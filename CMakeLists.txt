@@ -66,3 +66,59 @@ if (MATISSE_BUILD_TESTS AND USE_SYSTEM_GTEST)
 endif ()
 
 add_subdirectory(external)
+add_subdirectory(libs)
+add_subdirectory(tools)
+
+# The umbrella carries matisse's own libraries; munch arrives transitively through matisse_load.
+add_library(${PROJECT_NAME}
+        INTERFACE
+)
+
+add_library(${PROJECT_NAME}::${PROJECT_NAME} ALIAS ${PROJECT_NAME})
+add_library(${PROJECT_NAME}::load ALIAS matisse_load)
+add_library(${PROJECT_NAME}::pretok ALIAS matisse_pretok)
+add_library(${PROJECT_NAME}::validate ALIAS matisse_validate)
+add_library(${PROJECT_NAME}::encode ALIAS matisse_encode)
+
+target_link_libraries(${PROJECT_NAME}
+        INTERFACE
+        matisse_load
+        matisse_pretok
+        matisse_validate
+        matisse_encode
+)
+
+if (MATISSE_INSTALL)
+    # The installed names are the aliases the build offers: matisse::load, matisse::pretok, matisse::validate,
+    # matisse::encode, matisse::matisse.
+    set_target_properties(matisse_load PROPERTIES EXPORT_NAME load)
+    set_target_properties(matisse_pretok PROPERTIES EXPORT_NAME pretok)
+    set_target_properties(matisse_validate PROPERTIES EXPORT_NAME validate)
+    set_target_properties(matisse_encode PROPERTIES EXPORT_NAME encode)
+
+    install(TARGETS ${PROJECT_NAME} matisse_load matisse_pretok matisse_validate matisse_encode matisse_validate_cli
+            EXPORT matisse_targets)
+
+    install(DIRECTORY libs/load/include/ libs/pretok/include/ libs/validate/include/ libs/encode/include/
+            DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+
+    install(FILES LICENSE DESTINATION ${CMAKE_INSTALL_DATADIR}/licenses/matisse)
+
+    install(EXPORT matisse_targets
+            FILE matisse-targets.cmake
+            NAMESPACE matisse::
+            DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/matisse
+    )
+
+    include(CMakePackageConfigHelpers)
+
+    write_basic_package_version_file(${CMAKE_CURRENT_BINARY_DIR}/matisse-config-version.cmake
+            COMPATIBILITY SameMajorVersion
+    )
+
+    install(FILES
+            cmake/matisse-config.cmake
+            ${CMAKE_CURRENT_BINARY_DIR}/matisse-config-version.cmake
+            DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/matisse
+    )
+endif ()
