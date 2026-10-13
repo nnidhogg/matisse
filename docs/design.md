@@ -1,0 +1,615 @@
+# **Design**
+
+The decisions behind matisse, in the order a reader meets them: what the library is and is not, the repository and its
+build, the four libraries' interfaces, how the vendor verifiers move from their Python reference into C++, how the
+result is tested against the real tokenizers, what matisse needs from munch, the choices still open, and the order of
+work. Nothing is implemented yet; building starts after munch 3.0.0 is released. The sketches below give names and
+types, and they change as the code is written.
+
+## **What matisse is and is not**
+
+matisse reads the definition of a real tokenizer, decides where its output can be cut with certainty, and encodes text
+in parallel by cutting only there, with token ids byte-identical to the sequential encoding. The first version does this
+for GPT-2 and cl100k_base, whose deployed pre-tokenizer patterns have exact verifiers, and for a byte-level tokenizer
+without a pre-tokenizer it reports the certified windows of the merge table through the lazy certification. It is not a
+general tokenizer library. It trains nothing, applies no normalizer but the identity, and does not try to match Hugging
+Face's feature surface; its product is exactness against the reference tokenizer, shown on pinned vocabularies and
+corpora.
+
+munch stays the decision library, with the verifier framework and the general constructions on abstract inputs, merge
+tables and vocabularies among them. matisse takes everything about specific real tokenizers, which is reading their
+files and special tokens, the vendor pre-tokenizer verifiers tied to a regex and to an engine's Unicode tables, and the
+runtime with its token ids, normalizers and special-token cuts. The test for where a piece goes is whether it would make
+sense if no LLM existed; if it would, it belongs in munch. matisse is also the intended home of the tokenizer pieces of
+an execution-contract compiler (the full-dictionary verifier, the two-mode WordPiece construction, a labeler carrying
+token ids, certified-prefix streaming), and none of them is in the first version.
+
+The name is after Matisse's paper cut-outs, cutting with certainty, beside munch, the lexer library, and hopper, the
+parser toolkit.
+
+## **Repository and build**
+
+The repository is laid out as hopper's is, one library per subject under libs/, each with include/, src/ and tests/, the
+tools beside them, munch as a git submodule and googletest beside it:
+
+```
+matisse/
+  CMakeLists.txt  CITATION.cff  LICENSE  README.md  THIRD_PARTY_NOTICES.md  .clang-format  .gitignore  .gitmodules
+  .github/workflows/  ci.yml  codeql.yml
+  cmake/matisse-config.cmake
+  docs/  usage.md  how_it_works.md  design.md
+  external/  CMakeLists.txt  googletest/  munch/          (submodule, pinned to the munch release it builds against)
+  libs/
+    CMakeLists.txt
+    load/       include/matisse/load/      src/  tests/  tests/data/
+    pretok/     include/matisse/pretok/    src/  tests/  tests/data/
+    validate/   include/matisse/validate/  src/  tests/  tests/data/
+    encode/     include/matisse/encode/    src/  tests/  tests/data/
+  tools/
+    CMakeLists.txt
+    validate/   the matisse-validate command line
+    probes/     the corpus probe
+    fuzz/       libFuzzer harnesses
+    unicode/    generate_classes.py
+```
+
+The four libraries are the four subjects of the first version. load reads tokenizer files into one definition type.
+pretok holds the vendor pre-tokenizers: the class alphabets, the runtime segmenter, and the construction of each
+pattern's verifier. validate decides the certified windows and their right context and measures anchor supply. encode is
+the runtime. Each is a target `matisse_<name>` with the alias `matisse::<name>`, in namespace `matisse::<name>`, and the
+umbrella `matisse::matisse` links all four, as `hopper::hopper` links hopper's.
+
+The top-level CMakeLists.txt is hopper's with the prefix changed: `project(matisse VERSION 0.1.0 LANGUAGES CXX)`, C++23
+required, `MATISSE_IS_TOP_LEVEL`, Release by default at the top level only, `MATISSE_SOURCE_DIR` for test data paths,
+`-Wall -Wunused -Wextra` with `MATISSE_WERROR` on at the top level, `MATISSE_BUILD_TESTS`, `USE_SYSTEM_GTEST`, and, once
+the harnesses exist, `MATISSE_BUILD_FUZZER` instrumenting the whole tree with the submodule included. munch is consumed
+exactly as hopper consumes it, as the submodule by default, added by external/CMakeLists.txt, or with
+`MATISSE_SYSTEM_MUNCH` an installed munch found by `find_package(munch REQUIRED)` at the top level so that every library
+sees its imported targets; `MATISSE_INSTALL` requires the system munch, exports `matisse_targets` under
+`lib/cmake/matisse`, and cmake/matisse-config.cmake calls `find_dependency(munch)`. Every library whose headers name
+munch types links munch publicly, as hopper_json does: load (its definition holds `munch::verifier::Merge`), pretok and
+validate (`munch::verifier::Verifier`). The version starts at 0.1.0 with "pre-1.0" in the README, as hopper's did.
+
+CI copies hopper's workflow with munch's sanitizer matrix: format-check with clang-format-19, build and test with GCC
+13.3 (with coverage) and with Clang 19, an ARM64 job where plain char is unsigned, the address and undefined-behavior
+sanitizers and, because the encoder spawns threads, munch's thread-sanitizer job and its `-fprofile-update=atomic`
+coverage flag, the fuzz job once the harnesses exist, the installed-consumer job, and CodeQL. The README has hopper's
+sections (Status, Features, a first example, Getting Started, Documentation, Testing, Versioning and Stability, License,
+Author), docs/ has hopper's three pages, and CITATION.cff names the munch release with its version DOI under
+`references`, as hopper's does. Tests run with `ctest --test-dir build --timeout 300`, as munch's do.
+
+## **The API**
+
+Every declaration gets munch's full doc block when written. Aggregates are built with designated initializers, results
+are returned rather than written through out-parameters, and there are no raw pointers. Refusals follow munch. Content a
+function cannot take throws `std::invalid_argument` with a message naming the item and where it is, as `merge_tower()`
+names a merge and its rank, and a file that cannot be read throws `std::runtime_error{"cannot read <path>"}`, as
+munch-audit's main does.
+
+### **Loaders, matisse::load**
+
+```cpp
+namespace matisse::load
+{
+using Token_id_t = std::uint32_t;
+
+enum class Pattern : std::uint8_t
+{
+    none,
+    gpt2,
+    cl100k
+};
+
+enum class Merge_rule : std::uint8_t
+{
+    pairs,
+    ranks
+};
+
+struct Special_token
+{
+    std::string spelling{};
+
+    Token_id_t id{};
+};
+
+struct Definition
+{
+    Pattern pattern{};
+
+    Merge_rule merge_rule{};
+
+    std::vector<std::string> spellings{};
+
+    std::vector<munch::verifier::Merge> merges{};
+
+    std::vector<Special_token> specials{};
+};
+
+[[nodiscard]] Definition read_tokenizer_json(const std::filesystem::path& path);
+
+[[nodiscard]] Definition read_gpt2(const std::filesystem::path& encoder, const std::filesystem::path& vocab);
+
+[[nodiscard]] Definition read_tiktoken(const std::filesystem::path& path, Pattern pattern);
+
+} // namespace matisse::load
+```
+
+A `Definition` is held in raw bytes throughout. `spellings` gives the bytes of every ordinary token by id, dense from
+zero; GPT-2's byte-to-character map is undone by the loader, so `"Ġthe"` is read as `" the"`. `merges` is the merge
+table in rank order under `Merge_rule::pairs` (encoder.py's loop and Hugging Face's BPE model) and empty under
+`Merge_rule::ranks` (tiktoken's rank merge, which needs only the ranks). `Token_id_t` is 32 bits because ids are what a
+model reads, and every vocabulary in scope fits.
+
+`read_tokenizer_json()` takes a Hugging Face tokenizer.json with a BPE model. It recognizes a pre-tokenizer only by the
+exact published spelling of its pattern: a ByteLevel pre-tokenizer with `use_regex` true and `add_prefix_space` false is
+GPT-2's, and a Split on cl100k's published pattern, isolated and not inverted, followed by ByteLevel without its regex
+is cl100k's. A null pre-tokenizer is `Pattern::none`. The `added_tokens` marked special become `specials`. It refuses,
+naming the member: a model other than BPE, a normalizer other than null, any other pre-tokenizer or pattern (the cl100k
+pattern as tiktoken shipped it before its possessive rewrite is a different pattern, refused until it has its own
+verifier), `byte_fallback`, a post-processor that adds tokens, ordinary ids that are not dense from zero, and an empty
+token. `read_gpt2()` takes encoder.json and vocab.bpe as encoder.py reads them, with no special tokens, since encoder.py
+treats `<|endoftext|>` as text. `read_tiktoken()` takes a rank file, one base64 token and its rank per line; the file
+names neither its pattern nor its special tokens, so the caller names the pattern and matisse supplies the vendor's
+special tokens from its own table, quoted from tiktoken's openai_public.py (for cl100k_base `<|endoftext|>` 100257,
+`<|fim_prefix|>` 100258, `<|fim_middle|>` 100259, `<|fim_suffix|>` 100260 and `<|endofprompt|>` 100276, to be held to
+the pinned source).
+
+The JSON files need a JSON reader; which one is open choice 5.
+
+#### **The SentencePiece loader and its tie-breaking**
+
+The table a SentencePiece BPE model gives munch is the self-split table, not the Hugging Face converter's. For every
+piece P, the loader encodes P's own characters with SentencePiece's loop; when the result is P alone, the last pair
+merged is P's split, and that split is P's one merge. The merges are ranked by score, highest first, products of equal
+score shortest first. On Mistral 7B v0.1 and Yi 6B every product encodes to itself, no product is left out, every part
+precedes its product, and munch accepts the table. The converter's table, every split of every piece, is refused by
+munch's constructions and must be, since most of its products have several splits and some parts come after their
+products.
+
+Proved (the self-split proposition): in SentencePiece's loop on any input, whenever a pair (L, R) is merged into a piece
+P, the loop run on P's spelling alone ends with P as one token and merges (L, R) last. Tokens only grow, so the span of
+P's characters is a union of tokens throughout the run, and each merge inside it was the loop's choice at its time, the
+highest-scored pair and leftmost on a tie, hence also the highest and leftmost among the span's own pairs; by induction
+the loop on the span alone makes the same merges in the same order, ties included, since merges outside the span keep
+the relative order of the symbols inside it. So SentencePiece only ever forms a piece by its self split, and dropping
+every other split changes nothing in its run.
+
+Proved, no ties: when no two products share a score, SentencePiece's rule on the self-split pairs is munch's encoder on
+the self-split table, since the highest-scored pair present is the lowest-ranked merge present, and SentencePiece's
+leftmost tie between occurrences of one merge is munch's leftmost occurrence. Yi's scores are all distinct, and its
+table agrees with the library on 525,864 inputs with no difference.
+
+Mistral's one tie group, a separate compilation result. Mistral scores U+2581 and its runs of 2 to 14 and 16 all at
+-1e9, below every other piece, and no other piece holds two U+2581 in a row, so these merges act last and only inside
+runs of U+2581, where SentencePiece's position tie grows the leftmost token one character at a time: its self splits are
+(k - 1, 1) for the runs of 2 to 14 and (14, 2) for 16. No rank order of those self splits reproduces it, since every
+admissible order applies (1, 1) at both occurrences of four spaces and gets stuck at 2 and 2. A search over the
+admissible tables of the group, splits and ranks both, found one in 50,017 nodes, the runs joined being 1+1, 2+2, 4+4,
+4+1, 4+2, 2+1, 8+8, 8+1, 8+2, 8+3, 8+4, 8+5, 8+6 and 6+1: a split-and-rank compilation, not the self-split table (four
+spaces form as 2+2, eight as 4+4, sixteen as 8+8). What is proved of it is output equivalence on every run, by this
+argument: after the first six rules a run of length 8q + r consists of q tokens of length 8 followed by a tail of r for
+r up to 6 and of 6 then 1 for r = 7; (8, 8) then joins pairs into blocks of 16 from the left, an unmatched 8 absorbs a
+tail of 1 to 6 by the (8, k) rules, giving (14, 1) on the tail (6, 1), and the last rule (6, 1) joins a tail of 7 with
+no unmatched 8 before it; so a run of 16q + r ends as q sixteens then nothing, [r] for r from 1 to 14, or [14, 1] for r
+= 15, which is SentencePiece's own output, since it grows the leftmost token to 14, merges the next two into 2 and then
+(14, 2) into 16, a 16 being a barrier to every further merge, and ends with (14, 1) when one character remains.
+Validated on every run of 1 to 4,000 as well. The group acts in isolation only because of the two model facts stated
+first, which the loader checks when it compiles a group. With that group compiled and placed at the end of the table,
+Mistral agrees with the library on 526,292 inputs with no difference, and certificates decided on the compiled table
+hold for SentencePiece's segmentations by the equivalence.
+
+The general tie, refuted. Two equal-scored pieces ab and ba over {a, b} need opposite rule orders: on aba
+SentencePiece's position tie gives ab then a, on bab it gives ba then b, and a rank order that puts ab first turns bab
+into b then ab, while one that puts ba first turns aba into a then ba. So no rank order reproduces a position tie in
+general, and alternative splits cannot help, since two-symbol products have none; three equal-scored products ab, bc and
+ca likewise force a cyclic priority on abc, bca and cab, so all six orders fail. What the loader does: it runs the
+search over the group's admissible tables, which may change splits, bounded by the group's runs, and refuses a model
+whose group admits no output-equivalent table, naming the group. Mistral's group is the proved positive case, ab and ba
+the proved negative one. The realizability of a candidate table is decidable exactly: canonical adjacency holds for
+every deterministic merge encoder by interval projection, so two encoders are equal exactly when their canonical token
+sets and adjacency relations agree, every disagreement having a witness of at most 2L - 1, attained; the loader's search
+over admissible tables therefore ends in a complete finite test, at most |V|^2 pairs, and runs to 31 suffice for the
+whitespace group because L = 16. What remains is the cost of synthesis, not decidability. And conversion is not a
+prerequisite for certification: munch's lazy certification needs only the canonical tokens and the adjacency relation,
+which SentencePiece's own encoder supplies as a pair oracle, so a model whose tie group admits no table can still be
+certified through that relation once munch takes it directly, a planned munch addition.
+
+The class the loader may claim, proved: canonical adjacency holds for every projective merge process, every key rule
+among them (least priority among mergeable pairs, priority any function of the pair, ties by position), SentencePiece's
+score-first leftmost loop with score ties included, and the source paper's pass order for every dictionary; it fails for
+the count rule and for a parity tie, so "deterministic and memoryless" is not the class. Two encoders of the class are
+equal exactly when their canonical tokens and pairs agree, with a shortest witness of at most 2L - 1, so the loader's
+acceptance test is the pair test over the straddling candidates (Mistral: 184,745,026 candidate pairs, 18 seconds on 20
+threads, 0 pairs in one encoder only; Yi: 495,683,098, 58 seconds, 0 differences on the core, 516 skipped for a
+user-defined symbol across the join), and the compiled tables equal SentencePiece's core on every string by that
+theorem, no longer by sampling. Certification needs no table at all: the chain search with a pair oracle (encode a
+token, encode a pair) decides window certificates for every projective encoder, 15,436 decisions against brute force
+with 0 disagreements.
+
+What the loader does beyond the table, each outside munch's construction by the division: the dummy prefix (input
+normalization), byte fallback (a wrapper, since munch's character alphabet refuses boundaries inside a character by
+design; it contradicted no certificate on Mistral), and user-defined symbols, a longest-match pre-tokenizer composed
+with the BPE certificate by the closure calculus (on Yi they override certificates on 1,028,924 corpus occurrences,
+every one under a user-defined token). The Python reference implementation of the self-split table, the tie-group
+compilation and its search is the loader's model. SentencePiece's source also holds an unused-piece resegmentation
+stage, so the loader states its treatment of `UNUSED` pieces before it claims to cover a model, and the result statement
+reads: SentencePiece's deterministic BPE core forms every piece by a unique self split; with distinct product scores the
+score-ranked self-split table reproduces the core encoder, which is Yi's case; Mistral's tied separator group instead
+admits a split-and-rank compilation, proved equivalent by its 16-block structure; not every equal-score group admits
+one, ab and ba being a two-product counterexample; representability is decidable by finite enumeration of candidates and
+canonical-piece and pair equivalence, and efficient synthesis remains open.
+
+### **Pre-tokenizers, matisse::pretok**
+
+```cpp
+namespace matisse::pretok
+{
+using Class_t = unsigned char;
+
+[[nodiscard]] std::vector<Class_t> classes_of(load::Pattern pattern, std::string_view text);
+
+[[nodiscard]] std::size_t class_count(load::Pattern pattern);
+
+class Segmenter
+{
+public:
+    explicit Segmenter(load::Pattern pattern);
+
+    [[nodiscard]] std::vector<std::size_t> boundaries(std::string_view text) const;
+};
+
+[[nodiscard]] munch::verifier::Verifier split_verifier(load::Pattern pattern);
+
+[[nodiscard]] munch::core::Lexer factorization_lexer(load::Pattern pattern);
+
+} // namespace matisse::pretok
+```
+
+`classes_of()` decodes UTF-8 and maps every codepoint to its class, 14 classes for GPT-2 and 16 for cl100k, numbered
+from zero, read from Unicode tables pinned in the tree (open choice 6). Malformed UTF-8 is refused with its byte offset,
+since the model is defined on codepoints and invalid text is outside it. `Segmenter` is the runtime pre-tokenizer, the
+gated commitment order of the gate-sufficiency proposition read over codepoints. At each boundary it commits the longest
+gate-passing accept of the first alternative that has one, each alternative a small DFA over the classes, the run
+alternative gated by "the next codepoint is whitespace" and cl100k's end-anchored alternative passing only at the end of
+input. `boundaries()` returns the piece ends as byte offsets. `split_verifier()` is the verifier M built from the
+one-step relation Q of each pattern, minimized, and handed to munch as a `Verifier` table over the class symbols; the
+construction's M has 22 states for GPT-2 and 33 for cl100k. `factorization_lexer()` compiles the gate-erased union U of
+the alternatives over the class symbols as a munch token set, on which `is_split_window()` decides the factorization
+certificate. Each of them refuses `Pattern::none`.
+
+The construction behind these, the gate-sufficiency proposition, the transfer of a cut from class strings to text and
+the splice theorem the encoder rests on are the results of a report on pre-tokenizer certification that is not yet
+published.
+
+### **The validator, matisse::validate**
+
+```cpp
+namespace matisse::validate
+{
+enum class Inventory : std::uint8_t
+{
+    factorization,
+    policy
+};
+
+struct Window_table
+{
+    Inventory inventory{};
+
+    std::size_t width{};
+
+    std::size_t right_context{};
+
+    std::vector<std::optional<std::size_t>> origins{};
+};
+
+struct Report
+{
+    load::Pattern pattern{};
+
+    Window_table factorization{};
+
+    Window_table policy{};
+
+    munch::verifier::Boundary_gap gap{};
+};
+
+[[nodiscard]] Report validate(const load::Definition& definition, std::size_t width = default_width);
+
+struct Supply
+{
+    std::size_t bytes{};
+
+    Anchors anchors{};
+
+    double boundary_share{};
+
+    std::size_t longest_piece{};
+};
+
+[[nodiscard]] Supply supply(const Report& report, Inventory inventory, std::string_view input);
+
+struct Merge_window
+{
+    std::string window{};
+
+    std::size_t origin{};
+
+    std::optional<munch::verifier::Miscovering> refutation{};
+};
+
+[[nodiscard]] std::vector<Merge_window> validate_merges(
+        const load::Definition& definition, std::span<const munch::verifier::Certified_pair> candidates);
+
+[[nodiscard]] std::string render(const Report& report);
+
+[[nodiscard]] std::string json(const Report& report);
+
+} // namespace matisse::validate
+```
+
+`validate()` decides every class window of width two to `width` (four by default) under both certificates: the policy
+certificate by `munch::verifier::miscovering()` on the split verifier, the factorization certificate by
+`is_split_window()` on the factorization lexer. A table's `origins` is indexed by the class string read as a number in
+base `class_count()`, at most 16^4 entries, and holds the certified origin or nothing. Each table carries the right
+context its inventory needs, decided on the split verifier (section "What matisse needs from munch 3.0.0"), and the
+report carries `boundary_gap()` of the split verifier, which is unbounded for both patterns since a letter run of any
+length is one piece. A definition with `Pattern::none` goes to `validate_merges()` instead, which builds
+`munch::verifier::token_automaton()` once and decides each candidate window by `miscovering()` on it, the lazy
+certification. Its candidates are given by the caller; the command line draws them from an input, every byte and the
+most frequent byte pairs and triples, since all byte windows of width three are too many to decide at full scale.
+
+`supply()` measures one inventory's anchors on an input. `Anchors` and `Gaps` are munch-audit's, duplicated rather than
+linked (count, per kibibyte, median, ninetieth and ninety-ninth percentile, longest), and `Supply` adds two figures
+beside them: the share of the serial pre-token boundaries that are anchors, and the longest piece, which is the floor no
+cut rule can go below. `validate_merges()` returns each candidate with its refutation or none. `render()` and `json()`
+follow munch-audit's report renderings.
+
+`matisse-validate` in tools/validate is the command line, modelled on munch-audit's (a `matisse_validate_cli` target
+with that output name): `matisse-validate FILE [--tiktoken PATTERN] [--windows N] [--input FILE] [--json]`, with
+`--tiktoken` naming the pattern of a rank file since the file names none, the report always, the supply section only
+with `--input`, so that runs without it are unchanged by it, as munch-audit's `--input` is.
+
+### **The encoder, matisse::encode**
+
+```cpp
+namespace matisse::encode
+{
+class Encoder
+{
+public:
+    Encoder(load::Definition definition, validate::Inventory inventory, std::span<const std::string> allowed);
+
+    [[nodiscard]] std::vector<load::Token_id_t> encode(std::string_view text) const;
+
+    [[nodiscard]] std::vector<std::size_t> chunk_boundaries(std::string_view text, std::size_t chunks) const;
+
+    [[nodiscard]] std::vector<load::Token_id_t> encode_parallel(std::string_view text, std::size_t chunks) const;
+
+    [[nodiscard]] std::string decode(std::span<const load::Token_id_t> ids) const;
+};
+
+} // namespace matisse::encode
+```
+
+The names follow `core::Lexer`'s `tokenize_all()`, `chunk_boundaries()` and `tokenize_all_parallel()`. The constructor
+validates the definition and keeps the inventory's window table and right context; it refuses `Pattern::none` in the
+first version and an `allowed` spelling that is not one of the definition's special tokens. `encode()` is the sequential
+encoding: the text is split at every occurrence of an allowed special token, which emits its id, and each stretch
+between them is segmented by the `Segmenter` as a complete input, every piece then merged alone by the definition's
+merge rule, the pair loop of encoder.py or tiktoken's rank merge. Special tokens not allowed are ordinary text, which is
+tiktoken's `encode()` with that `allowed_special` and an empty `disallowed_special`, encoder.py's behavior when none is
+allowed. `chunk_boundaries()` aims for `chunks` pieces of equal size: from each byte target it walks forward to the
+first anchor, a position `t + o` for an occurrence at `t` of a window the table certifies at origin `o`, at least the
+width less one codepoints after the previous cut, inside one stretch; special tokens are cuts of their own.
+`encode_parallel()` gives each chunk to a worker, which segments its chunk followed by `right_context` further
+codepoints of the real text, read as a complete input there unless a special token or the text's end comes first, keeps
+the pieces that end at or before its cut, and merges them. The ids of the chunks, concatenated, are the result.
+
+The encoder claims one thing. For every text the definition accepts, `encode_parallel()` returns the ids `encode()`
+returns, at every chunk count. That is the splice theorem with the proposition that the cut transfers and the decided
+right context, given the four hypotheses (N), (S), (P) and (B), which the loader's refusals enforce, and given that the
+`Segmenter` is the engine's segmentation. Nothing is claimed about speed until it is measured, and nothing about the
+vendor's own implementation beyond the known answers and corpus ids of the test strategy.
+
+## **The vendor verifiers, from Python into C++**
+
+The Python reference implementation holds everything the port needs: the class alphabets, the per-alternative languages
+and the one-step relation Q, the verifier M with its functionality and totality decisions, the one-codepoint gate, the
+certificates, the right-context decisions and the references and end-to-end run, over a small DFA kit. Each moves as one
+C++ unit of pretok or validate, written in munch's style and modelled on its nearest munch neighbour: the verifier
+construction on `merge_tower()` and `trie_chain()`, the window tables on munch-audit's report, the supply on
+munch-audit's supply. The DFA kit the construction of M needs (product, complement, concatenation, minimization over a
+small alphabet) moves as one file of pretok; where it lives is open choice 7.
+
+The Unicode tables are generated, not ported by hand. tools/unicode/generate_classes.py is munch's generator of the same
+name duplicated and changed to emit the general categories L and N and the White_Space property, with the source digests
+and the `--version` guard munch's has, into libs/pretok/src/class_ranges.inc, checked in, so the build never touches the
+network. This is munch-audit's precedent for logos, whose reader keeps tables of the Unicode version logos is locked to
+rather than the library's. The classes and therefore the verifiers, the certified windows and the right context do not
+depend on the version; only the map from codepoints to classes does, and with it the ids of text holding a codepoint
+whose class moved between versions.
+
+The ported units stay exact through fixtures written by the reference and held byte for byte, as munch's verifier tests
+hold `token_automaton_reference.txt`. A fixture script beside the reference code writes each fixture with a header line
+naming the script and saying to regenerate with it, never by hand, one fact per line, bytes and class strings in hex,
+and the C++ tests read every line, check the answer, and count the lines of each kind. The fixtures, one per subject:
+
+- **Classes**: the Unicode version, the class of every codepoint range boundary of the tables, and the digest of the
+  table file.
+- **Segmentation**: the engine's segmentation of every class string of lengths zero to five (579,195 strings for GPT-2,
+  1,118,481 for cl100k, the gate check's own population, or length four if the file is too large to keep), against which
+  the `Segmenter` is held, and the boundaries of the three corpora's class projections as digests.
+- **Verifier**: the table munch's constructor makes of the minimized M (trimmed, start first, breadth-first over the
+  marked symbols ascending), the script applying the same renumbering, so the C++ construction must produce the
+  identical table state for state; and the replayed counterexamples of the construction.
+- **Windows**: every certified window to width four under both certificates with its origin (18,357 and 32,218 for
+  GPT-2, 30,576 and 58,580 for cl100k), and every refused one by count.
+- **Right context**: the decided R of each inventory, and the counterexample of each failing R with its replay
+  (`"\t\t!"` at cut two for R = 0, `"\t !"` and `"\t\tA"` at cut one for the policy inventory at R = 1).
+- **Known answers**: the ids of short strings under each reference, among them the published `"Hello world"`, 15496 995
+  for GPT-2, and `"tiktoken is great!"`, 83 1609 5963 374 2294 0 for cl100k.
+- **Lazy certification**: the verdicts and refutations of the lazy certification's validation set at the depths it
+  records.
+
+Where a C++ answer and a fixture line disagree, the test fails with both; the fix goes into whichever side is wrong, and
+a fixture changes only by rerunning its script.
+
+## **Test strategy against the real tokenizers**
+
+Each library has a GoogleTest suite registered with CTest, as hopper's do. The reference vocabularies are pinned by
+SHA-256:
+
+| File | SHA-256 |
+|---|---|
+| gpt2-merges.txt (vocab.bpe) | 1ce1664773c50f3e0cc8842619a93edc4624525b728b188a9e0be33b7726adc5 |
+| gpt2-vocab.json (encoder.json) | 196139668be63f3b5d6574427317ae82f612a97c5d1cdaf36ed2256dbf636783 |
+| cl100k_base.tiktoken | 223921b76ee99bde995b7ff738513eef100fb51d18c93597a113bcffe865b2a7 |
+| twitter.json | 30721e496a8d73cfc50658923c34eb2c0fbe15ee6835005e43ee624d8dedf200 |
+
+No GPT-2 or cl100k tokenizer.json is pinned yet; the loader's tests need one of each, taken once and pinned the same
+way. Nothing is fetched at test time: the test data is in the tree, or given to the probe as paths. Whether the
+vocabulary files themselves go into the tree is open choice 8.
+
+Three layers, each against something independent of the code under test:
+
+1. **The fixtures** of the previous section, in CTest: classes, segmentation, M, windows, right context, known answers,
+   lazy verdicts.
+2. **Self-consistency**, in CTest, on texts generated with a fixed seed as hopper's probe generates its corpus:
+   `encode_parallel()` against `encode()` at every chunk count from one to the number of anchors, and at every anchor;
+   `decode(encode(x)) == x`; M accepts the `Segmenter`'s marking of every text; every anchor is a `Segmenter` boundary.
+   The texts mix the known counterexample shapes, whitespace runs before letters and punctuation, newlines followed by
+   tab runs, long letter runs, contractions in both cases, and allowed and disallowed special tokens.
+3. **The three corpora**, by the probe in tools/probes: `matisse_corpus` takes the definition and corpus files, holds
+   each to its digest, and checks the ids of `encode()` and of `encode_parallel()` at every anchor and at the 4,096- and
+   65,536-codepoint chunkings against a digest of the reference ids (the SHA-256 of the ids as little-endian 32-bit
+   words, with their count) written by the fixture script; given no files it runs the generated texts of layer 2, which
+   is the form registered with CTest, as hopper_edit_relex does. The corpora are twitter.json, and munch's 10 tracked
+   Python files and its 306 tracked C++ sources and headers at 15b2863c, concatenated in path order by the fixture
+   script and pinned by digest. The probe prints the supply table, which this page quotes from its output.
+
+The reference ids in the fixtures are the Python references, encoder.py's loop and tiktoken's rank merge restated over
+Python's engine with Unicode 15.0, which are held to the published known answers and not run against the vendors' code
+on the corpora. One step of the order of work closes that: tiktoken and Hugging Face tokenizers are run on the three
+corpora outside the tree, and the fixture script records their id digests beside the restated references', so the probe
+holds matisse to the vendors themselves. A difference there would be the Unicode version or a vendor's engine, and it
+would name the codepoint.
+
+The fuzz harnesses in tools/fuzz follow hopper's contract (a refusal is the answer to bad input, a crash, a sanitizer
+report or a hang is a finding): one feeds arbitrary bytes to the tokenizer.json and tiktoken readers, and one feeds
+arbitrary well-formed UTF-8 to the encoder and asserts that `encode_parallel()` equals `encode()` at a chunk count drawn
+from the input, which turns the encoder's one claim into a fuzz property.
+
+## **What matisse needs from munch 3.0.0**
+
+Used as munch 3.0.0 has it:
+
+- `munch::verifier::Verifier`, built from a table, for M over the class symbols, which fit the byte alphabet (16 of 256
+  for cl100k).
+- `miscovering(const Verifier&, window, origin)` for the policy certificate, and `boundary_gap()` for the gap verdict.
+- `core::Builder` and `Lexer::is_split_window()` for the factorization certificate on U, the procedure cross-checked
+  against munch-audit exactly.
+- `Merge`, `token_automaton()` and `miscovering(const Token_automaton&, window, origin)` for the lazy certification,
+  with their refusal of a table that recreates a token passed through as the loader's.
+
+Missing, each with where it would go by the division:
+
+- **The right-context decision.** The prefix half with right context R for an inventory, and the suffix half, are
+  regular conditions on a verifier decided by breadth-first search on products, and they would make sense with no LLM,
+  so they belong in munch beside `dependence()` and `chunk_dependence()`, which decide the R = 0 case for one pair and
+  for an inventory. It is an addition, so a minor release (3.1.0) can carry it, or 3.0.0 if its contents are still open
+  when the port is ready; the Python reference's decision is the reference and its counterexamples the fixture, as
+  cut_reference.txt holds `dependence()`. Until it lands the validator cannot decide R and would carry the known values
+  as constants, which is why the order of work puts it before the validator.
+- **Functionality and totality of a verifier.** The Python reference decides both for M, and `divergence()` presumes the
+  first. The first version does not need them, since M's table is held state for state to the fixture whose M was
+  decided functional and total; they would let a new pattern's Q be checked by the validator itself. General, so munch,
+  later.
+- **Alphabets beyond bytes.** `Marked` carries an `unsigned char`, which holds every class alphabet in sight, o200k's
+  included. It does not hold a character-level merge table: SentencePiece BPE tokenizers without a pre-tokenizer, Llama
+  2 among them, merge Unicode characters, and `token_automaton()` refuses a part that is not a byte or an earlier
+  product. They also carry a normalizer and byte fallback. So the lazy route of the first version covers byte-level
+  merge tables, and character-level ones wait for a decision about munch's alphabet.
+
+Not needed from munch: the Unicode tables (munch's own are 17.0.0 and have no L or N; matisse keeps its own, as the
+logos reader does), a UTF-8 decoder (a small one in pretok, duplicated rather than shared), and the runtime, which is
+matisse's by the division.
+
+## **Open choices**
+
+1. **License.** munch and hopper are MIT, with a THIRD_PARTY_NOTICES.md for what they carry under other terms.
+   Recommendation: MIT, with notices for the Unicode data (Unicode License v3, munch's notice), for the published
+   patterns and special tokens quoted from openai/gpt-2 and openai/tiktoken, and for any vendored vocabulary (choice 8).
+2. **Python bindings.** Neither munch nor hopper has any, and the PyPI name matisse is taken, so a binding could be
+   called matisse-tok. Recommendation: later, once the validator has been used and the C++ surface has settled, so that
+   a binding does not fix names before the stability boundary is stated.
+3. **Tokenizers after GPT-2 and cl100k.** Recommendation, in this order. First the cl100k pattern as tiktoken shipped it
+   before the possessive rewrite. The construction already runs it, it differs from the current one only on text ending
+   in whitespace that holds a newline, and as far as is known Llama 3's published pattern and the tokenizer.json
+   conversions of cl100k carry it, which the pinned files will show. Then o200k, whose classes are more (Lu, Ll, Lt, Lm,
+   Lo, M) but whose pattern is still a regex without lookbehind; the conjecture that the same construction holds is
+   built and decided first. Then WordPiece through munch's `trie_chain()` with bert-vocab.txt, which brings BERT's
+   normalizer and so the first normalizer. Character-level SentencePiece waits on munch's alphabet.
+4. **Threading model.** munch's `tokenize_all_parallel()` spawns one `std::jthread` per chunk beyond the last, runs the
+   last on the calling thread, joins at scope end, and rethrows the first exception on the calling thread.
+   Recommendation: the same, with no pool and no executor, the caller choosing the chunk count; a pool is a question for
+   later, settled by measurement.
+5. **The JSON reader.** tokenizer.json and encoder.json are JSON, with `\u` escapes and surrogate pairs in GPT-2's
+   vocabulary. hopper has a complete RFC 8259 parser (`hopper::json::Parser`, held to the JSONTestSuite), munch has
+   none, and a third-party library would be a new vendored dependency. Taking hopper means a second submodule, and
+   hopper's external/CMakeLists.txt adds its own munch submodule unless hopper is built against a system munch, which
+   would define munch's targets twice beside matisse's own submodule. Recommendation: hopper's parser, with matisse
+   keeping its own munch submodule as hopper does and hopper skipping its submodule when `munch::munch` already exists,
+   a one-line change in hopper's next release, which has to build against munch 3.0.0 anyway (as 1.0.1 lifted hopper to
+   2.1.0). A third JSON parser in the family would duplicate a tested one.
+6. **The Unicode version of the class tables.** The fixtures come from Python 3.12, Unicode 15.0.0; tiktoken's and
+   Hugging Face's engines carry their own versions. Recommendation: 15.0.0 for the first version so that the fixtures
+   replay, then the version of the engine the vendor cross-check (layer 3) shows to matter, regenerating the fixtures
+   with it.
+7. **Where the DFA kit lives.** The construction of M needs product, complement and concatenation of DFAs, which munch
+   does not offer publicly. By the division test a DFA kit is general and belongs in munch; by the rule of duplicating
+   rather than sharing unless really needed it stays private to the one construction that uses it. Recommendation: in
+   matisse's pretok, as one file, because nothing in munch calls it and a munch addition would wait for a munch release;
+   it moves if a second user appears.
+8. **Vocabulary files in the tree.** CTest without network needs the pinned files on disk: about 1.5 MB for GPT-2's pair
+   and 1.7 MB for cl100k, plus the two tokenizer.json files. hopper vendors the JSONTestSuite cases with their licence
+   and provenance. The vocabulary files' own terms need checking first. As far as is known, GPT-2's are published with
+   the model under MIT on its Hugging Face card, and cl100k_base.tiktoken is served by OpenAI without a licence file of
+   its own. Recommendation: vendor them under libs/load/tests/data with provenance, as hopper vendors its cases, if the
+   terms allow; otherwise a `MATISSE_VOCAB_DIR` option naming a directory of the pinned files, the tests that need them
+   registered only when it is given, as the vendored-or-system pattern of `USE_SYSTEM_GTEST` already works.
+9. **The encoder's default inventory.** The factorization inventory needs one codepoint of right context and rests on
+   less, its cut holding for every complete factorization into the gate-erased languages whatever the engine does inside
+   its matches; the policy inventory needs two and rests on Q, validated and not machine-checked, but lands on more
+   boundaries (93.91 to 100.00 per cent against 57.30 to 92.88). Both reach a longest uncut stretch within 24 bytes of
+   the longest piece on all six runs. Recommendation: the factorization inventory by default, the policy inventory by
+   choice.
+
+## **Order of work**
+
+Each step lands green on its own, its tests first where a fixture exists.
+
+1. munch 3.0.0 released (no matisse work before it).
+2. The right-context decision in munch, with its fixture from the Python reference (3.1.0, or 3.0.0 if still open).
+3. The fixture script beside the Python reference, writing the fixtures of the vendor section and the corpus digests.
+4. The repository skeleton: hopper's CMake, CI, README and docs pages with the names changed, the munch submodule at the
+   release, an empty library, a green CI.
+5. load: the tiktoken reader and `read_gpt2()`, with the known-answer spellings; then `read_tokenizer_json()` after
+   choice 5, with its refusals.
+6. pretok: the generated class tables and `classes_of()`, held to the classes fixture.
+7. pretok: the `Segmenter`, held to the segmentation fixture.
+8. pretok: the DFA kit and `split_verifier()`, held to the verifier fixture state for state; `factorization_lexer()`.
+9. validate: the window tables under both certificates, held to the windows fixture; the right context through munch,
+   held to its fixture.
+10. validate: `supply()`, `render()`, `json()`, and `matisse-validate` with `--input`.
+11. encode: `encode()` and `decode()` with both merge rules and special-token cuts, held to the known answers.
+12. encode: `chunk_boundaries()` and `encode_parallel()`, with the self-consistency suite of layer 2 and the
+    thread-sanitizer job.
+13. The corpus probe on the three corpora, its figures into this page.
+14. validate: `validate_merges()`, the lazy route for byte-level tables without a pre-tokenizer, held to the lazy
+    fixture.
+15. The vendor cross-check (tiktoken, Hugging Face tokenizers), its digests into the fixture, the Unicode version
+    settled (choice 6).
+16. The fuzz harnesses and their CI job; the README's Versioning and Stability section naming the stable surface; then
+    the first release.

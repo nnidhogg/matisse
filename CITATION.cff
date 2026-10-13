@@ -1,0 +1,31 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "matisse"
+abstract: >-
+  A C++23 library that reads the definition of a real tokenizer, decides where its output can be cut with certainty,
+  and encodes text in parallel by cutting only there, with token ids byte-identical to the sequential encoding. The
+  first version covers GPT-2 and cl100k_base, whose pre-tokenizer patterns have exact verifiers, and reports the
+  certified windows of a byte-level merge table without a pre-tokenizer through the lazy certification.
+keywords:
+  - tokenization
+  - byte-pair encoding
+  - pre-tokenization
+  - parallel encoding
+  - C++
+authors:
+  - family-names: "Nidhögg"
+    given-names: "Nicklas"
+    orcid: "https://orcid.org/0009-0006-6161-6150"
+repository-code: "https://github.com/nnidhogg/matisse"
+url: "https://github.com/nnidhogg/matisse"
+license: MIT
+version: 0.1.0
+references:
+  - type: software
+    title: "munch"
+    authors:
+      - family-names: "Nidhögg"
+        given-names: "Nicklas"
+        orcid: "https://orcid.org/0009-0006-6161-6150"
+    version: 3.0.0
+    url: "https://github.com/nnidhogg/munch"

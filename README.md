@@ -1,0 +1,93 @@
+# **Matisse**
+
+<p align="center">
+  <img src="https://img.shields.io/badge/C%2B%2B-23-blue.svg" alt="C++23">
+  <img src="https://github.com/nnidhogg/matisse/actions/workflows/ci.yml/badge.svg" alt="CI">
+  <img src="https://github.com/nnidhogg/matisse/actions/workflows/codeql.yml/badge.svg" alt="CodeQL">
+  <img src="https://codecov.io/gh/nnidhogg/matisse/branch/master/graph/badge.svg" alt="Coverage">
+  <img src="https://img.shields.io/github/license/nnidhogg/matisse" alt="License">
+</p>
+
+`matisse` is a **C++23 library** that reads the definition of a **real tokenizer**, decides where its output can be
+**cut with certainty**, and **encodes text in parallel** by cutting only there, with token ids byte-identical to the
+sequential encoding. The first version does this for **GPT-2** and **cl100k_base**, whose deployed pre-tokenizer
+patterns have exact verifiers, and for a byte-level tokenizer without a pre-tokenizer it reports the certified windows
+of the merge table through the lazy certification. It is not a general tokenizer library: it trains nothing, applies no
+normalizer but the identity, and does not try to match Hugging Face's feature surface. Its product is exactness against
+the reference tokenizer, shown on pinned vocabularies and corpora.
+
+matisse is built on **[`munch`](https://github.com/nnidhogg/munch)**, and the two divide the work by one test: whether a
+piece would make sense if no LLM existed. munch keeps the general constructions, the verifier framework and the
+decisions on abstract inputs, merge tables and vocabularies among them. Everything about a specific tokenizer is here:
+reading its files and special tokens, the vendor pre-tokenizer verifiers tied to a regex and to an engine's Unicode
+tables, and the runtime with its token ids, normalizers and special-token cuts.
+
+## **Status**
+
+Not yet released; matisse depends on munch 3.0.0. The tree is the repository's skeleton: the four libraries build, link
+and register their tests with CTest, and `matisse-validate` prints its usage, while the libraries themselves are still
+empty. The version is 0.1.0, pre-1.0, and nothing is stable yet. The munch submodule is pinned to munch's 3.0.0 release
+candidate and moves to the release tag once munch 3.0.0 is released. What each library will hold, the proved results the
+loaders rest on and the order of work are in [docs/design.md](docs/design.md).
+
+## **Libraries**
+
+- **load** reads a tokenizer's files, a Hugging Face tokenizer.json, GPT-2's encoder.json and vocab.bpe, or a tiktoken
+  rank file, into one definition held in raw bytes, refusing whatever it cannot take exactly.
+- **pretok** holds the vendor pre-tokenizers: each pattern's class alphabet, the runtime segmenter, and the construction
+  of the pattern's verifier for munch.
+- **validate** decides which class windows certify a cut, at which origin and with which right context, and measures how
+  many anchors they supply on an input.
+- **encode** is the runtime, a sequential and a parallel encoder whose ids are identical at every chunk count.
+
+## **Getting Started**
+
+### **Requirements**
+
+- A C++23 compiler; GCC and Clang on Linux are the toolchains built and tested (GCC 13.3 and Clang 19 in CI), on x86-64
+  and 64-bit ARM. Clang 18 and older cannot compile munch's tokenizer, which matisse builds against.
+- CMake 3.20.6 or later.
+- munch as the git submodule under `external/munch`, checked out at the release matisse builds against; googletest
+  beside it for the tests. Everything else is the standard library.
+
+### **Building the Project**
+
+```bash
+git clone --recurse-submodules https://github.com/nnidhogg/matisse
+cd matisse
+cmake -S . -B build
+cmake --build build -j 8
+```
+
+The default `CMAKE_BUILD_TYPE` is `Release` when unset.
+
+## **Documentation**
+
+- [docs/design.md](docs/design.md): what matisse is and is not, the repository and its build, the sketched interfaces of
+  the four libraries, the loaders' proved results, how the vendor verifiers move from their reference into C++, the test
+  strategy against the real tokenizers, what matisse needs from munch 3.0.0, the open choices, and the order of work.
+
+The theory matisse builds on is in munch's technical reports, listed in the [munch
+README](https://github.com/nnidhogg/munch) by their arXiv identifiers:
+[arXiv:2608.03473](https://arxiv.org/abs/2608.03473), [arXiv:2608.09761](https://arxiv.org/abs/2608.09761),
+[arXiv:2609.10600](https://arxiv.org/abs/2609.10600) and [arXiv:2610.08854](https://arxiv.org/abs/2610.08854), the last
+of which holds the verifiers matisse's certificates are decided on.
+
+## **Testing**
+
+Each library under `libs/` has a GoogleTest suite in a `tests/` subdirectory, registered with CTest:
+
+```bash
+ctest --test-dir build --timeout 300 --output-on-failure
+```
+
+Tests and warnings-as-errors are enabled by default only when matisse is the top-level project; a build consuming
+matisse through `add_subdirectory` opts in with `-DMATISSE_BUILD_TESTS=ON` or `-DMATISSE_WERROR=ON`.
+
+## **License**
+
+MIT, see [LICENSE](LICENSE).
+
+## **Author**
+
+Developed and maintained by **Nicklas Nidhögg**, [nnidhogg](https://github.com/nnidhogg) on GitHub.
