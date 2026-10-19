@@ -6,6 +6,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include <munch/core/builder.hpp>
@@ -82,6 +83,22 @@ constexpr std::array<Spelling, 8> cl100k_spellings{{
 }};
 
 /**
+ * @brief Returns the DFA of one alternative's gate-erased language, compiled by munch as a single token.
+ * @param pattern The language, over the class symbols in munch's pattern syntax.
+ * @return The DFA.
+ */
+[[nodiscard]] munch::dfa::Simulator simulator_of(const std::string_view pattern)
+{
+    munch::core::Builder builder{};
+
+    builder.add_token(munch::pattern::parse(pattern), std::size_t{0}, 0);
+
+    const auto lexer{builder.build()};
+
+    return lexer.simulator();
+}
+
+/**
  * @brief Returns the class symbols of a pattern's white space, `\s`.
  * @param pattern The pattern, GPT-2's or cl100k's.
  * @return The symbols.
@@ -92,6 +109,29 @@ constexpr std::array<Spelling, 8> cl100k_spellings{{
 }
 
 /**
+ * @brief Returns the class string of a text: the symbol of every code point's class, in order.
+ * @param pattern The pattern, GPT-2's or cl100k's.
+ * @param text The text, well-formed UTF-8.
+ * @return The class string, one symbol per code point.
+ * @throws std::invalid_argument If the text is not well-formed UTF-8, as classes_of() refuses it.
+ */
+[[nodiscard]] std::string class_string(const load::Pattern pattern, const std::string_view text)
+{
+    const auto classes{classes_of(pattern, text)};
+
+    const auto symbol_of_class{class_symbols(pattern)};
+
+    std::string symbols{};
+
+    for (const auto symbol : classes)
+    {
+        symbols += symbol_of_class[symbol];
+    }
+
+    return symbols;
+}
+
+/**
  * @brief Returns how many bytes the UTF-8 sequence a lead byte begins holds, as its high bits say.
  * @param lead The lead byte.
  * @return One to four.
@@ -99,6 +139,26 @@ constexpr std::array<Spelling, 8> cl100k_spellings{{
 [[nodiscard]] constexpr std::size_t sequence_length(const unsigned char lead) noexcept
 {
     return lead < 0x80U ? 1 : lead >= 0xF0U ? 4 : lead >= 0xE0U ? 3 : 2;
+}
+
+/**
+ * @brief Returns the byte offset a number of code points past an offset of a well-formed UTF-8 text.
+ * @param text The text.
+ * @param from The offset, at the start of a code point.
+ * @param points The number of code points, at most those after the offset.
+ * @return The offset after them.
+ */
+[[nodiscard]] std::size_t byte_after(
+        const std::string_view text, const std::size_t from, const std::size_t points) noexcept
+{
+    auto byte{from};
+
+    for (std::size_t point{0}; point < points; ++point)
+    {
+        byte += sequence_length(static_cast<unsigned char>(text[byte]));
+    }
+
+    return byte;
 }
 
 } // namespace
@@ -122,15 +182,11 @@ std::vector<Segmenter::Alternative> Segmenter::alternatives_of(const load::Patte
 
     for (const auto& [spelling, gate] : spellings)
     {
-        munch::core::Builder builder{};
-
-        builder.add_token(munch::pattern::parse(spelling), std::size_t{0}, 0);
-
-        const auto lexer{builder.build()};
+        auto simulator{simulator_of(spelling)};
 
         const auto kind{gate == lookahead ? Gate::next_white_space : gate == anchor ? Gate::end_of_input : Gate::none};
 
-        alternatives.push_back({.simulator = lexer.simulator(), .gate = kind});
+        alternatives.push_back({.simulator = std::move(simulator), .gate = kind});
     }
 
     return alternatives;
@@ -138,16 +194,7 @@ std::vector<Segmenter::Alternative> Segmenter::alternatives_of(const load::Patte
 
 std::vector<std::size_t> Segmenter::boundaries(const std::string_view text) const
 {
-    const auto classes{classes_of(pattern_, text)};
-
-    const auto symbol_of_class{class_symbols(pattern_)};
-
-    std::string symbols{};
-
-    for (const auto symbol : classes)
-    {
-        symbols += symbol_of_class[symbol];
-    }
+    const auto symbols{class_string(pattern_, text)};
 
     std::vector<std::size_t> ends{};
 
@@ -157,10 +204,7 @@ std::vector<std::size_t> Segmenter::boundaries(const std::string_view text) cons
     {
         const auto length{piece_length(symbols, at)};
 
-        for (std::size_t point{0}; point < length; ++point)
-        {
-            byte += sequence_length(static_cast<unsigned char>(text[byte]));
-        }
+        byte = byte_after(text, byte, length);
 
         at += length;
 
@@ -172,30 +216,9 @@ std::vector<std::size_t> Segmenter::boundaries(const std::string_view text) cons
 
 std::size_t Segmenter::piece_length(const std::string_view symbols, const std::size_t at) const
 {
-    for (const auto& [simulator, gate] : alternatives_)
+    for (const auto& alternative : alternatives_)
     {
-        std::size_t longest{0};
-
-        auto state{simulator.init_state()};
-
-        for (auto end{at}; end < symbols.size();)
-        {
-            const auto next{simulator.step(state, static_cast<unsigned char>(symbols[end]))};
-
-            ++end;
-
-            if (!next || !simulator.is_live(*next))
-            {
-                break;
-            }
-
-            state = *next;
-
-            if (simulator.is_accepting(state) && passes(gate, symbols, end))
-            {
-                longest = end - at;
-            }
-        }
+        const auto longest{longest_accept(alternative, symbols, at)};
 
         if (longest != 0)
         {
@@ -204,6 +227,37 @@ std::size_t Segmenter::piece_length(const std::string_view symbols, const std::s
     }
 
     return 0;
+}
+
+std::size_t Segmenter::longest_accept(
+        const Alternative& alternative, const std::string_view symbols, const std::size_t at) const noexcept
+{
+    const auto& [simulator, gate]{alternative};
+
+    std::size_t longest{0};
+
+    auto state{simulator.init_state()};
+
+    for (auto end{at}; end < symbols.size();)
+    {
+        const auto next{simulator.step(state, static_cast<unsigned char>(symbols[end]))};
+
+        ++end;
+
+        if (!next || !simulator.is_live(*next))
+        {
+            break;
+        }
+
+        state = *next;
+
+        if (simulator.is_accepting(state) && passes(gate, symbols, end))
+        {
+            longest = end - at;
+        }
+    }
+
+    return longest;
 }
 
 bool Segmenter::passes(const Gate gate, const std::string_view symbols, const std::size_t end) const noexcept

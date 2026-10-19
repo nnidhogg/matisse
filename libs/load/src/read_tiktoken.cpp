@@ -1,4 +1,4 @@
-#include <array>
+#include <algorithm>
 #include <charconv>
 #include <cstddef>
 #include <cstdint>
@@ -32,6 +32,11 @@ constexpr std::string_view separators{" \t\n\v\f\r"};
 constexpr std::string_view base64_digits{"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"};
 
 /**
+ * @brief The lines of a rank file as read, each token's bytes with its rank, in the file's order.
+ */
+using Entries_t = std::vector<std::pair<std::string, std::size_t>>;
+
+/**
  * @brief Returns the whole of a file.
  * @param path The file's path.
  * @return Its bytes.
@@ -50,37 +55,17 @@ constexpr std::string_view base64_digits{"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijkl
 }
 
 /**
- * @brief Returns the vendor's special tokens of a pattern, quoted from tiktoken's openai_public.py: those of the gpt2
- *        and r50k_base encodings for GPT-2's pattern and those of cl100k_base for cl100k's.
- * @param pattern The pattern, GPT-2's or cl100k's.
- * @return The special tokens, by id ascending.
- */
-[[nodiscard]] std::vector<Special_token> specials_of(const Pattern pattern)
-{
-    if (pattern == Pattern::gpt2)
-    {
-        return {{.spelling = "<|endoftext|>", .id = 50256}};
-    }
-
-    return {{.spelling = "<|endoftext|>", .id = 100257},
-            {.spelling = "<|fim_prefix|>", .id = 100258},
-            {.spelling = "<|fim_middle|>", .id = 100259},
-            {.spelling = "<|fim_suffix|>", .id = 100260},
-            {.spelling = "<|endofprompt|>", .id = 100276}};
-}
-
-/**
  * @brief Returns the bytes a base64 field spells, four digits for every three bytes, the last group padded with `=`.
  * @param field The field.
  * @return The bytes, std::nullopt when the field is not base64.
  */
 [[nodiscard]] std::optional<std::string> decoded(const std::string_view field)
 {
-    constexpr std::size_t group{4};
-
     const auto padding{field.ends_with("==") ? 2UZ : field.ends_with('=') ? 1UZ : 0UZ};
 
     const auto digits{field.substr(0, field.size() - padding)};
+
+    constexpr std::size_t group{4};
 
     if (field.size() % group != 0 || digits.find_first_not_of(base64_digits) != std::string_view::npos)
     {
@@ -114,21 +99,80 @@ constexpr std::string_view base64_digits{"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijkl
     return bytes;
 }
 
-} // namespace
-
-Definition read_tiktoken(const std::filesystem::path& path, const Pattern pattern)
+/**
+ * @brief Returns the rank a decimal field spells.
+ * @param field The field.
+ * @return The rank, std::nullopt when the field is empty or not decimal digits alone.
+ */
+[[nodiscard]] std::optional<std::size_t> rank_of(const std::string_view field) noexcept
 {
-    const auto name{path.string()};
+    std::size_t rank{};
 
-    if (pattern == Pattern::none)
+    const auto field_end{field.data() + field.size()};
+
+    const auto [stop, error]{std::from_chars(field.data(), field_end, rank)};
+
+    if (error != std::errc{} || stop != field_end)
     {
-        throw std::invalid_argument{std::format(
-                "read_tiktoken: {} is read under GPT-2's or cl100k's pattern, and the pattern given is none", name)};
+        return std::nullopt;
     }
 
-    const auto text{contents(path)};
+    return rank;
+}
 
-    std::vector<std::pair<std::string, std::size_t>> entries{};
+/**
+ * @brief Returns the token and the rank of a line of a rank file, its two fields separated by white space.
+ * @param line The line, without its line feed.
+ * @param number The line's number, from one, for the refusal.
+ * @param name The file's path, for the refusal.
+ * @return The token's bytes and its rank, std::nullopt for a line of white space alone, which tiktoken skips.
+ * @throws std::invalid_argument If the line is not a base64 token and a decimal rank.
+ */
+[[nodiscard]] std::optional<std::pair<std::string, std::size_t>> entry_of(
+        const std::string_view line, const std::size_t number, const std::string_view name)
+{
+    const auto token_start{line.find_first_not_of(separators)};
+
+    if (token_start == std::string_view::npos)
+    {
+        return std::nullopt;
+    }
+
+    const auto token_end{std::min(line.find_first_of(separators, token_start), line.size())};
+
+    const auto rank_start{std::min(line.find_first_not_of(separators, token_end), line.size())};
+
+    const auto rank_end{std::min(line.find_first_of(separators, rank_start), line.size())};
+
+    const auto rest{line.find_first_not_of(separators, rank_end)};
+
+    const auto token_field{line.substr(token_start, token_end - token_start)};
+
+    const auto rank_field{line.substr(rank_start, rank_end - rank_start)};
+
+    auto bytes{decoded(token_field)};
+
+    const auto rank{rank_of(rank_field)};
+
+    if (!bytes || !rank || rest != std::string_view::npos)
+    {
+        throw std::invalid_argument{
+                std::format("read_tiktoken: line {} of {} is not a base64 token and a decimal rank", number, name)};
+    }
+
+    return std::pair{std::move(*bytes), *rank};
+}
+
+/**
+ * @brief Returns the entries of a rank file, its lines read in order and the lines of white space alone skipped.
+ * @param text The file's bytes.
+ * @param name The file's path, for the refusals.
+ * @return Every token's bytes with its rank, in the file's order.
+ * @throws std::invalid_argument If a line is not a base64 token and a decimal rank.
+ */
+[[nodiscard]] Entries_t entries_of(const std::string_view text, const std::string_view name)
+{
+    Entries_t entries{};
 
     std::size_t number{0};
 
@@ -136,46 +180,34 @@ Definition read_tiktoken(const std::filesystem::path& path, const Pattern patter
     {
         const auto end{std::min(text.find('\n', start), text.size())};
 
-        const std::string_view line{text.data() + start, end - start};
+        const auto line{text.substr(start, end - start)};
 
         start = end + 1;
 
         ++number;
 
-        const auto token_start{line.find_first_not_of(separators)};
+        auto entry{entry_of(line, number, name)};
 
-        if (token_start == std::string_view::npos)
+        if (!entry)
         {
             continue;
         }
 
-        const auto token_end{std::min(line.find_first_of(separators, token_start), line.size())};
-
-        const auto rank_start{std::min(line.find_first_not_of(separators, token_end), line.size())};
-
-        const auto rank_end{std::min(line.find_first_of(separators, rank_start), line.size())};
-
-        const auto rest{line.find_first_not_of(separators, rank_end)};
-
-        const auto rank_field{line.substr(rank_start, rank_end - rank_start)};
-
-        auto bytes{decoded(line.substr(token_start, token_end - token_start))};
-
-        std::size_t rank{};
-
-        const auto [rank_stop, error]{std::from_chars(rank_field.data(), rank_field.data() + rank_field.size(), rank)};
-
-        const auto whole_rank{error == std::errc{} && rank_stop == rank_field.data() + rank_field.size()};
-
-        if (!bytes || rank_field.empty() || !whole_rank || rest != std::string_view::npos)
-        {
-            throw std::invalid_argument{
-                    std::format("read_tiktoken: line {} of {} is not a base64 token and a decimal rank", number, name)};
-        }
-
-        entries.emplace_back(std::move(*bytes), rank);
+        entries.push_back(std::move(*entry));
     }
 
+    return entries;
+}
+
+/**
+ * @brief Returns the spellings of a rank file's entries by rank, the rank of a token being its id.
+ * @param entries Every token's bytes with its rank.
+ * @param name The file's path, for the refusal.
+ * @return The bytes of every token, by id.
+ * @throws std::invalid_argument If the ranks are not dense from zero.
+ */
+[[nodiscard]] std::vector<std::string> spellings_by_rank(Entries_t entries, const std::string_view name)
+{
     std::vector<std::string> spellings(entries.size());
 
     std::vector<bool> placed(entries.size());
@@ -194,6 +226,47 @@ Definition read_tiktoken(const std::filesystem::path& path, const Pattern patter
 
         spellings[rank] = std::move(bytes);
     }
+
+    return spellings;
+}
+
+/**
+ * @brief Returns the vendor's special tokens of a pattern, quoted from tiktoken's openai_public.py: those of the gpt2
+ *        and r50k_base encodings for GPT-2's pattern and those of cl100k_base for cl100k's.
+ * @param pattern The pattern, GPT-2's or cl100k's.
+ * @return The special tokens, by id ascending.
+ */
+[[nodiscard]] std::vector<Special_token> specials_of(const Pattern pattern)
+{
+    if (pattern == Pattern::gpt2)
+    {
+        return {{.spelling = "<|endoftext|>", .id = 50256}};
+    }
+
+    return {{.spelling = "<|endoftext|>", .id = 100257},
+            {.spelling = "<|fim_prefix|>", .id = 100258},
+            {.spelling = "<|fim_middle|>", .id = 100259},
+            {.spelling = "<|fim_suffix|>", .id = 100260},
+            {.spelling = "<|endofprompt|>", .id = 100276}};
+}
+
+} // namespace
+
+Definition read_tiktoken(const std::filesystem::path& path, const Pattern pattern)
+{
+    const auto name{path.string()};
+
+    if (pattern == Pattern::none)
+    {
+        throw std::invalid_argument{std::format(
+                "read_tiktoken: {} is read under GPT-2's or cl100k's pattern, and the pattern given is none", name)};
+    }
+
+    const auto text{contents(path)};
+
+    auto entries{entries_of(text, name)};
+
+    auto spellings{spellings_by_rank(std::move(entries), name)};
 
     return {.pattern = pattern,
             .merge_rule = Merge_rule::ranks,

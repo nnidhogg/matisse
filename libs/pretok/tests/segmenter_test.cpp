@@ -40,6 +40,22 @@ struct Fixture_counts
 };
 
 /**
+ * @brief The segmentation fixture under check: the current universe's segmenter and the counts so far.
+ */
+struct Fixture_check
+{
+    /**
+     * @brief The current universe's segmenter, none before the first universe line.
+     */
+    std::optional<Segmenter> segmenter{};
+
+    /**
+     * @brief The lines checked so far, by kind.
+     */
+    Fixture_counts counts{};
+};
+
+/**
  * @brief Returns the bytes a lowercase hex field spells, two digits per byte, "-" spelling the empty text.
  * @param field The hex digits.
  * @return The bytes.
@@ -85,6 +101,83 @@ std::string refusal_of(const Pattern pattern, const std::string_view text)
     return {};
 }
 
+/**
+ * @brief Starts a universe line's universe: the segmenter of the pattern it names, gpt2 or cl100k.
+ * @param check The fixture under check.
+ * @param fields The line after its first word.
+ */
+void start_universe(Fixture_check& check, std::istringstream& fields)
+{
+    std::string name{};
+
+    fields >> name;
+
+    check.segmenter.emplace(name == "gpt2" ? Pattern::gpt2 : Pattern::cl100k);
+
+    ++check.counts.universes;
+}
+
+/**
+ * @brief Checks a segment line: the segmenter ends the pieces of its class string, written in hex, at its offsets.
+ * @param check The fixture under check.
+ * @param fields The line after its first word.
+ * @param context The line.
+ */
+void expect_segment(Fixture_check& check, std::istringstream& fields, const std::string& context)
+{
+    ASSERT_TRUE(check.segmenter) << context;
+
+    std::string text{};
+
+    fields >> text;
+
+    std::vector<std::size_t> ends{};
+
+    for (std::size_t end{}; fields >> end;)
+    {
+        ends.push_back(end);
+    }
+
+    EXPECT_EQ(check.segmenter->boundaries(bytes_of(text)), ends) << context;
+
+    ++check.counts.segments;
+}
+
+/**
+ * @brief Checks one fixture line against the segmenter, a comment or blank line checking nothing and a corpus line
+ *        only counted.
+ * @param check The fixture under check.
+ * @param line The line.
+ */
+void expect_fixture_line(Fixture_check& check, const std::string& line)
+{
+    std::istringstream fields{line};
+
+    std::string kind{};
+
+    if (!(fields >> kind) || kind.starts_with('#'))
+    {
+        return;
+    }
+
+    if (kind == "universe")
+    {
+        start_universe(check, fields);
+    }
+    else if (kind == "corpus")
+    {
+        ++check.counts.corpora;
+    }
+    else if (kind == "segment")
+    {
+        expect_segment(check, fields, line);
+    }
+    else
+    {
+        ADD_FAILURE() << "unknown fixture line: " << line;
+    }
+}
+
 } // namespace
 
 TEST(Segmenter_test, The_patterns_end_the_pieces_of_a_text_where_their_engines_do)
@@ -126,61 +219,14 @@ TEST(Segmenter_test, The_segmenter_gives_the_engine_s_segmentation_of_every_clas
 
     ASSERT_TRUE(file.is_open());
 
-    std::optional<Segmenter> segmenter{};
-
-    Fixture_counts counts{};
+    Fixture_check check{};
 
     for (std::string line{}; std::getline(file, line);)
     {
-        std::istringstream fields{line};
-
-        std::string kind{};
-
-        if (!(fields >> kind) || kind.starts_with('#'))
-        {
-            continue;
-        }
-
-        if (kind == "universe")
-        {
-            std::string name{};
-
-            fields >> name;
-
-            segmenter.emplace(name == "gpt2" ? Pattern::gpt2 : Pattern::cl100k);
-
-            ++counts.universes;
-
-            continue;
-        }
-
-        if (kind == "corpus")
-        {
-            ++counts.corpora;
-
-            continue;
-        }
-
-        ASSERT_EQ(kind, "segment") << line;
-        ASSERT_TRUE(segmenter) << line;
-
-        std::string text{};
-
-        fields >> text;
-
-        std::vector<std::size_t> ends{};
-
-        for (std::size_t end{}; fields >> end;)
-        {
-            ends.push_back(end);
-        }
-
-        EXPECT_EQ(segmenter->boundaries(bytes_of(text)), ends) << line;
-
-        ++counts.segments;
+        expect_fixture_line(check, line);
     }
 
-    EXPECT_EQ(counts.universes, 2U);
-    EXPECT_EQ(counts.segments, 41371U + 69905U);
-    EXPECT_EQ(counts.corpora, 6U);
+    EXPECT_EQ(check.counts.universes, 2U);
+    EXPECT_EQ(check.counts.segments, 41371U + 69905U);
+    EXPECT_EQ(check.counts.corpora, 6U);
 }

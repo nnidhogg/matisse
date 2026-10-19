@@ -17,6 +17,7 @@
 #include <string_view>
 #include <tuple>
 #include <unistd.h>
+#include <utility>
 #include <vector>
 
 using namespace matisse::load;
@@ -57,6 +58,33 @@ struct Fixture_counts
      * @brief The corpus lines, which the corpus probe checks.
      */
     std::size_t corpora{0};
+};
+
+/**
+ * @brief The known-answer fixture under check: the pinned vocabularies, the current universe's pattern and the counts
+ *        so far.
+ */
+struct Fixture_check
+{
+    /**
+     * @brief GPT-2's pinned vocabulary.
+     */
+    Definition gpt2{};
+
+    /**
+     * @brief cl100k_base's pinned vocabulary.
+     */
+    Definition cl100k{};
+
+    /**
+     * @brief The current universe's pattern, Pattern::none before the first universe line.
+     */
+    Pattern universe{Pattern::none};
+
+    /**
+     * @brief The lines checked so far, by kind.
+     */
+    Fixture_counts counts{};
 };
 
 /**
@@ -104,16 +132,12 @@ std::string contents(const std::filesystem::path& path)
 }
 
 /**
- * @brief Returns the SHA-256 of a byte string, as hexadecimal, the digest the pinned vocabularies are named by.
- * @param text The bytes.
- * @return The 64 hexadecimal digits.
+ * @brief Returns a message padded as SHA-256 pads it: a one bit, zeros to 56 mod 64, and the bit length big-endian.
+ * @param text The message.
+ * @return The padded message, a whole number of 64-byte blocks.
  */
-std::string sha256(const std::string_view text)
+std::string padded_message(const std::string_view text)
 {
-    std::array<std::uint32_t, 8> state{0x6A09E667, 0xBB67AE85, 0x3C6EF372, 0xA54FF53A,
-                                       0x510E527F, 0x9B05688C, 0x1F83D9AB, 0x5BE0CD19};
-
-    // The message, padded: a one bit, zeros to 56 mod 64, and the bit length big-endian.
     std::string padded{text};
 
     padded.push_back(static_cast<char>(0x80));
@@ -130,75 +154,115 @@ std::string sha256(const std::string_view text)
         padded.push_back(static_cast<char>((bit_length >> static_cast<unsigned>(shift)) & 0xFF));
     }
 
+    return padded;
+}
+
+/**
+ * @brief Returns the message schedule of one 64-byte block: its sixteen big-endian words and the 48 SHA-256 derives
+ *        from them.
+ * @param block The block.
+ * @return The 64 words.
+ */
+std::array<std::uint32_t, 64> schedule_of(const std::string_view block)
+{
+    std::array<std::uint32_t, 64> schedule{};
+
+    for (std::size_t word{0}; word < 16; ++word)
+    {
+        for (std::size_t byte{0}; byte < 4; ++byte)
+        {
+            schedule[word] = (schedule[word] << 8U) | static_cast<unsigned char>(block[(word * 4U) + byte]);
+        }
+    }
+
+    for (std::size_t word{16}; word < 64; ++word)
+    {
+        const auto s0{
+                std::rotr(schedule[word - 15], 7) ^ std::rotr(schedule[word - 15], 18) ^ (schedule[word - 15] >> 3)};
+
+        const auto s1{
+                std::rotr(schedule[word - 2], 17) ^ std::rotr(schedule[word - 2], 19) ^ (schedule[word - 2] >> 10)};
+
+        schedule[word] = schedule[word - 16] + s0 + schedule[word - 7] + s1;
+    }
+
+    return schedule;
+}
+
+/**
+ * @brief Returns a hash state after one block, its schedule run through SHA-256's 64 rounds and added to the state.
+ * @param state The hash state before the block.
+ * @param schedule The block's message schedule.
+ * @return The hash state after it.
+ */
+std::array<std::uint32_t, 8> compressed(
+        std::array<std::uint32_t, 8> state, const std::array<std::uint32_t, 64>& schedule)
+{
+    auto [a, b, c, d, e, f, g, h]{state};
+
+    static constexpr std::array<std::uint32_t, 64> round_constants{
+            0x428A2F98, 0x71374491, 0xB5C0FBCF, 0xE9B5DBA5, 0x3956C25B, 0x59F111F1, 0x923F82A4, 0xAB1C5ED5,
+            0xD807AA98, 0x12835B01, 0x243185BE, 0x550C7DC3, 0x72BE5D74, 0x80DEB1FE, 0x9BDC06A7, 0xC19BF174,
+            0xE49B69C1, 0xEFBE4786, 0x0FC19DC6, 0x240CA1CC, 0x2DE92C6F, 0x4A7484AA, 0x5CB0A9DC, 0x76F988DA,
+            0x983E5152, 0xA831C66D, 0xB00327C8, 0xBF597FC7, 0xC6E00BF3, 0xD5A79147, 0x06CA6351, 0x14292967,
+            0x27B70A85, 0x2E1B2138, 0x4D2C6DFC, 0x53380D13, 0x650A7354, 0x766A0ABB, 0x81C2C92E, 0x92722C85,
+            0xA2BFE8A1, 0xA81A664B, 0xC24B8B70, 0xC76C51A3, 0xD192E819, 0xD6990624, 0xF40E3585, 0x106AA070,
+            0x19A4C116, 0x1E376C08, 0x2748774C, 0x34B0BCB5, 0x391C0CB3, 0x4ED8AA4A, 0x5B9CCA4F, 0x682E6FF3,
+            0x748F82EE, 0x78A5636F, 0x84C87814, 0x8CC70208, 0x90BEFFFA, 0xA4506CEB, 0xBEF9A3F7, 0xC67178F2};
+
+    for (std::size_t round{0}; round < 64; ++round)
+    {
+        const auto s1{std::rotr(e, 6) ^ std::rotr(e, 11) ^ std::rotr(e, 25)};
+
+        const auto choice{(e & f) ^ (~e & g)};
+
+        const auto t1{h + s1 + choice + round_constants[round] + schedule[round]};
+
+        const auto s0{std::rotr(a, 2) ^ std::rotr(a, 13) ^ std::rotr(a, 22)};
+
+        const auto majority{(a & b) ^ (a & c) ^ (b & c)};
+
+        const auto t2{s0 + majority};
+
+        h = g;
+        g = f;
+        f = e;
+        e = d + t1;
+        d = c;
+        c = b;
+        b = a;
+        a = t1 + t2;
+    }
+
+    state[0] += a;
+    state[1] += b;
+    state[2] += c;
+    state[3] += d;
+    state[4] += e;
+    state[5] += f;
+    state[6] += g;
+    state[7] += h;
+
+    return state;
+}
+
+/**
+ * @brief Returns the SHA-256 of a byte string, as hexadecimal, the digest the pinned vocabularies are named by.
+ * @param text The bytes.
+ * @return The 64 hexadecimal digits.
+ */
+std::string sha256(const std::string_view text)
+{
+    std::array<std::uint32_t, 8> state{0x6A09E667, 0xBB67AE85, 0x3C6EF372, 0xA54FF53A,
+                                       0x510E527F, 0x9B05688C, 0x1F83D9AB, 0x5BE0CD19};
+
+    const auto padded{padded_message(text)};
+
     for (std::size_t block{0}; block < padded.size(); block += 64)
     {
-        std::array<std::uint32_t, 64> schedule{};
+        const auto schedule{schedule_of(std::string_view{padded}.substr(block, 64))};
 
-        for (std::size_t word{0}; word < 16; ++word)
-        {
-            for (std::size_t byte{0}; byte < 4; ++byte)
-            {
-                schedule[word] =
-                        (schedule[word] << 8U) | static_cast<unsigned char>(padded[block + (word * 4U) + byte]);
-            }
-        }
-
-        for (std::size_t word{16}; word < 64; ++word)
-        {
-            const auto s0{
-                    std::rotr(schedule[word - 15], 7) ^ std::rotr(schedule[word - 15], 18) ^
-                    (schedule[word - 15] >> 3)};
-
-            const auto s1{
-                    std::rotr(schedule[word - 2], 17) ^ std::rotr(schedule[word - 2], 19) ^ (schedule[word - 2] >> 10)};
-
-            schedule[word] = schedule[word - 16] + s0 + schedule[word - 7] + s1;
-        }
-
-        auto [a, b, c, d, e, f, g, h]{state};
-
-        static constexpr std::array<std::uint32_t, 64> round_constants{
-                0x428A2F98, 0x71374491, 0xB5C0FBCF, 0xE9B5DBA5, 0x3956C25B, 0x59F111F1, 0x923F82A4, 0xAB1C5ED5,
-                0xD807AA98, 0x12835B01, 0x243185BE, 0x550C7DC3, 0x72BE5D74, 0x80DEB1FE, 0x9BDC06A7, 0xC19BF174,
-                0xE49B69C1, 0xEFBE4786, 0x0FC19DC6, 0x240CA1CC, 0x2DE92C6F, 0x4A7484AA, 0x5CB0A9DC, 0x76F988DA,
-                0x983E5152, 0xA831C66D, 0xB00327C8, 0xBF597FC7, 0xC6E00BF3, 0xD5A79147, 0x06CA6351, 0x14292967,
-                0x27B70A85, 0x2E1B2138, 0x4D2C6DFC, 0x53380D13, 0x650A7354, 0x766A0ABB, 0x81C2C92E, 0x92722C85,
-                0xA2BFE8A1, 0xA81A664B, 0xC24B8B70, 0xC76C51A3, 0xD192E819, 0xD6990624, 0xF40E3585, 0x106AA070,
-                0x19A4C116, 0x1E376C08, 0x2748774C, 0x34B0BCB5, 0x391C0CB3, 0x4ED8AA4A, 0x5B9CCA4F, 0x682E6FF3,
-                0x748F82EE, 0x78A5636F, 0x84C87814, 0x8CC70208, 0x90BEFFFA, 0xA4506CEB, 0xBEF9A3F7, 0xC67178F2};
-
-        for (std::size_t round{0}; round < 64; ++round)
-        {
-            const auto s1{std::rotr(e, 6) ^ std::rotr(e, 11) ^ std::rotr(e, 25)};
-
-            const auto choice{(e & f) ^ (~e & g)};
-
-            const auto t1{h + s1 + choice + round_constants[round] + schedule[round]};
-
-            const auto s0{std::rotr(a, 2) ^ std::rotr(a, 13) ^ std::rotr(a, 22)};
-
-            const auto majority{(a & b) ^ (a & c) ^ (b & c)};
-
-            const auto t2{s0 + majority};
-
-            h = g;
-            g = f;
-            f = e;
-            e = d + t1;
-            d = c;
-            c = b;
-            b = a;
-            a = t1 + t2;
-        }
-
-        state[0] += a;
-        state[1] += b;
-        state[2] += c;
-        state[3] += d;
-        state[4] += e;
-        state[5] += f;
-        state[6] += g;
-        state[7] += h;
+        state = compressed(state, schedule);
     }
 
     std::string hex{};
@@ -348,6 +412,85 @@ std::optional<Definition> pinned_cl100k()
     EXPECT_EQ(sha256(contents(*path)), cl100k_digest);
 
     return read_tiktoken(*path, Pattern::cl100k);
+}
+
+/**
+ * @brief Starts a universe line's universe: the vocabulary it names, gpt2 or cl100k.
+ * @param check The fixture under check.
+ * @param fields The line after its first word.
+ */
+void start_universe(Fixture_check& check, std::istringstream& fields)
+{
+    std::string name{};
+
+    fields >> name;
+
+    check.universe = name == "gpt2" ? Pattern::gpt2 : Pattern::cl100k;
+
+    ++check.counts.universes;
+}
+
+/**
+ * @brief Checks an encode line: its ids spell its text, written in hex, under the current universe's vocabulary.
+ * @param check The fixture under check.
+ * @param fields The line after its first word.
+ * @param context The line.
+ */
+void expect_encoding(Fixture_check& check, std::istringstream& fields, const std::string& context)
+{
+    ASSERT_NE(check.universe, Pattern::none) << context;
+
+    const auto& definition{check.universe == Pattern::gpt2 ? check.gpt2 : check.cl100k};
+
+    std::string text{};
+
+    fields >> text;
+
+    std::vector<Token_id_t> ids{};
+
+    for (Token_id_t id{}; fields >> id;)
+    {
+        ids.push_back(id);
+    }
+
+    EXPECT_EQ(spelled(definition, ids), bytes_of(text)) << context;
+
+    ++check.counts.encodings;
+}
+
+/**
+ * @brief Checks one fixture line against the pinned vocabularies, a comment or blank line checking nothing and a corpus
+ *        line only counted.
+ * @param check The fixture under check.
+ * @param line The line.
+ */
+void expect_fixture_line(Fixture_check& check, const std::string& line)
+{
+    std::istringstream fields{line};
+
+    std::string kind{};
+
+    if (!(fields >> kind) || kind.starts_with('#'))
+    {
+        return;
+    }
+
+    if (kind == "universe")
+    {
+        start_universe(check, fields);
+    }
+    else if (kind == "corpus")
+    {
+        ++check.counts.corpora;
+    }
+    else if (kind == "encode")
+    {
+        expect_encoding(check, fields, line);
+    }
+    else
+    {
+        ADD_FAILURE() << "unknown fixture line: " << line;
+    }
 }
 
 } // namespace
@@ -538,8 +681,8 @@ TEST(Definition_test, The_pinned_cl100k_file_reads_as_its_vocabulary_and_spells_
 
 TEST(Definition_test, The_ids_of_every_known_answer_of_the_fixture_spell_its_text_under_the_pinned_vocabularies)
 {
-    const auto gpt2{pinned_gpt2()};
-    const auto cl100k{pinned_cl100k()};
+    auto gpt2{pinned_gpt2()};
+    auto cl100k{pinned_cl100k()};
 
     if (!gpt2 || !cl100k)
     {
@@ -550,61 +693,14 @@ TEST(Definition_test, The_ids_of_every_known_answer_of_the_fixture_spell_its_tex
 
     ASSERT_TRUE(file.is_open());
 
-    std::optional<Definition> definition{};
-
-    Fixture_counts counts{};
+    Fixture_check check{.gpt2 = std::move(*gpt2), .cl100k = std::move(*cl100k)};
 
     for (std::string line{}; std::getline(file, line);)
     {
-        std::istringstream fields{line};
-
-        std::string kind{};
-
-        if (!(fields >> kind) || kind.starts_with('#'))
-        {
-            continue;
-        }
-
-        if (kind == "universe")
-        {
-            std::string name{};
-
-            fields >> name;
-
-            definition = name == "gpt2" ? gpt2 : cl100k;
-
-            ++counts.universes;
-
-            continue;
-        }
-
-        if (kind == "corpus")
-        {
-            ++counts.corpora;
-
-            continue;
-        }
-
-        ASSERT_EQ(kind, "encode") << line;
-        ASSERT_TRUE(definition) << line;
-
-        std::string text{};
-
-        fields >> text;
-
-        std::vector<Token_id_t> ids{};
-
-        for (Token_id_t id{}; fields >> id;)
-        {
-            ids.push_back(id);
-        }
-
-        EXPECT_EQ(spelled(*definition, ids), bytes_of(text)) << line;
-
-        ++counts.encodings;
+        expect_fixture_line(check, line);
     }
 
-    EXPECT_EQ(counts.universes, 2U);
-    EXPECT_EQ(counts.encodings, 30U);
-    EXPECT_EQ(counts.corpora, 6U);
+    EXPECT_EQ(check.counts.universes, 2U);
+    EXPECT_EQ(check.counts.encodings, 30U);
+    EXPECT_EQ(check.counts.corpora, 6U);
 }

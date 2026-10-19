@@ -108,6 +108,16 @@ private:
     [[nodiscard]] std::size_t piece_length(std::string_view symbols, std::size_t at) const;
 
     /**
+     * @brief Returns the length of an alternative's longest gate-passing accept at a boundary of a class string.
+     * @param alternative The alternative.
+     * @param symbols The class string, in class symbols.
+     * @param at The boundary, before the end of the string.
+     * @return The length, in code points, zero when the alternative has no such accept there.
+     */
+    [[nodiscard]] std::size_t longest_accept(
+            const Alternative& alternative, std::string_view symbols, std::size_t at) const noexcept;
+
+    /**
      * @brief Returns whether an accept ending at an offset of a class string passes a gate.
      * @param gate The gate.
      * @param symbols The class string, in class symbols.

@@ -41,6 +41,11 @@ using Byte_map_t = std::array<std::optional<unsigned char>, map_end>;
 constexpr std::string_view separators{" \t\n\v\f\r"};
 
 /**
+ * @brief The members of encoder.json as read, each spelling's bytes with its id, in the file's order.
+ */
+using Entries_t = std::vector<std::pair<std::string, Token_id_t>>;
+
+/**
  * @brief Returns whether a byte stands for itself in GPT-2's byte map: the printable bytes `!` to `~`, `¡` to `¬` and
  *        `®` to `ÿ`, as encoder.py's bytes_to_unicode() lists them.
  * @param byte The byte.
@@ -162,165 +167,316 @@ constexpr Byte_map_t byte_map{byte_map_of()};
 }
 
 /**
- * @brief Returns the spellings of encoder.json by id, its one flat object read with JSON's escapes, each spelling's
- *        byte map undone.
- * @param text The file's bytes.
- * @param name The file's path, for the refusals.
- * @return The bytes of every token, by id.
- * @throws std::invalid_argument If the text is not one object of quoted spellings and decimal ids, a spelling is empty
- *         or holds a character the byte map does not carry, or the ids are not dense from zero.
+ * @brief A reader over encoder.json, the one flat JSON object of GPT-2's spellings and ids, read with JSON's escapes
+ *        and each spelling's byte map undone.
+ *
+ * A refusal names the file and the byte offset where the reading stopped: what the object's syntax expected there, the
+ * opening quote of an empty token, or the start of a character the byte map does not carry.
  */
-[[nodiscard]] std::vector<std::string> spellings_of(const std::string_view text, const std::string& name)
+class Encoder_reader
 {
-    std::size_t at{0};
+public:
+    /**
+     * @brief Binds the reader to a file's bytes.
+     * @param text The file's bytes.
+     * @param name The file's path, for the refusals.
+     */
+    Encoder_reader(std::string_view text, std::string_view name) noexcept;
 
-    const auto refuse{[&](const std::string_view expected) {
-        throw std::invalid_argument{std::format("read_gpt2: {} has no {} at byte {}", name, expected, at)};
-    }};
+    /**
+     * @brief Reads the whole object, its spellings placed by id.
+     * @return The bytes of every token, by id.
+     * @throws std::invalid_argument If the text is not one object of quoted spellings and decimal ids, a spelling is
+     *         empty or holds a character the byte map does not carry, or the ids are not dense from zero.
+     */
+    [[nodiscard]] std::vector<std::string> read();
 
-    const auto skip_space{[&] {
-        while (at < text.size() && separators.contains(text[at]))
-        {
-            ++at;
-        }
-    }};
+private:
+    /**
+     * @brief Consumes a symbol after white space or refuses, naming what the syntax expected.
+     * @param symbol The symbol required.
+     * @param expected What the syntax expected, for the refusal.
+     * @throws std::invalid_argument If the symbol does not stand there.
+     */
+    void expect(char symbol, std::string_view expected);
 
-    const auto expect{[&](const char symbol, const std::string_view expected) {
-        skip_space();
+    /**
+     * @brief Skips the white space at the current position.
+     */
+    void skip_space() noexcept;
 
-        if (at == text.size() || text[at] != symbol)
-        {
-            refuse(expected);
-        }
+    /**
+     * @brief Refuses the file at the current position.
+     * @param expected What the syntax expected there.
+     * @throws std::invalid_argument Always.
+     */
+    [[noreturn]] void fail(std::string_view expected) const;
 
-        ++at;
-    }};
+    /**
+     * @brief Consumes a symbol after white space when it stands there.
+     * @param symbol The symbol.
+     * @return True when it stood there and was consumed.
+     */
+    [[nodiscard]] bool accept(char symbol) noexcept;
 
-    const auto consumed{[&](const char symbol) {
-        skip_space();
+    /**
+     * @brief Reads the object's members up to its closing brace: quoted spellings and their ids, separated by commas.
+     * @return Every spelling with its id, in the file's order.
+     * @throws std::invalid_argument If a member is not a quoted spelling, a colon and an id, a spelling is empty or
+     *         holds a character the byte map does not carry, or the members are not closed by a brace.
+     */
+    [[nodiscard]] Entries_t members();
 
-        const auto found{at < text.size() && text[at] == symbol};
+    /**
+     * @brief Reads a quoted spelling, each character's byte map undone.
+     * @return The spelling's bytes, at least one.
+     * @throws std::invalid_argument If no quote opens or closes it, an escape is not JSON's, a character is one the
+     *         byte map does not carry, or it is empty.
+     */
+    [[nodiscard]] std::string spelling();
 
-        at += found ? 1 : 0;
+    /**
+     * @brief Reads one character of a spelling, raw as UTF-8 or as a JSON escape.
+     * @return The character's code point.
+     * @throws std::invalid_argument If an escape is not JSON's.
+     */
+    [[nodiscard]] char32_t character();
 
-        return found;
-    }};
+    /**
+     * @brief Reads a JSON escape after its backslash.
+     * @return The code point the escape stands for.
+     * @throws std::invalid_argument If the escape is not JSON's.
+     */
+    [[nodiscard]] char32_t escaped();
 
-    const auto escaped{[&]() -> char32_t {
-        constexpr std::string_view simple{R"("\/bfnrt)"};
-        constexpr std::string_view meant{"\"\\/\b\f\n\r\t"};
+    /**
+     * @brief Reads a `\uXXXX` escape after its backslash, four hexadecimal digits after the `u`.
+     * @return The code point the escape stands for.
+     * @throws std::invalid_argument If the escape is not `u` and four hexadecimal digits.
+     */
+    [[nodiscard]] char32_t hex_escape();
 
-        const auto escape{at < text.size() ? text[at] : '\0'};
+    /**
+     * @brief Reads a decimal id after white space.
+     * @return The id.
+     * @throws std::invalid_argument If no decimal number stands there or it is beyond the 32 bits of an id.
+     */
+    [[nodiscard]] Token_id_t id();
 
-        if (const auto found{simple.find(escape)}; found != std::string_view::npos)
-        {
-            ++at;
+    /**
+     * @brief Returns the spellings placed by id.
+     * @param entries Every spelling with its id.
+     * @return The bytes of every token, by id.
+     * @throws std::invalid_argument If the ids are not dense from zero.
+     */
+    [[nodiscard]] std::vector<std::string> by_id(Entries_t entries) const;
 
-            return static_cast<unsigned char>(meant[found]);
-        }
+    /**
+     * @brief The file's bytes.
+     */
+    std::string_view text_;
 
-        constexpr std::size_t hex_digits{4};
+    /**
+     * @brief The file's path, for the refusals.
+     */
+    std::string_view name_;
 
-        const auto digits{escape == 'u' && at + 1 + hex_digits <= text.size() ? text.substr(at + 1, hex_digits) : ""};
+    /**
+     * @brief The current position, a byte offset into the text.
+     */
+    std::size_t at_{0};
+};
 
-        std::uint32_t value{};
+Encoder_reader::Encoder_reader(const std::string_view text, const std::string_view name) noexcept
+    : text_{text}, name_{name}
+{}
 
-        const auto [end, error]{std::from_chars(digits.data(), digits.data() + digits.size(), value, 16)};
-
-        if (digits.empty() || error != std::errc{} || end != digits.data() + digits.size())
-        {
-            refuse("JSON escape");
-        }
-
-        at += 1 + hex_digits;
-
-        return value;
-    }};
-
-    const auto spelling{[&] {
-        expect('"', "quoted spelling");
-
-        // The token is named by the offset of its opening quote.
-        const auto start{at - 1};
-
-        std::string bytes{};
-
-        while (at < text.size() && text[at] != '"')
-        {
-            const auto character_start{at};
-
-            const auto escape{text[at] == '\\'};
-
-            const auto [character, length]{escape ? std::pair{char32_t{}, 1UZ} : character_at(text, at)};
-
-            at += length;
-
-            const auto code_point{escape ? escaped() : character};
-
-            const auto byte{byte_of(code_point)};
-
-            if (!byte)
-            {
-                throw unmapped(code_point, std::format("{} at byte {}", name, character_start));
-            }
-
-            bytes += *byte;
-        }
-
-        expect('"', "closing quote");
-
-        if (bytes.empty())
-        {
-            throw std::invalid_argument{std::format("read_gpt2: {} holds an empty token at byte {}", name, start)};
-        }
-
-        return bytes;
-    }};
-
-    const auto id{[&] {
-        skip_space();
-
-        std::uint64_t value{};
-
-        const auto [end, error]{std::from_chars(text.data() + at, text.data() + text.size(), value)};
-
-        if (error != std::errc{} || value > std::numeric_limits<Token_id_t>::max())
-        {
-            refuse("id");
-        }
-
-        at = static_cast<std::size_t>(end - text.data());
-
-        return static_cast<Token_id_t>(value);
-    }};
-
-    std::vector<std::pair<std::string, Token_id_t>> entries{};
-
+std::vector<std::string> Encoder_reader::read()
+{
     expect('{', "opening brace");
 
-    if (!consumed('}'))
-    {
-        do
-        {
-            auto bytes{spelling()};
-
-            expect(':', "colon");
-
-            const auto token{id()};
-
-            entries.emplace_back(std::move(bytes), token);
-        } while (consumed(','));
-
-        expect('}', "closing brace");
-    }
+    auto entries{accept('}') ? Entries_t{} : members()};
 
     skip_space();
 
-    if (at != text.size())
+    if (at_ != text_.size())
     {
-        refuse("end of the object");
+        fail("end of the object");
     }
 
+    return by_id(std::move(entries));
+}
+
+void Encoder_reader::expect(const char symbol, const std::string_view expected)
+{
+    skip_space();
+
+    if (at_ == text_.size() || text_[at_] != symbol)
+    {
+        fail(expected);
+    }
+
+    ++at_;
+}
+
+void Encoder_reader::skip_space() noexcept
+{
+    while (at_ < text_.size() && separators.contains(text_[at_]))
+    {
+        ++at_;
+    }
+}
+
+void Encoder_reader::fail(const std::string_view expected) const
+{
+    throw std::invalid_argument{std::format("read_gpt2: {} has no {} at byte {}", name_, expected, at_)};
+}
+
+bool Encoder_reader::accept(const char symbol) noexcept
+{
+    skip_space();
+
+    const auto found{at_ < text_.size() && text_[at_] == symbol};
+
+    at_ += found ? 1 : 0;
+
+    return found;
+}
+
+Entries_t Encoder_reader::members()
+{
+    Entries_t entries{};
+
+    do
+    {
+        auto bytes{spelling()};
+
+        expect(':', "colon");
+
+        const auto token{id()};
+
+        entries.emplace_back(std::move(bytes), token);
+    } while (accept(','));
+
+    expect('}', "closing brace");
+
+    return entries;
+}
+
+std::string Encoder_reader::spelling()
+{
+    expect('"', "quoted spelling");
+
+    // The token is named by the offset of its opening quote.
+    const auto start{at_ - 1};
+
+    std::string bytes{};
+
+    while (at_ < text_.size() && text_[at_] != '"')
+    {
+        const auto character_start{at_};
+
+        const auto code_point{character()};
+
+        const auto byte{byte_of(code_point)};
+
+        if (!byte)
+        {
+            throw unmapped(code_point, std::format("{} at byte {}", name_, character_start));
+        }
+
+        bytes += *byte;
+    }
+
+    expect('"', "closing quote");
+
+    if (bytes.empty())
+    {
+        throw std::invalid_argument{std::format("read_gpt2: {} holds an empty token at byte {}", name_, start)};
+    }
+
+    return bytes;
+}
+
+char32_t Encoder_reader::character()
+{
+    if (text_[at_] == '\\')
+    {
+        ++at_;
+
+        return escaped();
+    }
+
+    const auto [code_point, length]{character_at(text_, at_)};
+
+    at_ += length;
+
+    return code_point;
+}
+
+char32_t Encoder_reader::escaped()
+{
+    constexpr std::string_view simple{R"("\/bfnrt)"};
+    constexpr std::string_view meant{"\"\\/\b\f\n\r\t"};
+
+    const auto escape{at_ < text_.size() ? text_[at_] : '\0'};
+
+    const auto found{simple.find(escape)};
+
+    if (found == std::string_view::npos)
+    {
+        return hex_escape();
+    }
+
+    ++at_;
+
+    return static_cast<unsigned char>(meant[found]);
+}
+
+char32_t Encoder_reader::hex_escape()
+{
+    constexpr std::size_t hex_digits{4};
+
+    const auto spelled{at_ < text_.size() && text_[at_] == 'u' && at_ + 1 + hex_digits <= text_.size()};
+
+    const auto digits{spelled ? text_.substr(at_ + 1, hex_digits) : ""};
+
+    std::uint32_t value{};
+
+    const auto digits_end{digits.data() + digits.size()};
+
+    const auto [end, error]{std::from_chars(digits.data(), digits_end, value, 16)};
+
+    if (digits.empty() || error != std::errc{} || end != digits_end)
+    {
+        fail("JSON escape");
+    }
+
+    at_ += 1 + hex_digits;
+
+    return value;
+}
+
+Token_id_t Encoder_reader::id()
+{
+    skip_space();
+
+    std::uint64_t value{};
+
+    const auto [end, error]{std::from_chars(text_.data() + at_, text_.data() + text_.size(), value)};
+
+    if (error != std::errc{} || value > std::numeric_limits<Token_id_t>::max())
+    {
+        fail("id");
+    }
+
+    at_ = static_cast<std::size_t>(end - text_.data());
+
+    return static_cast<Token_id_t>(value);
+}
+
+std::vector<std::string> Encoder_reader::by_id(Entries_t entries) const
+{
     std::vector<std::string> spellings(entries.size());
 
     std::vector<bool> placed(entries.size());
@@ -332,7 +488,7 @@ constexpr Byte_map_t byte_map{byte_map_of()};
             throw std::invalid_argument{std::format(
                     "read_gpt2: the ids of {} are not dense from zero: {} tokens, and the id {} is beyond them or "
                     "repeats",
-                    name, entries.size(), token)};
+                    name_, entries.size(), token)};
         }
 
         placed[token] = true;
@@ -344,6 +500,67 @@ constexpr Byte_map_t byte_map{byte_map_of()};
 }
 
 /**
+ * @brief Returns the bytes a part of a merge line stands for, each of its characters' byte map undone.
+ * @param part The part.
+ * @param where The line and the file, for the refusal.
+ * @return The bytes.
+ * @throws std::invalid_argument If the part holds a character the byte map does not carry.
+ */
+[[nodiscard]] std::string part_bytes(const std::string_view part, const std::string_view where)
+{
+    std::string bytes{};
+
+    for (std::size_t index{0}; index < part.size();)
+    {
+        const auto [character, length]{character_at(part, index)};
+
+        const auto byte{byte_of(character)};
+
+        if (!byte)
+        {
+            throw unmapped(character, where);
+        }
+
+        bytes += *byte;
+
+        index += length;
+    }
+
+    return bytes;
+}
+
+/**
+ * @brief Returns the merge a line of vocab.bpe spells, its two parts separated by white space.
+ * @param line The line, without its line feed.
+ * @param where The line and the file, for the refusals.
+ * @return The merge, each part's byte map undone.
+ * @throws std::invalid_argument If the line is not two parts, or a part holds a character the byte map does not carry.
+ */
+[[nodiscard]] munch::verifier::Merge merge_of(const std::string_view line, const std::string_view where)
+{
+    std::vector<std::string> parts{};
+
+    for (std::size_t at{line.find_first_not_of(separators)}; at != std::string_view::npos;)
+    {
+        const auto stop{std::min(line.find_first_of(separators, at), line.size())};
+
+        const auto part{line.substr(at, stop - at)};
+
+        parts.push_back(part_bytes(part, where));
+
+        at = line.find_first_not_of(separators, stop);
+    }
+
+    if (parts.size() != 2)
+    {
+        throw std::invalid_argument{
+                std::format("read_gpt2: {} is not a merge, two parts separated by white space", where)};
+    }
+
+    return {.left = std::move(parts.front()), .right = std::move(parts.back())};
+}
+
+/**
  * @brief Returns the merge table of vocab.bpe, as encoder.py reads it: the lines between the first newline and the
  *        last, each two parts separated by white space, each part's byte map undone.
  * @param text The file's bytes.
@@ -351,7 +568,7 @@ constexpr Byte_map_t byte_map{byte_map_of()};
  * @return The merges in rank order.
  * @throws std::invalid_argument If a line is not two parts, or a part holds a character the byte map does not carry.
  */
-[[nodiscard]] std::vector<munch::verifier::Merge> merges_of(const std::string_view text, const std::string& name)
+[[nodiscard]] std::vector<munch::verifier::Merge> merges_of(const std::string_view text, const std::string_view name)
 {
     std::vector<munch::verifier::Merge> merges{};
 
@@ -372,44 +589,7 @@ constexpr Byte_map_t byte_map{byte_map_of()};
 
         const auto where{std::format("line {} of {}", number, name)};
 
-        std::vector<std::string> parts{};
-
-        for (std::size_t at{line.find_first_not_of(separators)}; at != std::string_view::npos;)
-        {
-            const auto stop{std::min(line.find_first_of(separators, at), line.size())};
-
-            const auto field{line.substr(at, stop - at)};
-
-            std::string bytes{};
-
-            for (std::size_t index{0}; index < field.size();)
-            {
-                const auto [character, length]{character_at(field, index)};
-
-                const auto byte{byte_of(character)};
-
-                if (!byte)
-                {
-                    throw unmapped(character, where);
-                }
-
-                bytes += *byte;
-
-                index += length;
-            }
-
-            parts.push_back(std::move(bytes));
-
-            at = line.find_first_not_of(separators, stop);
-        }
-
-        if (parts.size() != 2)
-        {
-            throw std::invalid_argument{
-                    std::format("read_gpt2: {} is not a merge, two parts separated by white space", where)};
-        }
-
-        merges.push_back({.left = std::move(parts.front()), .right = std::move(parts.back())});
+        merges.push_back(merge_of(line, where));
     }
 
     return merges;
@@ -423,7 +603,11 @@ Definition read_gpt2(const std::filesystem::path& encoder, const std::filesystem
 
     const auto vocab_text{contents(vocab)};
 
-    auto spellings{spellings_of(encoder_text, encoder.string())};
+    const auto encoder_name{encoder.string()};
+
+    Encoder_reader reader{encoder_text, encoder_name};
+
+    auto spellings{reader.read()};
 
     auto merges{merges_of(vocab_text, vocab.string())};
 
