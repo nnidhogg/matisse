@@ -274,9 +274,9 @@ gate-passing accept of the first alternative that has one, each alternative a sm
 alternative gated by "the next codepoint is whitespace" and cl100k's end-anchored alternative passing only at the end of
 input. `boundaries()` returns the piece ends as byte offsets. `split_verifier()` is the verifier M built from the
 one-step relation Q of each pattern, minimized, and handed to munch as a `Verifier` table over the class symbols; the
-construction's M has 22 states for GPT-2 and 33 for cl100k. `factorization_lexer()` compiles the gate-erased union U of
-the alternatives over the class symbols as a munch token set, on which `is_split_window()` decides the factorization
-certificate. Each of them refuses `Pattern::none`.
+table munch's constructor makes of M has 21 states for GPT-2 and 32 for cl100k, 22 and 33 counting the dead state.
+`factorization_lexer()` compiles the gate-erased union U of the alternatives over the class symbols as a munch token
+set, on which `is_split_window()` decides the factorization certificate. Each of them refuses `Pattern::none`.
 
 The construction behind these, the gate-sufficiency proposition, the transfer of a cut from class strings to text and
 the splice theorem the encoder rests on are the results of a report on pre-tokenizer certification that is not yet
@@ -439,9 +439,10 @@ and the C++ tests read every line, check the answer, and count the lines of each
 
 - **Classes**: the Unicode version, the class numbering by symbol, the range count and SHA-256 of each set the tables
   hold, L, N and White_Space, and the class of every code point on either side of a change of class.
-- **Segmentation**: the engine's segmentation of every class string of lengths zero to five (579,195 strings for GPT-2,
-  1,118,481 for cl100k, the gate check's own population, or length four if the file is too large to keep), against which
-  the `Segmenter` is held, and the boundaries of the three corpora's class projections as digests.
+- **Segmentation**: the engine's segmentation of every class string of lengths zero to four (41,371 strings for GPT-2
+  and 69,905 for cl100k, 2.4 MB, the script's default length; to five, the gate check's own population, they would be
+  579,195 and 1,118,481), against which the `Segmenter` is held, and the boundaries of the three corpora's class
+  projections as digests.
 - **Verifier**: the table munch's constructor makes of the minimized M (trimmed, start first, breadth-first over the
   marked symbols ascending), the script applying the same renumbering, so the C++ construction must produce the
   identical table state for state; and the replayed counterexamples of the construction.

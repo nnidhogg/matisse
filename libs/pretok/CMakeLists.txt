@@ -18,14 +18,13 @@ target_include_directories(${PROJECT_NAME}
         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
 
-# munch is header-visible: a pattern's verifier is a munch::verifier::Verifier, so consumers link it too; the pattern
-# parser reads the alternatives inside the library, and the class tables are munch's code point ranges.
+# munch is header-visible: the segmenter runs munch's DFAs and a pattern's verifier is a munch::verifier::Verifier, so
+# consumers link it too. The umbrella target carries the pattern parser, which reads the alternatives, and the core,
+# which compiles them.
 target_link_libraries(${PROJECT_NAME}
         PUBLIC
         matisse_load
-        munch::munch_verifier
-        PRIVATE
-        munch::munch_pattern
+        munch::munch
 )
 
 if (MATISSE_BUILD_TESTS)
