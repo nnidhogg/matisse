@@ -3,11 +3,12 @@
 The decisions behind matisse, in the order a reader meets them: what the library is and is not, the repository and its
 build, the libraries' interfaces, how the vendor verifiers move from their Python reference into C++, how the result is
 tested against the real tokenizers, what matisse needs from munch, the choices still open, and the order of work. Steps
-1 to 9 of the order of work are built, `read_tokenizer_json()` waiting on open choice 5: load reads GPT-2's files and
+1 to 10 of the order of work are built, `read_tokenizer_json()` waiting on open choice 5: load reads GPT-2's files and
 tiktoken rank files, pretok classes and segments a text and builds a pattern's split verifier and factorization lexer,
-validate decides a pattern's window tables under both certificates with their right contexts, the gpt2 and cl100k
-libraries describe their patterns, and lookup finds them, while the rest of validate and encode are still to be written.
-The sketches below give names and types, and they change as the code is written.
+validate decides a pattern's window tables under both certificates with their right contexts, measures their anchor
+supply on an input and renders the report as text and as JSON, the gpt2 and cl100k libraries describe their patterns,
+lookup finds them, and `matisse-validate` reports a rank file read under a pattern, while `validate_merges()` and encode
+are still to be written. The sketches below give names and types, and they change as the code is written.
 
 ## **What matisse is and is not**
 
@@ -454,7 +455,8 @@ struct Supply
     std::size_t longest_piece{};
 };
 
-[[nodiscard]] Supply supply(const Report& report, Inventory inventory, std::string_view input);
+[[nodiscard]] Supply supply(
+        const Report& report, Inventory inventory, const pretok::Pattern& pattern, std::string_view input);
 
 struct Merge_window
 {
@@ -471,6 +473,10 @@ struct Merge_window
 [[nodiscard]] std::string render(const Report& report);
 
 [[nodiscard]] std::string json(const Report& report);
+
+[[nodiscard]] std::string supply_section(const Supply& factorization, const Supply& policy, std::string_view path);
+
+[[nodiscard]] std::string supply_json(const Supply& factorization, const Supply& policy, std::string_view path);
 
 } // namespace matisse::validate
 ```
@@ -494,18 +500,35 @@ length is one piece. A definition without a pre-tokenizer goes to `validate_merg
 certification. Its candidates are given by the caller; the command line draws them from an input, every byte and the
 most frequent byte pairs and triples, since all byte windows of width three are too many to decide at full scale.
 
-`supply()` measures one inventory's anchors on an input. `Anchors` and `Gaps` are munch-audit's, duplicated rather than
-linked (count, per kibibyte, median, ninetieth and ninety-ninth percentile, longest), and `Supply` adds two figures
-beside them: the share of the serial pre-token boundaries that are anchors, and the longest piece, which is the floor no
-cut rule can go below. `validate_merges()` returns each candidate with its refutation or none. `render()` and `json()`
-follow munch-audit's report renderings.
+`supply()` measures one inventory's anchors on an input, the interior positions where an occurrence of a certified
+window places its origin, counted at the byte offsets of their code points. It takes the pattern the report was decided
+of, since the report holds no alphabet to class the input with and no segmenter for its pre-token boundaries. `Anchors`
+and `Gaps` are munch-audit's, duplicated rather than linked (count, per kibibyte, median, ninetieth and ninety-ninth
+percentile, longest), and `Supply` adds two figures beside them: the share of the serial pre-token boundaries that are
+anchors, and the longest piece, which is the floor no cut rule can go below. `validate_merges()` returns each candidate
+with its refutation or none. `render()` and `json()` follow munch-audit's report renderings: the text is rows of a label
+and a value, the verdict first, then each inventory's windows, counted by width with six examples, and its right context
+with the shortest truncation of every context that fails, then the boundary gap; the JSON is one object with a member
+per figure, class strings holding each byte as the code point of its value. `supply_section()` and `supply_json()`
+render the supply of both inventories on one input as munch-audit's renderings of its supply do, in supply.hpp beside
+the report, as munch-audit keeps its supply in a unit of its own.
 
 `matisse-validate` in tools/validate is the command line, modelled on munch-audit's (a `matisse_validate_cli` target
 with that output name): `matisse-validate FILE [--tiktoken PATTERN] [--windows N] [--input FILE] [--json]`, with
 `--tiktoken` naming the pattern of a rank file since the file names none, a tokenizer.json read under the first
 tokenizer of the lookup whose published spelling it holds, the report always, the supply section only with `--input`, so
 that runs without it are unchanged by it, as munch-audit's `--input` is. The pattern names are the lookup's, and the
-command line finds the pattern and the vendor's special tokens through `lookup::tokenizer()`.
+command line finds the pattern and the vendor's special tokens through `lookup::tokenizer()`. Until
+`read_tokenizer_json()` is written a FILE without `--tiktoken` is a command-line error, and GPT-2 reaches the command
+line only as a rank file under `--tiktoken gpt2`, since FILE is one file and encoder.json and vocab.bpe are two.
+`--windows` takes 2 to 5. The text heads the report with the file and the tokenizer it was read as, with its token
+counts, and `--json` writes one document holding the path, the tokenizer, the refusal or null, the token counts, the
+report and the supply. The exit status is munch-audit's: 0 when the definition was read and reported, 1 when the loader
+refused it, the refusal written in place of the report, and 2 on a command-line error, with the usage, or on a file or
+an input the command cannot read, an input that is not UTF-8 among them. Its tests run it on a rank file of the 256
+single bytes, which every pattern takes, and a short sample beside them, and hold its text at the default width and its
+JSON at width two to fixtures it wrote, each headed by the line that says how, as munch-audit's tests hold its own; the
+supply figures on the sample agree with the Python reference's measurement of the same text.
 
 ### **The encoder, matisse::encode**
 

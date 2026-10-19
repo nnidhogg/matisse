@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include <munch/verifier/verifier_decisions.hpp>
@@ -12,20 +13,18 @@
 
 /**
  * @file
- * @brief The validator, validate(), supply(), validate_merges(), render() and json(): which class windows of a
- *        definition's pattern certify a cut, at which origin and with which right context, how many anchors they
- *        supply on an input, and which candidate windows of a merge table without a pre-tokenizer certify.
+ * @brief The validator's report, Report, decided by validate(): which class windows of a definition's pattern certify a
+ *        cut, at which origin and with which right context; and the report rendered as text, render(), and as JSON,
+ *        json(), with text as a JSON string, json_string(), and the ending a noun takes for a count, plural().
  *
- * validate() decides every class window of width two to four under both certificates, the policy certificate by
- * munch::verifier::miscovering() on the split verifier and the factorization certificate by is_split_window() on the
- * factorization lexer; each window table carries the right context its inventory needs, decided by
- * munch::verifier::right_context() on the split verifier, and the report carries boundary_gap() of the split verifier.
- * A window is a string of class symbols and its origin counts code points, as the pattern's alphabet classes a text.
- * validate_merges() builds munch::verifier::token_automaton() once and decides each candidate window by miscovering()
- * on it, the lazy certification. supply() measures one inventory's anchors on an input as munch-audit's supply does,
- * with the share of the serial pre-token boundaries that are anchors and the longest piece beside them, and render()
- * and json() follow munch-audit's report renderings. Of the functions, only validate() is declared yet; docs/design.md
- * sketches the others.
+ * validate() decides every class window of width two to a width, four unless told, under both certificates, the policy
+ * certificate by munch::verifier::miscovering() on the split verifier and the factorization certificate by
+ * is_split_window() on the factorization lexer; each window table carries the right context its inventory needs,
+ * decided by munch::verifier::right_context() on the split verifier, and the report carries boundary_gap() of the split
+ * verifier. A window is a string of class symbols and its origin counts code points, as the pattern's alphabet classes
+ * a text. render() and json() follow munch-audit's report renderings. Two units implement it, as munch-audit's report
+ * is implemented: report.cpp decides and report_render.cpp writes what was decided. supply.hpp measures a report's
+ * anchors on an input.
  */
 namespace matisse::validate
 {
@@ -149,6 +148,48 @@ struct Report
  * @throws munch::pattern::Syntax_error If an alternative's language is not in munch's pattern syntax.
  */
 [[nodiscard]] Report validate(const pretok::Pattern& pattern, std::size_t width = default_width);
+
+/**
+ * @brief Renders a report as text, the verdict first, then each inventory's windows and right context, then the
+ *        boundary gap.
+ *
+ * A window and a truncation's text are class strings, shown quoted with the common controls escaped; the windows are
+ * counted by width and the first six shown as examples, printable ones first, and each right context that fails is
+ * shown by its shortest truncation, the text with its cut and the boundaries the split verifier accepts it with.
+ * @param report The report.
+ * @return The text, a newline after every row.
+ */
+[[nodiscard]] std::string render(const Report& report);
+
+/**
+ * @brief Renders a report as JSON, one object with a member per figure.
+ *
+ * Class strings are JSON strings holding each byte as the code point of its value, so a reader recovers them exactly; a
+ * marked string, a truncation's segmentation or a part of the gap's lasso, is an object of its text and the offsets its
+ * boundaries stand at; the boundary gap is a number, or the string "unbounded" with its lasso beside it.
+ * @param report The report.
+ * @return The JSON text, no trailing newline.
+ */
+[[nodiscard]] std::string json(const Report& report);
+
+/**
+ * @brief Returns text as a JSON string, the quote, the backslash and the controls escaped; a byte beyond ASCII stands
+ *        as it is where it is part of a well-formed UTF-8 sequence, the text being UTF-8, and is escaped as the code
+ *        point of its value where it is not, so that the document is JSON whatever bytes a path holds.
+ * @param text The text.
+ * @return The JSON text, quotes included.
+ */
+[[nodiscard]] std::string json_string(std::string_view text);
+
+/**
+ * @brief Returns the ending a noun takes for a count.
+ * @param count The count.
+ * @return Nothing for one, `s` for any other.
+ */
+[[nodiscard]] constexpr std::string_view plural(const std::size_t count) noexcept
+{
+    return count == 1 ? "" : "s";
+}
 
 } // namespace matisse::validate
 

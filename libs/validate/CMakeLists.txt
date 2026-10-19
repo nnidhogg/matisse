@@ -5,6 +5,8 @@ project(matisse_validate)
 
 add_library(${PROJECT_NAME}
         src/report.cpp
+        src/report_render.cpp
+        src/supply.cpp
 )
 
 # The exported target carries the standard it needs.
@@ -29,6 +31,7 @@ target_link_libraries(${PROJECT_NAME}
 if (MATISSE_BUILD_TESTS)
     add_executable(${PROJECT_NAME}_tests
             tests/report_test.cpp
+            tests/supply_test.cpp
     )
 
     target_link_libraries(${PROJECT_NAME}_tests

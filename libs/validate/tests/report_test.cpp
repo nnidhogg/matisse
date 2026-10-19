@@ -88,6 +88,18 @@ constexpr std::array<Alternative, 2> single_alternatives{{
 constexpr Pattern single{.alphabet = two_symbols, .alternatives = single_alternatives};
 
 /**
+ * @brief A pattern whose one piece is the whole text, so that no cut is ever certified.
+ */
+constexpr std::array<Alternative, 1> whole_alternatives{{
+        {.language = "[ab]+", .gate = "ab"},
+}};
+
+/**
+ * @brief The whole-text pattern over the two classes.
+ */
+constexpr Pattern whole{.alphabet = two_symbols, .alternatives = whole_alternatives};
+
+/**
  * @brief Returns whether a class string is a word of the gated pattern's gate-erased union, a run of `a` or one `b`.
  * @param word The class string.
  * @return True when it is a word.
@@ -470,4 +482,110 @@ TEST(Report_test, The_tables_carry_their_inventory_and_width)
 
     // A run of a has no bound.
     EXPECT_TRUE(std::holds_alternative<munch::verifier::Lasso>(report.gap));
+}
+
+TEST(Report_test, The_text_reads_as_the_verdict_then_each_inventory_then_the_gap)
+{
+    // Every window of the single-symbol pattern is certified at its last symbol with no right context, and every
+    // boundary is at most one symbol from the next.
+    EXPECT_EQ(
+            render(validate(single, 2)),
+            "verdict                     windows certify a cut: 4 under the factorization certificate and 4 under the "
+            "policy certificate, up to width 2\n"
+            "factorization windows       4: 4 at width 2\n"
+            "                            \"aa\" at 1\n"
+            "                            \"ab\" at 1\n"
+            "                            \"ba\" at 1\n"
+            "                            \"bb\" at 1\n"
+            "factorization context       0 code points read past the cut\n"
+            "policy windows              4: 4 at width 2\n"
+            "                            \"aa\" at 1\n"
+            "                            \"ab\" at 1\n"
+            "                            \"ba\" at 1\n"
+            "                            \"bb\" at 1\n"
+            "policy context              0 code points read past the cut\n"
+            "boundary gap                1 code point\n");
+
+    // The gated pattern leaves the last a of a run before a b to the second alternative, so "ab" is certified at the b
+    // and "aa" nowhere; the cut in "aab" needs the b read past it, since "aa" alone is one piece, and a run of a
+    // carries no boundary however long. Six examples are shown and the rest counted.
+    EXPECT_EQ(
+            render(validate(gated, 3)),
+            "verdict                     windows certify a cut: 9 under the factorization certificate and 9 under the "
+            "policy certificate, up to width 3\n"
+            "factorization windows       9: 3 at width 2, 6 at width 3\n"
+            "                            \"ab\" at 1\n"
+            "                            \"ba\" at 1\n"
+            "                            \"bb\" at 1\n"
+            "                            \"aab\" at 2\n"
+            "                            \"aba\" at 2\n"
+            "                            \"abb\" at 2\n"
+            "                            ... 3 more\n"
+            "factorization context       1 code point read past the cut\n"
+            "                            0 fails at cut 2 of \"aab\", boundaries 1 2\n"
+            "policy windows              9: 3 at width 2, 6 at width 3\n"
+            "                            \"ab\" at 1\n"
+            "                            \"ba\" at 1\n"
+            "                            \"bb\" at 1\n"
+            "                            \"aab\" at 2\n"
+            "                            \"aba\" at 2\n"
+            "                            \"abb\" at 2\n"
+            "                            ... 3 more\n"
+            "policy context              1 code point read past the cut\n"
+            "                            0 fails at cut 2 of \"aab\", boundaries 1 2\n"
+            "boundary gap                unbounded: \"a\" repeats with no boundary\n");
+}
+
+TEST(Report_test, The_json_document_holds_every_figure_under_its_name)
+{
+    EXPECT_EQ(
+            json(validate(single, 2)),
+            R"({
+  "verdict": "windows certify a cut: 4 under the factorization certificate and 4 under the policy certificate, up to width 2",
+  "factorization": {"width": 2, "windows": [{"window": "aa", "origin": 1}, {"window": "ab", "origin": 1}, {"window": "ba", "origin": 1}, {"window": "bb", "origin": 1}], "right_context": 0, "failing": []},
+  "policy": {"width": 2, "windows": [{"window": "aa", "origin": 1}, {"window": "ab", "origin": 1}, {"window": "ba", "origin": 1}, {"window": "bb", "origin": 1}], "right_context": 0, "failing": []},
+  "boundary_gap": 1,
+  "gap_lasso": null
+})");
+
+    EXPECT_EQ(
+            json(validate(gated, 3)),
+            R"({
+  "verdict": "windows certify a cut: 9 under the factorization certificate and 9 under the policy certificate, up to width 3",
+  "factorization": {"width": 3, "windows": [{"window": "ab", "origin": 1}, {"window": "ba", "origin": 1}, {"window": "bb", "origin": 1}, {"window": "aab", "origin": 2}, {"window": "aba", "origin": 2}, {"window": "abb", "origin": 2}, {"window": "bab", "origin": 2}, {"window": "bba", "origin": 2}, {"window": "bbb", "origin": 2}], "right_context": 1, "failing": [{"segmentation": {"text": "aab", "boundaries": [1, 2]}, "occurrence": 1, "cut": 2, "context": 0}]},
+  "policy": {"width": 3, "windows": [{"window": "ab", "origin": 1}, {"window": "ba", "origin": 1}, {"window": "bb", "origin": 1}, {"window": "aab", "origin": 2}, {"window": "aba", "origin": 2}, {"window": "abb", "origin": 2}, {"window": "bab", "origin": 2}, {"window": "bba", "origin": 2}, {"window": "bbb", "origin": 2}], "right_context": 1, "failing": [{"segmentation": {"text": "aab", "boundaries": [1, 2]}, "occurrence": 1, "cut": 2, "context": 0}]},
+  "boundary_gap": "unbounded",
+  "gap_lasso": {"stem": {"text": "a", "boundaries": []}, "loop": {"text": "a", "boundaries": []}, "suffix": {"text": "", "boundaries": []}}
+})");
+}
+
+TEST(Report_test, A_pattern_that_certifies_no_window_says_so_in_both_forms)
+{
+    const auto report{validate(whole)};
+
+    const auto text{render(report)};
+
+    EXPECT_TRUE(text.starts_with(
+            "verdict                     no window up to width 4 certifies a cut under either certificate\n"
+            "factorization windows       none\n"
+            "factorization context       0 code points read past the cut\n"
+            "policy windows              none\n"))
+            << text;
+
+    const auto document{json(report)};
+
+    EXPECT_TRUE(document.contains(R"("verdict": "no window up to width 4 certifies a cut under either certificate")"))
+            << document;
+    EXPECT_TRUE(document.contains(R"("policy": {"width": 4, "windows": [], "right_context": 0, "failing": []})"))
+            << document;
+}
+
+TEST(Report_test, A_json_string_escapes_the_quote_the_backslash_and_the_controls_and_passes_utf8_through)
+{
+    EXPECT_EQ(json_string(R"(say "hi"\)"), R"("say \"hi\"\\")");
+    EXPECT_EQ(json_string("tab\tnewline\n"), R"("tab\u0009newline\u000a")");
+    EXPECT_EQ(json_string("h\xC3\xA9llo"), "\"h\xC3\xA9llo\"");
+
+    // A byte that begins no well-formed sequence is escaped as the code point of its value.
+    EXPECT_EQ(json_string("a\xFF"), R"("a\u00ff")");
 }

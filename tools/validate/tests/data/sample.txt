@@ -1,0 +1,7 @@
+Hello world! tiktoken is great.
+We're sure it's fine, DON'T worry.
+
+	Indented line with  two spaces and 1234567 digits.
+héllo wörld, 日本語 text.
+    
+		!end

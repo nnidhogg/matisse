@@ -30,6 +30,7 @@ if (MATISSE_BUILD_TESTS)
             tests/definition_test.cpp
             tests/report_test.cpp
             tests/segmenter_test.cpp
+            tests/supply_test.cpp
             tests/verifier_test.cpp
     )
 

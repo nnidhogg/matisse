@@ -1,0 +1,31 @@
+# written by matisse-validate from the repository's root with --tiktoken gpt2 tools/validate/tests/data/bytes.tiktoken --input tools/validate/tests/data/sample.txt; regenerate with it, never by hand
+== tools/validate/tests/data/bytes.tiktoken
+-- tokenizer gpt2: 256 tokens, 1 special token
+verdict                     windows certify a cut: 18357 under the factorization certificate and 32218 under the policy certificate, up to width 4
+factorization windows       18357: 87 at width 2, 1218 at width 3, 17052 at width 4
+                            "! " at 1
+                            "!0" at 1
+                            "!A" at 1
+                            "!d" at 1
+                            "!e" at 1
+                            "!l" at 1
+                            ... 18351 more
+factorization context       1 code point read past the cut
+                            0 fails at cut 2 of "\t\t!", boundaries 1 2
+policy windows              32218: 99 at width 2, 1878 at width 3, 30241 at width 4
+                            " !" at 0
+                            " '" at 0
+                            " 0" at 0
+                            " A" at 0
+                            " d" at 0
+                            " e" at 0
+                            ... 32212 more
+policy context              2 code points read past the cut
+                            0 fails at cut 2 of "\t\t!", boundaries 1 2
+                            1 fails at cut 1 of "\t !", boundaries 1
+boundary gap                unbounded: "\t" repeats with no boundary
+
+certified-anchor supply on tools/validate/tests/data/sample.txt, 163 bytes
+  longest piece              10 bytes, the floor no cut rule goes below
+  factorization              40 anchors, 251.3 per KiB, 93.02% of the pre-token boundaries, gaps p50 4, p90 8, p99 10, max 10
+  policy                     41 anchors, 257.6 per KiB, 95.35% of the pre-token boundaries, gaps p50 4, p90 8, p99 10, max 10
