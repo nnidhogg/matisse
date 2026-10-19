@@ -42,6 +42,10 @@ if (MATISSE_BUILD_TESTS)
     enable_testing()
 endif ()
 
+# The pinned vocabulary files, GPT-2's and cl100k_base's, are not in the tree; the loaders' tests read them from this
+# directory, each held to its digest, and skip when it is not given.
+set(MATISSE_VOCAB_DIR "" CACHE PATH "A directory holding the pinned vocabulary files the tests read")
+
 include(GNUInstallDirs)
 
 # Installing matisse means installing targets that link munch, and an exported target can only refer to munch as an

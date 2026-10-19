@@ -24,11 +24,11 @@ tables, and the runtime with its token ids, normalizers and special-token cuts.
 
 ## **Status**
 
-Not yet released; matisse depends on munch 3.0.0. The tree is the repository's skeleton: the four libraries build, link
-and register their tests with CTest, and `matisse-validate` prints its usage, while the libraries themselves are still
-empty. The version is 0.1.0, pre-1.0, and nothing is stable yet. The munch submodule is pinned to munch's 3.0.0 release
-candidate and moves to the release tag once munch 3.0.0 is released. What each library will hold, the proved results the
-loaders rest on and the order of work are in [docs/design.md](docs/design.md).
+Not yet released; matisse depends on munch 3.0.0, the release its submodule is pinned to. load reads GPT-2's
+encoder.json and vocab.bpe and tiktoken rank files; the other libraries build, link and register their tests with CTest,
+and `matisse-validate` prints its usage, while what they will hold is still to be written. The version is 0.1.0,
+pre-1.0, and nothing is stable yet. What each library will hold, the proved results the loaders rest on and the order of
+work are in [docs/design.md](docs/design.md).
 
 ## **Libraries**
 
@@ -83,6 +83,10 @@ ctest --test-dir build --timeout 300 --output-on-failure
 
 Tests and warnings-as-errors are enabled by default only when matisse is the top-level project; a build consuming
 matisse through `add_subdirectory` opts in with `-DMATISSE_BUILD_TESTS=ON` or `-DMATISSE_WERROR=ON`.
+
+The vocabulary files the loaders' tests read, GPT-2's gpt2-vocab.json and gpt2-merges.txt and cl100k_base.tiktoken, are
+not in the tree. A directory holding them is named with `-DMATISSE_VOCAB_DIR=DIR`, each file is held to the SHA-256
+docs/design.md gives, and the tests that need them skip when no directory is named; nothing is fetched at test time.
 
 ## **License**
 
