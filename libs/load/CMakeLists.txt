@@ -36,11 +36,4 @@ if (MATISSE_BUILD_TESTS)
     )
 
     add_test(NAME ${PROJECT_NAME}_tests COMMAND ${PROJECT_NAME}_tests)
-
-    # The pinned vocabularies are read from outside the tree; the tests that need them skip when none is named.
-    target_compile_definitions(${PROJECT_NAME}_tests
-            PRIVATE
-            SOURCE_DIR="${MATISSE_SOURCE_DIR}"
-            VOCAB_DIR="${MATISSE_VOCAB_DIR}"
-    )
 endif ()

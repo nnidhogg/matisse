@@ -1,7 +1,6 @@
 #include "matisse/pretok/classes.hpp"
 
 #include <algorithm>
-#include <array>
 #include <cstddef>
 #include <format>
 #include <iterator>
@@ -18,62 +17,6 @@ namespace
 {
 using munch::regex::utf8::Code_point_range;
 
-#include "class_ranges.inc"
-
-/**
- * @brief The class alphabet of a pattern: its class symbols and which of them are literals of the pattern.
- */
-struct Alphabet
-{
-    /**
-     * @brief The symbol of every class, ascending, so a class is its symbol's place among them.
-     */
-    std::string_view symbols{};
-
-    /**
-     * @brief The symbols that are literals of the pattern, each a class of that code point alone, or of its two cases
-     *        when the alphabet is caseless.
-     */
-    std::string_view literals{};
-
-    /**
-     * @brief Whether the pattern's contraction letters match either case, as cl100k's `(?i:...)` matches them.
-     */
-    bool caseless{};
-};
-
-/**
- * @brief GPT-2's alphabet: the space, the apostrophe and the contraction letters of `'s|'t|'re|'ve|'m|'ll|'d`, case
- *        sensitive.
- */
-constexpr Alphabet gpt2_alphabet{.symbols = "\t !'0Adelmrstv", .literals = " 'delmrstv", .caseless = false};
-
-/**
- * @brief cl100k's alphabet: the carriage return, the line feed, the space, the apostrophe and the contraction
- *        letters of `'(?i:[sdmt]|ll|ve|re)`, caseless.
- */
-constexpr Alphabet cl100k_alphabet{.symbols = "\t\n\r !'0Adelmrstv", .literals = "\n\r 'delmrstv", .caseless = true};
-
-/**
- * @brief The symbol of the white space that is no literal.
- */
-constexpr char white_space_symbol{'\t'};
-
-/**
- * @brief The symbol of the letters that are no literal.
- */
-constexpr char letter_symbol{'A'};
-
-/**
- * @brief The symbol of the numbers.
- */
-constexpr char number_symbol{'0'};
-
-/**
- * @brief The symbol of every code point in no set and no literal.
- */
-constexpr char other_symbol{'!'};
-
 /**
  * @brief U+017F, the long s, which `s` matches caselessly under the simple case folding both the regex crate and
  *        Python's re apply.
@@ -84,23 +27,6 @@ constexpr char32_t long_s{0x17F};
  * @brief One past the last ASCII code point.
  */
 constexpr char32_t ascii_end{0x80};
-
-/**
- * @brief Returns the alphabet of a pattern.
- * @param pattern The pattern.
- * @param caller The function asking, for the refusal.
- * @return The alphabet.
- * @throws std::invalid_argument If the pattern is Pattern::none.
- */
-[[nodiscard]] const Alphabet& alphabet_of(const load::Pattern pattern, const std::string_view caller)
-{
-    if (pattern == load::Pattern::none)
-    {
-        throw std::invalid_argument{std::format("{}: Pattern::none has no class alphabet", caller)};
-    }
-
-    return pattern == load::Pattern::gpt2 ? gpt2_alphabet : cl100k_alphabet;
-}
 
 /**
  * @brief Returns whether a byte continues a UTF-8 sequence rather than beginning one.
@@ -200,55 +126,57 @@ constexpr char32_t ascii_end{0x80};
 }
 
 /**
- * @brief Returns the symbol of a code point's class: its own as a literal of the alphabet, the lowercase letter's for
- *        either case of a contraction letter of a caseless alphabet and the `s`'s for U+017F, and otherwise the symbol
- *        of the first set holding it, white space, letters or numbers, or the symbol of everything else.
+ * @brief Returns the case folding of a code point as far as a caseless alphabet's literals reach: A to Z fold to a to
+ *        z, and U+017F to s.
+ * @param point The code point.
+ * @return The folded code point, the code point itself when it folds to none of them.
+ */
+[[nodiscard]] constexpr char32_t case_folded(const char32_t point) noexcept
+{
+    constexpr char32_t case_bit{0x20};
+
+    if (point >= U'A' && point <= U'Z')
+    {
+        return point | case_bit;
+    }
+
+    return point == long_s ? U's' : point;
+}
+
+/**
+ * @brief Returns the symbol of a code point's class: its own as a literal of the alphabet, the literal its case folding
+ *        is under a caseless alphabet, and otherwise the symbol of the first set holding it, or the symbol of
+ *        everything else.
  * @param alphabet The alphabet.
  * @param point The code point.
  * @return The symbol.
  */
 [[nodiscard]] char symbol_of(const Alphabet& alphabet, const char32_t point) noexcept
 {
-    constexpr char32_t case_bit{0x20};
+    const auto& [symbols, literals, caseless, sets, other, unicode_version]{alphabet};
 
-    const auto& [symbols, literals, caseless]{alphabet};
+    const auto folded{caseless ? case_folded(point) : point};
 
-    const auto lowered{point >= U'A' && point <= U'Z' && caseless ? point | case_bit : point};
-
-    if (lowered < ascii_end && literals.contains(static_cast<char>(lowered)))
+    if (folded < ascii_end && literals.contains(static_cast<char>(folded)))
     {
-        return static_cast<char>(lowered);
+        return static_cast<char>(folded);
     }
 
-    if (caseless && point == long_s)
+    for (const auto& [symbol, ranges] : sets)
     {
-        return 's';
+        if (holds(ranges, point))
+        {
+            return symbol;
+        }
     }
 
-    if (holds(white_space_ranges, point))
-    {
-        return white_space_symbol;
-    }
-
-    if (holds(letter_ranges, point))
-    {
-        return letter_symbol;
-    }
-
-    if (holds(number_ranges, point))
-    {
-        return number_symbol;
-    }
-
-    return other_symbol;
+    return other;
 }
 
 } // namespace
 
-std::vector<Class_t> classes_of(const load::Pattern pattern, const std::string_view text)
+std::vector<Class_t> classes_of(const Alphabet& alphabet, const std::string_view text)
 {
-    const auto& alphabet{alphabet_of(pattern, "classes_of")};
-
     std::vector<Class_t> classes{};
 
     for (std::size_t at{0}; at < text.size();)
@@ -270,21 +198,6 @@ std::vector<Class_t> classes_of(const load::Pattern pattern, const std::string_v
     }
 
     return classes;
-}
-
-std::size_t class_count(const load::Pattern pattern)
-{
-    return alphabet_of(pattern, "class_count").symbols.size();
-}
-
-std::string_view class_symbols(const load::Pattern pattern)
-{
-    return alphabet_of(pattern, "class_symbols").symbols;
-}
-
-std::string_view unicode_version() noexcept
-{
-    return class_unicode_version;
 }
 
 } // namespace matisse::pretok

@@ -7,6 +7,7 @@
 #include <fstream>
 #include <iterator>
 #include <optional>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -230,37 +231,11 @@ using Entries_t = std::vector<std::pair<std::string, std::size_t>>;
     return spellings;
 }
 
-/**
- * @brief Returns the vendor's special tokens of a pattern, quoted from tiktoken's openai_public.py: those of the gpt2
- *        and r50k_base encodings for GPT-2's pattern and those of cl100k_base for cl100k's.
- * @param pattern The pattern, GPT-2's or cl100k's.
- * @return The special tokens, by id ascending.
- */
-[[nodiscard]] std::vector<Special_token> specials_of(const Pattern pattern)
-{
-    if (pattern == Pattern::gpt2)
-    {
-        return {{.spelling = "<|endoftext|>", .id = 50256}};
-    }
-
-    return {{.spelling = "<|endoftext|>", .id = 100257},
-            {.spelling = "<|fim_prefix|>", .id = 100258},
-            {.spelling = "<|fim_middle|>", .id = 100259},
-            {.spelling = "<|fim_suffix|>", .id = 100260},
-            {.spelling = "<|endofprompt|>", .id = 100276}};
-}
-
 } // namespace
 
-Definition read_tiktoken(const std::filesystem::path& path, const Pattern pattern)
+Definition read_tiktoken(const std::filesystem::path& path, const std::span<const Special_token> specials)
 {
     const auto name{path.string()};
-
-    if (pattern == Pattern::none)
-    {
-        throw std::invalid_argument{std::format(
-                "read_tiktoken: {} is read under GPT-2's or cl100k's pattern, and the pattern given is none", name)};
-    }
 
     const auto text{contents(path)};
 
@@ -268,11 +243,12 @@ Definition read_tiktoken(const std::filesystem::path& path, const Pattern patter
 
     auto spellings{spellings_by_rank(std::move(entries), name)};
 
-    return {.pattern = pattern,
-            .merge_rule = Merge_rule::ranks,
+    std::vector<Special_token> vendor_specials(specials.begin(), specials.end());
+
+    return {.merge_rule = Merge_rule::ranks,
             .spellings = std::move(spellings),
             .merges = {},
-            .specials = specials_of(pattern)};
+            .specials = std::move(vendor_specials)};
 }
 
 } // namespace matisse::load

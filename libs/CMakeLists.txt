@@ -1,4 +1,8 @@
+add_subdirectory(common)
 add_subdirectory(load)
 add_subdirectory(pretok)
 add_subdirectory(validate)
 add_subdirectory(encode)
+add_subdirectory(gpt2)
+add_subdirectory(cl100k)
+add_subdirectory(lookup)

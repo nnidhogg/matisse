@@ -611,8 +611,7 @@ Definition read_gpt2(const std::filesystem::path& encoder, const std::filesystem
 
     auto merges{merges_of(vocab_text, vocab.string())};
 
-    return {.pattern = Pattern::gpt2,
-            .merge_rule = Merge_rule::pairs,
+    return {.merge_rule = Merge_rule::pairs,
             .spellings = std::move(spellings),
             .merges = std::move(merges),
             .specials = {}};

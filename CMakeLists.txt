@@ -73,7 +73,8 @@ add_subdirectory(external)
 add_subdirectory(libs)
 add_subdirectory(tools)
 
-# The umbrella carries matisse's own libraries; munch arrives transitively through matisse_load.
+# The umbrella carries matisse's own libraries, the stages, every tokenizer and the lookup over them; munch arrives
+# transitively through matisse_load.
 add_library(${PROJECT_NAME}
         INTERFACE
 )
@@ -83,6 +84,9 @@ add_library(${PROJECT_NAME}::load ALIAS matisse_load)
 add_library(${PROJECT_NAME}::pretok ALIAS matisse_pretok)
 add_library(${PROJECT_NAME}::validate ALIAS matisse_validate)
 add_library(${PROJECT_NAME}::encode ALIAS matisse_encode)
+add_library(${PROJECT_NAME}::gpt2 ALIAS matisse_gpt2)
+add_library(${PROJECT_NAME}::cl100k ALIAS matisse_cl100k)
+add_library(${PROJECT_NAME}::lookup ALIAS matisse_lookup)
 
 target_link_libraries(${PROJECT_NAME}
         INTERFACE
@@ -90,20 +94,28 @@ target_link_libraries(${PROJECT_NAME}
         matisse_pretok
         matisse_validate
         matisse_encode
+        matisse_gpt2
+        matisse_cl100k
+        matisse_lookup
 )
 
 if (MATISSE_INSTALL)
     # The installed names are the aliases the build offers: matisse::load, matisse::pretok, matisse::validate,
-    # matisse::encode, matisse::matisse.
+    # matisse::encode, matisse::gpt2, matisse::cl100k, matisse::lookup, matisse::matisse.
     set_target_properties(matisse_load PROPERTIES EXPORT_NAME load)
     set_target_properties(matisse_pretok PROPERTIES EXPORT_NAME pretok)
     set_target_properties(matisse_validate PROPERTIES EXPORT_NAME validate)
     set_target_properties(matisse_encode PROPERTIES EXPORT_NAME encode)
+    set_target_properties(matisse_gpt2 PROPERTIES EXPORT_NAME gpt2)
+    set_target_properties(matisse_cl100k PROPERTIES EXPORT_NAME cl100k)
+    set_target_properties(matisse_lookup PROPERTIES EXPORT_NAME lookup)
 
-    install(TARGETS ${PROJECT_NAME} matisse_load matisse_pretok matisse_validate matisse_encode matisse_validate_cli
+    install(TARGETS ${PROJECT_NAME} matisse_load matisse_pretok matisse_validate matisse_encode matisse_gpt2
+            matisse_cl100k matisse_lookup matisse_validate_cli
             EXPORT matisse_targets)
 
     install(DIRECTORY libs/load/include/ libs/pretok/include/ libs/validate/include/ libs/encode/include/
+            libs/gpt2/include/ libs/cl100k/include/ libs/lookup/include/
             DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 
     # The Unicode License v3 requires its complete notice to accompany copies of the generated class tables.

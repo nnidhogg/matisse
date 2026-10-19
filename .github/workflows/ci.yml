@@ -275,8 +275,11 @@ jobs:
           CMAKE
           cat > consumer/main.cpp << 'CPP'
           #include <cstdio>
+          #include <matisse/cl100k/tokenizer.hpp>
           #include <matisse/encode/encoder.hpp>
+          #include <matisse/gpt2/tokenizer.hpp>
           #include <matisse/load/definition.hpp>
+          #include <matisse/lookup/tokenizers.hpp>
           #include <matisse/pretok/segmenter.hpp>
           #include <matisse/validate/report.hpp>
           int main()
@@ -288,3 +291,31 @@ jobs:
           cmake -G Ninja -S consumer -B build-consumer -DCMAKE_PREFIX_PATH="$PWD/prefix"
           cmake --build build-consumer
           ./build-consumer/consumer
+
+      - name: Build a consumer of one tokenizer with find_package
+        # A consumer of one tokenizer links its library alone and gets the stages it needs through it.
+        run: |
+          mkdir consumer-cl100k
+          cat > consumer-cl100k/CMakeLists.txt << 'CMAKE'
+          cmake_minimum_required(VERSION 3.20)
+          project(consumer_cl100k LANGUAGES CXX)
+          set(CMAKE_CXX_STANDARD 23)
+          find_package(matisse REQUIRED)
+          add_executable(consumer_cl100k main.cpp)
+          target_link_libraries(consumer_cl100k PRIVATE matisse::cl100k)
+          CMAKE
+          cat > consumer-cl100k/main.cpp << 'CPP'
+          #include <cstdio>
+          #include <matisse/cl100k/tokenizer.hpp>
+          #include <matisse/pretok/segmenter.hpp>
+          int main()
+          {
+              const matisse::pretok::Segmenter segmenter{matisse::cl100k::pattern()};
+              const auto pieces{segmenter.boundaries("tiktoken is great!").size()};
+              std::printf("matisse::cl100k found and linked, %zu pieces\n", pieces);
+              return pieces == 4 ? 0 : 1;
+          }
+          CPP
+          cmake -G Ninja -S consumer-cl100k -B build-consumer-cl100k -DCMAKE_PREFIX_PATH="$PWD/prefix"
+          cmake --build build-consumer-cl100k
+          ./build-consumer-cl100k/consumer_cl100k

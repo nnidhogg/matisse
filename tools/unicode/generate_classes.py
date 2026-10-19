@@ -9,10 +9,11 @@ https://www.unicode.org/Public/<version>/ucd/, and emits one table file for the 
 is checked in, so building matisse never touches the network; rerun this script against a newer database to move the
 pinned Unicode version.
 
-libs/pretok/src/class_ranges.inc, the default output, is pinned to Unicode 15.0.0, the version of the Python reference
-the fixtures are written by, so that the fixtures replay. Pass --version to require the database to be a given version.
+Each tokenizer library whose pattern names these sets keeps its own output, libs/<name>/src/class_ranges.inc, GPT-2's
+and cl100k's both pinned to Unicode 15.0.0, the version of the Python reference the fixtures are written by, so that
+the fixtures replay. Pass --version to require the database to be a given version.
 
-Usage: tools/unicode/generate_classes.py [--version X.Y.Z] <PropList.txt> <DerivedGeneralCategory.txt> [output.inc]
+Usage: tools/unicode/generate_classes.py [--version X.Y.Z] <PropList.txt> <DerivedGeneralCategory.txt> <output.inc>
 """
 
 import hashlib
@@ -86,14 +87,14 @@ def main() -> None:
 
         required, arguments = arguments[1], arguments[2:]
 
-    if len(arguments) < 2:
+    if len(arguments) < 3:
         sys.exit(__doc__)
 
     raw = [Path(argument).read_bytes() for argument in arguments[:2]]
 
     props, categories = (text.decode("utf-8").splitlines() for text in raw)
 
-    output = Path(arguments[2] if len(arguments) > 2 else Path(__file__).parents[2] / "libs/pretok/src/class_ranges.inc")
+    output = Path(arguments[2])
 
     versions = {version_of(props, "PropList"), version_of(categories, "DerivedGeneralCategory")}
 

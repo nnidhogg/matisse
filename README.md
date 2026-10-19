@@ -33,13 +33,28 @@ library will hold, the proved results the loaders rest on and the order of work 
 
 ## **Libraries**
 
+Four stage libraries hold nothing of a specific tokenizer and take its description as data:
+
 - **load** reads a tokenizer's files, a Hugging Face tokenizer.json, GPT-2's encoder.json and vocab.bpe, or a tiktoken
   rank file, into one definition held in raw bytes, refusing whatever it cannot take exactly.
-- **pretok** holds the vendor pre-tokenizers: each pattern's class alphabet, the runtime segmenter, and the construction
-  of the pattern's verifier for munch.
+- **pretok** holds the pre-tokenizers over a pattern description, the ordered alternatives with their languages and
+  gates and the class alphabet: the classes of a text, the runtime segmenter, and the construction of the pattern's
+  verifier for munch.
 - **validate** decides which class windows certify a cut, at which origin and with which right context, and measures how
   many anchors they supply on an input.
 - **encode** is the runtime, a sequential and a parallel encoder whose ids are identical at every chunk count.
+
+Each tokenizer is a small library of its own beside them, holding its pattern description, its Unicode class tables, the
+vendor's special tokens and its tests, and a consumer of one tokenizer links its library alone:
+
+- **gpt2** describes GPT-2's pattern, whose files load reads from encoder.json and vocab.bpe or from a tiktoken rank
+  file.
+- **cl100k** describes cl100k_base's pattern, whose tiktoken rank file load reads with the special tokens it supplies.
+
+The **lookup** library finds the tokenizer libraries by name, for the command line and any choice made at run time.
+
+A further tokenizer, o200k or Llama 3, is added as a new directory under `libs/` with no change to the stage libraries,
+as [docs/design.md](docs/design.md) describes.
 
 ## **Getting Started**
 
@@ -65,8 +80,9 @@ The default `CMAKE_BUILD_TYPE` is `Release` when unset.
 ## **Documentation**
 
 - [docs/design.md](docs/design.md): what matisse is and is not, the repository and its build, the sketched interfaces of
-  the four libraries, the loaders' proved results, how the vendor verifiers move from their reference into C++, the test
-  strategy against the real tokenizers, what matisse needs from munch 3.0.0, the open choices, and the order of work.
+  the libraries, how a tokenizer is added, the loaders' proved results, how the vendor verifiers move from their
+  reference into C++, the test strategy against the real tokenizers, what matisse needs from munch 3.0.0, the open
+  choices, and the order of work.
 
 The theory matisse builds on is in munch's technical reports, listed in the [munch
 README](https://github.com/nnidhogg/munch) by their arXiv identifiers:

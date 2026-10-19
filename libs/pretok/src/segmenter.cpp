@@ -1,9 +1,7 @@
 #include "matisse/pretok/segmenter.hpp"
 
-#include <array>
 #include <cstddef>
 #include <span>
-#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -19,79 +17,15 @@ namespace matisse::pretok
 namespace
 {
 /**
- * @brief One alternative of a published pattern as the Segmenter compiles it: its gate-erased language written over
- *        the class symbols in munch's pattern syntax, and its gate as the pattern spells it.
- */
-struct Spelling
-{
-    /**
-     * @brief The gate-erased language, over the class symbols.
-     */
-    std::string_view pattern{};
-
-    /**
-     * @brief The gate, the lookahead `(?!\S)`, the anchor `$`, or empty for none.
-     */
-    std::string_view gate{};
-};
-
-/**
- * @brief The lookahead gate as the patterns spell it.
- */
-constexpr std::string_view lookahead{R"((?!\S))"};
-
-/**
- * @brief The end anchor as cl100k's pattern spells it.
- */
-constexpr std::string_view anchor{"$"};
-
-/**
- * @brief GPT-2's pattern, `'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+`, alternative by
- *        alternative over its classes: the letters are `A` and the contraction letters, the numbers `0`, the white
- *        space `\t` and the space, and everything else `!` and the apostrophe.
- */
-constexpr std::array<Spelling, 12> gpt2_spellings{{
-        {.pattern = "'s"},
-        {.pattern = "'t"},
-        {.pattern = "'re"},
-        {.pattern = "'ve"},
-        {.pattern = "'m"},
-        {.pattern = "'ll"},
-        {.pattern = "'d"},
-        {.pattern = R"(\x20?[Adelmrstv]+)"},
-        {.pattern = R"(\x20?0+)"},
-        {.pattern = R"(\x20?[!']+)"},
-        {.pattern = R"([\t\x20]+)", .gate = lookahead},
-        {.pattern = R"([\t\x20]+)"},
-}};
-
-/**
- * @brief cl100k's pattern, `'(?i:[sdmt]|ll|ve|re)|[^\r\n\p{L}\p{N}]?+\p{L}++|\p{N}{1,3}+| ?[^\s\p{L}\p{N}]++[\r\n]*+|`
- *        `\s++$|\s*[\r\n]|\s+(?!\S)|\s`, alternative by alternative over its classes: the letters are `A` and the
- *        contraction letters, each holding both cases, the numbers `0`, the white space `\t`, `\n`, `\r` and the space,
- *        and everything else `!` and the apostrophe.
- */
-constexpr std::array<Spelling, 8> cl100k_spellings{{
-        {.pattern = "'([sdmt]|ll|ve|re)"},
-        {.pattern = R"([\t\x20!']?[Adelmrstv]+)"},
-        {.pattern = "0{1,3}"},
-        {.pattern = R"(\x20?[!']+[\r\n]*)"},
-        {.pattern = R"([\t\n\r\x20]+)", .gate = anchor},
-        {.pattern = R"([\t\n\r\x20]*[\r\n])"},
-        {.pattern = R"([\t\n\r\x20]+)", .gate = lookahead},
-        {.pattern = R"([\t\n\r\x20])"},
-}};
-
-/**
- * @brief Returns the DFA of one alternative's gate-erased language, compiled by munch as a single token.
- * @param pattern The language, over the class symbols in munch's pattern syntax.
+ * @brief Returns the DFA of one alternative's language, compiled by munch as a single token.
+ * @param language The language, over the class symbols in munch's pattern syntax.
  * @return The DFA.
  */
-[[nodiscard]] munch::dfa::Simulator simulator_of(const std::string_view pattern)
+[[nodiscard]] munch::dfa::Simulator simulator_of(const std::string_view language)
 {
     munch::core::Builder builder{};
 
-    builder.add_token(munch::pattern::parse(pattern), std::size_t{0}, 0);
+    builder.add_token(munch::pattern::parse(language), std::size_t{0}, 0);
 
     const auto lexer{builder.build()};
 
@@ -99,27 +33,17 @@ constexpr std::array<Spelling, 8> cl100k_spellings{{
 }
 
 /**
- * @brief Returns the class symbols of a pattern's white space, `\s`.
- * @param pattern The pattern, GPT-2's or cl100k's.
- * @return The symbols.
- */
-[[nodiscard]] std::string_view white_space_of(const load::Pattern pattern) noexcept
-{
-    return pattern == load::Pattern::gpt2 ? "\t " : "\t\n\r ";
-}
-
-/**
  * @brief Returns the class string of a text: the symbol of every code point's class, in order.
- * @param pattern The pattern, GPT-2's or cl100k's.
+ * @param alphabet The class alphabet.
  * @param text The text, well-formed UTF-8.
  * @return The class string, one symbol per code point.
  * @throws std::invalid_argument If the text is not well-formed UTF-8, as classes_of() refuses it.
  */
-[[nodiscard]] std::string class_string(const load::Pattern pattern, const std::string_view text)
+[[nodiscard]] std::string class_string(const Alphabet& alphabet, const std::string_view text)
 {
-    const auto classes{classes_of(pattern, text)};
+    const auto classes{classes_of(alphabet, text)};
 
-    const auto symbol_of_class{class_symbols(pattern)};
+    const auto symbol_of_class{alphabet.symbols};
 
     std::string symbols{};
 
@@ -163,38 +87,27 @@ constexpr std::array<Spelling, 8> cl100k_spellings{{
 
 } // namespace
 
-Segmenter::Segmenter(const load::Pattern pattern)
-    : pattern_{pattern}, alternatives_{alternatives_of(pattern)}, white_space_{white_space_of(pattern)}
+Segmenter::Segmenter(const Pattern& pattern)
+    : alphabet_{pattern.alphabet}, alternatives_{compiled_of(pattern.alternatives)}
 {}
 
-std::vector<Segmenter::Alternative> Segmenter::alternatives_of(const load::Pattern pattern)
+std::vector<Segmenter::Compiled> Segmenter::compiled_of(const std::span<const Alternative> alternatives)
 {
-    if (pattern == load::Pattern::none)
+    std::vector<Compiled> compiled{};
+
+    for (const auto& [language, gate] : alternatives)
     {
-        throw std::invalid_argument{"Segmenter: Pattern::none has no pre-tokenizer"};
+        auto simulator{simulator_of(language)};
+
+        compiled.push_back({.simulator = std::move(simulator), .gate = gate});
     }
 
-    const auto spellings{
-            pattern == load::Pattern::gpt2 ? std::span<const Spelling>{gpt2_spellings} :
-                                             std::span<const Spelling>{cl100k_spellings}};
-
-    std::vector<Alternative> alternatives{};
-
-    for (const auto& [spelling, gate] : spellings)
-    {
-        auto simulator{simulator_of(spelling)};
-
-        const auto kind{gate == lookahead ? Gate::next_white_space : gate == anchor ? Gate::end_of_input : Gate::none};
-
-        alternatives.push_back({.simulator = std::move(simulator), .gate = kind});
-    }
-
-    return alternatives;
+    return compiled;
 }
 
 std::vector<std::size_t> Segmenter::boundaries(const std::string_view text) const
 {
-    const auto symbols{class_string(pattern_, text)};
+    const auto symbols{class_string(alphabet_, text)};
 
     std::vector<std::size_t> ends{};
 
@@ -230,7 +143,7 @@ std::size_t Segmenter::piece_length(const std::string_view symbols, const std::s
 }
 
 std::size_t Segmenter::longest_accept(
-        const Alternative& alternative, const std::string_view symbols, const std::size_t at) const noexcept
+        const Compiled& alternative, const std::string_view symbols, const std::size_t at) noexcept
 {
     const auto& [simulator, gate]{alternative};
 
@@ -260,14 +173,14 @@ std::size_t Segmenter::longest_accept(
     return longest;
 }
 
-bool Segmenter::passes(const Gate gate, const std::string_view symbols, const std::size_t end) const noexcept
+bool Segmenter::passes(const std::string_view gate, const std::string_view symbols, const std::size_t end) noexcept
 {
-    if (gate == Gate::none || end == symbols.size())
+    if (end == symbols.size())
     {
         return true;
     }
 
-    return gate == Gate::next_white_space && white_space_.contains(symbols[end]);
+    return gate.contains(symbols[end]);
 }
 
 } // namespace matisse::pretok
