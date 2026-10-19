@@ -3,10 +3,11 @@
 The decisions behind matisse, in the order a reader meets them: what the library is and is not, the repository and its
 build, the libraries' interfaces, how the vendor verifiers move from their Python reference into C++, how the result is
 tested against the real tokenizers, what matisse needs from munch, the choices still open, and the order of work. Steps
-1 to 8 of the order of work are built, `read_tokenizer_json()` waiting on open choice 5: load reads GPT-2's files and
+1 to 9 of the order of work are built, `read_tokenizer_json()` waiting on open choice 5: load reads GPT-2's files and
 tiktoken rank files, pretok classes and segments a text and builds a pattern's split verifier and factorization lexer,
-the gpt2 and cl100k libraries describe their patterns, and lookup finds them, while validate and encode are still to be
-written. The sketches below give names and types, and they change as the code is written.
+validate decides a pattern's window tables under both certificates with their right contexts, the gpt2 and cl100k
+libraries describe their patterns, and lookup finds them, while the rest of validate and encode are still to be written.
+The sketches below give names and types, and they change as the code is written.
 
 ## **What matisse is and is not**
 
@@ -409,15 +410,26 @@ enum class Inventory : std::uint8_t
     policy
 };
 
+inline constexpr std::size_t default_width{4};
+
+struct Certified_window
+{
+    std::string window{};
+
+    std::size_t origin{};
+};
+
 struct Window_table
 {
     Inventory inventory{};
 
     std::size_t width{};
 
+    std::vector<Certified_window> windows{};
+
     std::size_t right_context{};
 
-    std::vector<std::optional<std::size_t>> origins{};
+    std::vector<munch::verifier::Truncation> failing{};
 };
 
 struct Report
@@ -465,11 +477,19 @@ struct Merge_window
 
 `validate()` decides every class window of a pattern of width two to `width` (four by default) under both certificates:
 the policy certificate by `munch::verifier::miscovering()` on the split verifier, the factorization certificate by
-`is_split_window()` on the factorization lexer. A table's `origins` is indexed by the class string read as a number in
-base the alphabet's class count, at most 16^4 entries, and holds the certified origin or nothing. Each table carries the
-right context its inventory needs, decided on the split verifier (section "What matisse needs from munch 3.0.0"), and
-the report carries `boundary_gap()` of the split verifier, which is unbounded for both patterns since a letter run of
-any length is one piece. A definition without a pre-tokenizer goes to `validate_merges()` instead, which builds
+`is_split_window()` on the factorization lexer. A table holds its certified windows as munch-audit's report holds them,
+`Certified_window` duplicated rather than linked, widths ascending and each width's windows in the order the class
+symbols give, which is the windows fixture's order; an index over the class strings is the encoder's to build, since
+windows of several widths share no single numbering. A window certified at an origin is certified at the origin plus one
+with a symbol prepended, so a policy window whose last symbols are certified takes its origin from them, and every other
+one is asked of `miscovering()` at its last symbol and, refuted, once more at the one origin the refutation leaves,
+where the piece holding the refuted occurrence's last symbol begins, unless that piece begins before the occurrence and
+leaves none. Each table carries the right context its inventory needs, decided on the split verifier (section "What
+matisse needs from munch 3.0.0"), with the shortest truncation at every context that fails, asked of the windows that
+hold no shorter certified window whose origin lands on the same symbol, since every cut of one that does is a cut of the
+shorter one; for GPT-2 that is 87 and 540 windows of 18,357 and 32,218, for cl100k 112 and 678 of 30,576 and 58,580. The
+report carries `boundary_gap()` of the split verifier, which is unbounded for both patterns since a letter run of any
+length is one piece. A definition without a pre-tokenizer goes to `validate_merges()` instead, which builds
 `munch::verifier::token_automaton()` once and decides each candidate window by `miscovering()` on it, the lazy
 certification. Its candidates are given by the caller; the command line draws them from an input, every byte and the
 most frequent byte pairs and triples, since all byte windows of width three are too many to decide at full scale.
@@ -641,9 +661,17 @@ Used as munch 3.0.0 has it:
 - `right_context(const Verifier&, window, origin)` for the right context of each certified pair, an inventory's being
   the largest of its pairs', and `dependence()` for the suffix half beside the case R = 0; the Python reference's
   decision is the reference and its counterexamples the fixture, as context_reference.txt holds `right_context()`.
+  `dependence()` returns the shortest refutation of either side, so at a window whose prefix already fails with no
+  symbol past the cut it leaves the suffix half open: at 12 of the 87 and 12 of the 540 windows GPT-2's right contexts
+  are asked of, under the factorization and the policy certificate, and at 4 of the 112 and 24 of the 678 of cl100k's,
+  every other one refuting neither side.
 
 Missing, each with where it would go by the division:
 
+- **The suffix half alone.** The Python reference decides it for every boundary of M, and `dependence()` decides it only
+  together with the prefix at R = 0, so the fixture's suffix line is held at every certified cut except at those open
+  windows, and not at the boundaries of M that no certified window places. A decision of the suffix side alone, the
+  restarted copy of `dependence()`'s product without the prefix flag, would close it. General, so munch, later.
 - **Functionality and totality of a verifier.** The Python reference decides both for M, and `divergence()` presumes the
   first. The first version does not need them, since M's table is held state for state to the fixture whose M was
   decided functional and total; they would let a new pattern's Q be checked by the validator itself. General, so munch,

@@ -1,0 +1,19 @@
+# written by matisse_fixture.py of munch-research, explorations/pretok-route; regenerate with it, never by hand
+universe gpt2
+suffix holds
+context factorization 0 fails 090921 2 1,2 2
+context factorization 1 holds
+right factorization 1
+context policy 0 fails 090921 2 1,2 2
+context policy 1 fails 092021 1 1 -
+context policy 2 holds
+right policy 2
+universe cl100k
+suffix holds
+context factorization 0 fails 090921 2 1,2 2
+context factorization 1 holds
+right factorization 1
+context policy 0 fails 090921 2 1,2 2
+context policy 1 fails 090941 1 1 -
+context policy 2 holds
+right policy 2
