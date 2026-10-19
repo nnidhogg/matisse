@@ -29,6 +29,7 @@ if (MATISSE_BUILD_TESTS)
             tests/classes_test.cpp
             tests/definition_test.cpp
             tests/segmenter_test.cpp
+            tests/verifier_test.cpp
     )
 
     target_link_libraries(${PROJECT_NAME}_tests

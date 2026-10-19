@@ -26,10 +26,12 @@ tables, and the runtime with its token ids, normalizers and special-token cuts.
 
 Not yet released; matisse depends on munch 3.0.0, the release its submodule is pinned to. load reads GPT-2's
 encoder.json and vocab.bpe and tiktoken rank files, and pretok maps a text to each pattern's classes, from tables pinned
-to Unicode 15.0.0, the version of the reference the fixtures are written by, and segments it as the pattern's engine
-does; the other libraries build, link and register their tests with CTest, and `matisse-validate` prints its usage,
-while what they will hold is still to be written. The version is 0.1.0, pre-1.0, and nothing is stable yet. What each
-library will hold, the proved results the loaders rest on and the order of work are in [docs/design.md](docs/design.md).
+to Unicode 15.0.0, the version of the reference the fixtures are written by, segments it as the pattern's engine does,
+and builds the pattern's split verifier and factorization lexer, the automata the policy and factorization certificates
+are decided on; gpt2 and cl100k describe their patterns and lookup finds them by name; validate and encode build, link
+and register their tests with CTest, and `matisse-validate` prints its usage, while what they will hold is still to be
+written. The version is 0.1.0, pre-1.0, and nothing is stable yet. What each library will hold, the proved results the
+loaders rest on and the order of work are in [docs/design.md](docs/design.md).
 
 ## **Libraries**
 

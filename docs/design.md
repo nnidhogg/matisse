@@ -2,9 +2,11 @@
 
 The decisions behind matisse, in the order a reader meets them: what the library is and is not, the repository and its
 build, the libraries' interfaces, how the vendor verifiers move from their Python reference into C++, how the result is
-tested against the real tokenizers, what matisse needs from munch, the choices still open, and the order of work.
-Nothing is implemented yet; building starts after munch 3.0.0 is released. The sketches below give names and types, and
-they change as the code is written.
+tested against the real tokenizers, what matisse needs from munch, the choices still open, and the order of work. Steps
+1 to 8 of the order of work are built, `read_tokenizer_json()` waiting on open choice 5: load reads GPT-2's files and
+tiktoken rank files, pretok classes and segments a text and builds a pattern's split verifier and factorization lexer,
+the gpt2 and cl100k libraries describe their patterns, and lookup finds them, while validate and encode are still to be
+written. The sketches below give names and types, and they change as the code is written.
 
 ## **What matisse is and is not**
 
@@ -566,7 +568,8 @@ checked by its tokenizer's tests. The fixtures, one per subject:
   projections as digests.
 - **Verifier**: the table munch's constructor makes of the minimized M (trimmed, start first, breadth-first over the
   marked symbols ascending), the script applying the same renumbering, so the C++ construction must produce the
-  identical table state for state; and the replayed counterexamples of the construction.
+  identical table state for state; and the reference's decisions that M is functional and total and that the pattern
+  covers every nonempty residual.
 - **Windows**: every certified window to width four under both certificates with its origin (18,357 and 32,218 for
   GPT-2, 30,576 and 58,580 for cl100k), and every refused one by count.
 - **Right context**: the decided R of each inventory, and the counterexample of each failing R with its replay
@@ -635,16 +638,12 @@ Used as munch 3.0.0 has it:
   against munch-audit exactly.
 - `Merge`, `token_automaton()` and `miscovering(const Token_automaton&, window, origin)` for the lazy certification,
   with their refusal of a table that recreates a token passed through as the loader's.
+- `right_context(const Verifier&, window, origin)` for the right context of each certified pair, an inventory's being
+  the largest of its pairs', and `dependence()` for the suffix half beside the case R = 0; the Python reference's
+  decision is the reference and its counterexamples the fixture, as context_reference.txt holds `right_context()`.
 
 Missing, each with where it would go by the division:
 
-- **The right-context decision.** The prefix half with right context R for an inventory, and the suffix half, are
-  regular conditions on a verifier decided by breadth-first search on products, and they would make sense with no LLM,
-  so they belong in munch beside `dependence()` and `chunk_dependence()`, which decide the R = 0 case for one pair and
-  for an inventory. It is an addition, so a minor release (3.1.0) can carry it, or 3.0.0 if its contents are still open
-  when the port is ready; the Python reference's decision is the reference and its counterexamples the fixture, as
-  cut_reference.txt holds `dependence()`. Until it lands the validator cannot decide R and would carry the known values
-  as constants, which is why the order of work puts it before the validator.
 - **Functionality and totality of a verifier.** The Python reference decides both for M, and `divergence()` presumes the
   first. The first version does not need them, since M's table is held state for state to the fixture whose M was
   decided functional and total; they would let a new pattern's Q be checked by the validator itself. General, so munch,
@@ -692,9 +691,10 @@ matisse's by the division.
    with it.
 7. **Where the DFA kit lives.** The construction of M needs product, complement and concatenation of DFAs, which munch
    does not offer publicly. By the division test a DFA kit is general and belongs in munch; by the rule of duplicating
-   rather than sharing unless really needed it stays private to the one construction that uses it. Recommendation: in
-   matisse's pretok, as one file, because nothing in munch calls it and a munch addition would wait for a munch release;
-   it moves if a second user appears.
+   rather than sharing unless really needed it stays with the one construction that uses it. Settled: in matisse's
+   pretok, as automata.hpp and its source, because nothing in munch calls it and a munch addition would wait for a munch
+   release; the header is installed, as munch keeps no private headers under src, and the kit moves if a second user
+   appears.
 8. **Vocabulary files in the tree.** CTest without network needs the pinned files on disk: about 1.5 MB for GPT-2's pair
    and 1.7 MB for cl100k, plus the two tokenizer.json files. hopper vendors the JSONTestSuite cases with their licence
    and provenance. The vocabulary files' own terms need checking first. As far as is known, GPT-2's are published with
@@ -714,7 +714,7 @@ matisse's by the division.
 Each step lands green on its own, its tests first where a fixture exists.
 
 1. munch 3.0.0 released (no matisse work before it).
-2. The right-context decision in munch, with its fixture from the Python reference (3.1.0, or 3.0.0 if still open).
+2. The right-context decision in munch, with its fixture from the Python reference (3.0.0).
 3. The fixture script beside the Python reference, writing the fixtures of the vendor section and the corpus digests.
 4. The repository skeleton: hopper's CMake, CI, README and docs pages with the names changed, the munch submodule at the
    release, an empty library, a green CI.

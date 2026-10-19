@@ -12,13 +12,11 @@
 
 /**
  * @file
- * @brief The runtime pre-tokenizer of a pattern, the Segmenter; split_verifier(), building the pattern's verifier, and
- *        factorization_lexer(), compiling the gate-erased union of its alternatives, are not declared yet.
+ * @brief The runtime pre-tokenizer of a pattern, the Segmenter.
  *
  * The Segmenter is the gated commitment order of the gate-sufficiency proposition read over code points, which
- * reproduces the engine's segmentation. split_verifier() is to be the minimized verifier of the pattern's one-step
- * relation, handed to munch as a Verifier table over the class symbols; factorization_lexer() is to be the munch token
- * set on which is_split_window() decides the factorization certificate. docs/design.md sketches both.
+ * reproduces the engine's segmentation. Its marking of a text's class string is the one marking of it that the
+ * pattern's split_verifier(), declared in verifier.hpp, accepts.
  */
 namespace matisse::pretok
 {
