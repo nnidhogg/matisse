@@ -106,7 +106,8 @@ if (MATISSE_INSTALL)
     install(DIRECTORY libs/load/include/ libs/pretok/include/ libs/validate/include/ libs/encode/include/
             DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 
-    install(FILES LICENSE DESTINATION ${CMAKE_INSTALL_DATADIR}/licenses/matisse)
+    # The Unicode License v3 requires its complete notice to accompany copies of the generated class tables.
+    install(FILES LICENSE THIRD_PARTY_NOTICES.md DESTINATION ${CMAKE_INSTALL_DATADIR}/licenses/matisse)
 
     install(EXPORT matisse_targets
             FILE matisse-targets.cmake

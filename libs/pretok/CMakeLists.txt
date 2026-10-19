@@ -4,6 +4,7 @@ project(matisse_pretok)
 
 
 add_library(${PROJECT_NAME}
+        src/classes.cpp
         src/segmenter.cpp
 )
 
@@ -18,7 +19,7 @@ target_include_directories(${PROJECT_NAME}
 )
 
 # munch is header-visible: a pattern's verifier is a munch::verifier::Verifier, so consumers link it too; the pattern
-# parser reads the alternatives inside the library.
+# parser reads the alternatives inside the library, and the class tables are munch's code point ranges.
 target_link_libraries(${PROJECT_NAME}
         PUBLIC
         matisse_load
@@ -29,6 +30,7 @@ target_link_libraries(${PROJECT_NAME}
 
 if (MATISSE_BUILD_TESTS)
     add_executable(${PROJECT_NAME}_tests
+            tests/classes_test.cpp
             tests/segmenter_test.cpp
     )
 
@@ -39,4 +41,6 @@ if (MATISSE_BUILD_TESTS)
     )
 
     add_test(NAME ${PROJECT_NAME}_tests COMMAND ${PROJECT_NAME}_tests)
+
+    target_compile_definitions(${PROJECT_NAME}_tests PRIVATE SOURCE_DIR="${MATISSE_SOURCE_DIR}")
 endif ()

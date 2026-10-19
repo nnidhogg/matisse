@@ -427,8 +427,9 @@ The Unicode tables are generated, not ported by hand. tools/unicode/generate_cla
 name duplicated and changed to emit the general categories L and N and the White_Space property, with the source digests
 and the `--version` guard munch's has, into libs/pretok/src/class_ranges.inc, checked in, so the build never touches the
 network. This is munch-audit's precedent for logos, whose reader keeps tables of the Unicode version logos is locked to
-rather than the library's. The classes and therefore the verifiers, the certified windows and the right context do not
-depend on the version; only the map from codepoints to classes does, and with it the ids of text holding a codepoint
+rather than the library's. The tables are pinned to Unicode 15.0.0, the version of the Python reference, so that the
+fixtures replay (open choice 6). The classes and therefore the verifiers, the certified windows and the right context do
+not depend on the version; only the map from codepoints to classes does, and with it the ids of text holding a codepoint
 whose class moved between versions.
 
 The ported units stay exact through fixtures written by the reference and held byte for byte, as munch's verifier tests
@@ -436,8 +437,8 @@ hold `token_automaton_reference.txt`. A fixture script beside the reference code
 naming the script and saying to regenerate with it, never by hand, one fact per line, bytes and class strings in hex,
 and the C++ tests read every line, check the answer, and count the lines of each kind. The fixtures, one per subject:
 
-- **Classes**: the Unicode version, the class of every codepoint range boundary of the tables, and the digest of the
-  table file.
+- **Classes**: the Unicode version, the class numbering by symbol, the range count and SHA-256 of each set the tables
+  hold, L, N and White_Space, and the class of every code point on either side of a change of class.
 - **Segmentation**: the engine's segmentation of every class string of lengths zero to five (579,195 strings for GPT-2,
   1,118,481 for cl100k, the gate check's own population, or length four if the file is too large to keep), against which
   the `Segmenter` is held, and the boundaries of the three corpora's class projections as digests.
