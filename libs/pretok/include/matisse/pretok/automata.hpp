@@ -15,7 +15,9 @@
  * marker beside them, or the class symbols with a boundary bit each are all alphabets of the same kind. Every DFA is
  * complete, a move from every state on every symbol, its start state zero, and every operation that builds one but the
  * complement returns it minimized, so that two DFAs of one language are equal state for state up to the order of their
- * states.
+ * states. The kit is the verifier construction's own and is not part of matisse's stable surface. The header is
+ * installed only because every header of the library lives under include, as munch keeps none under src, and it may
+ * change, or move to munch, in minor releases.
  */
 namespace matisse::pretok::automata
 {

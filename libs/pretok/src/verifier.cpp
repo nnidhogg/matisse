@@ -1,9 +1,13 @@
 #include "matisse/pretok/verifier.hpp"
 
 #include <cstddef>
+#include <deque>
+#include <format>
 #include <map>
 #include <optional>
 #include <span>
+#include <stdexcept>
+#include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
@@ -56,6 +60,66 @@ using automata::Symbol_t;
 }
 
 /**
+ * @brief Returns the escape a byte of a class string is written as inside the quotes a refusal shows it in, when it has
+ *        one: a common control, the backslash, and the quote.
+ * @param byte The byte.
+ * @return The escape, or std::nullopt for a byte written as itself or in hex.
+ */
+[[nodiscard]] std::optional<std::string_view> quoted_escape(const unsigned char byte)
+{
+    switch (byte)
+    {
+    case '\n':
+        return R"(\n)";
+    case '\t':
+        return R"(\t)";
+    case '\r':
+        return R"(\r)";
+    case '\\':
+        return R"(\\)";
+    case '"':
+        return R"(\")";
+    default:
+        break;
+    }
+
+    return std::nullopt;
+}
+
+/**
+ * @brief Returns a class string as a refusal shows it, as the report prints one: each byte the character when it is
+ *        printable, an escape when it is a common control, and the escape `\xHH` otherwise.
+ * @param bytes The class string.
+ * @return The rendering, quoted.
+ */
+[[nodiscard]] std::string shown(const std::string_view bytes)
+{
+    std::string out{'"'};
+
+    for (const auto byte : bytes)
+    {
+        const auto value{static_cast<unsigned char>(byte)};
+
+        const auto printable{value >= ' ' && value <= '~'};
+
+        if (const auto escape{quoted_escape(value)})
+        {
+            out += *escape;
+        }
+        else if (printable)
+        {
+            out += byte;
+        }
+        else
+        {
+            out += std::format(R"(\x{:02X})", value);
+        }
+    }
+
+    return out + '"';
+}
+
+/**
  * @brief The construction of a pattern's verifier over its class symbols, after the class theorem: each alternative's
  *        endpoints and longest accepts, the one-step relation Q, and the verifier M.
  *
@@ -83,8 +147,13 @@ private:
     /**
      * @brief Returns the one-step relation Q: the strings u|z for which u is the longest gate-passing accept of the
      *        first alternative that has one on the residual uz.
+     *
+     * The residuals no alternative matches are what is left once every alternative's are taken away, so the pattern is
+     * total exactly when the empty residual is the only one left.
      * @param alternatives The alternatives, in order.
      * @return Q, over the class symbols and the marker.
+     * @throws std::invalid_argument If the pattern is not total, the message naming a shortest nonempty residual no
+     *         alternative matches.
      */
     [[nodiscard]] Dfa one_step(std::span<const Alternative> alternatives) const;
 
@@ -157,6 +226,14 @@ private:
      * @return Match, over the class symbols.
      */
     [[nodiscard]] Dfa erased(const Dfa& endpoints) const;
+
+    /**
+     * @brief Returns a shortest nonempty string a DFA over the class symbols accepts, by breadth-first search from the
+     *        states one symbol reaches, the symbols tried in ascending order.
+     * @param residuals The DFA.
+     * @return The string, in class symbols, or std::nullopt when the DFA accepts no nonempty string.
+     */
+    [[nodiscard]] std::optional<std::string> shortest_nonempty(const Dfa& residuals) const;
 
     /**
      * @brief Returns K, the nonempty marked strings whose first boundary is where Q ends the first piece of their
@@ -249,6 +326,15 @@ Dfa Construction::one_step(const std::span<const Alternative> alternatives) cons
         const auto unmatched_here{automata::complement(matched_here)};
 
         unmatched = automata::product(unmatched, unmatched_here, Accepts::both);
+    }
+
+    const auto residual{shortest_nonempty(unmatched)};
+
+    if (residual)
+    {
+        throw std::invalid_argument{std::format(
+                "split_verifier: no alternative matches the residual {}, so the pattern is not total",
+                shown(*residual))};
     }
 
     return relation;
@@ -482,6 +568,50 @@ Dfa Construction::erased(const Dfa& endpoints) const
     nfa.start = states[0];
 
     return automata::determinize(nfa);
+}
+
+std::optional<std::string> Construction::shortest_nonempty(const Dfa& residuals) const
+{
+    // The string that first reaches each state, the start reached by none until a symbol is read.
+    std::vector<std::optional<std::string>> reached(residuals.transitions.size());
+
+    std::deque<State_t> frontier{};
+
+    const auto visit{[&](const State_t state, std::string word) {
+        if (reached[state])
+        {
+            return;
+        }
+
+        reached[state] = std::move(word);
+        frontier.push_back(state);
+    }};
+
+    for (Symbol_t symbol{0}; symbol < marker(); ++symbol)
+    {
+        visit(residuals.transitions[0][symbol], std::string{symbols_[symbol]});
+    }
+
+    while (!frontier.empty())
+    {
+        const auto state{frontier.front()};
+
+        frontier.pop_front();
+
+        if (residuals.accepting[state])
+        {
+            return reached[state];
+        }
+
+        for (Symbol_t symbol{0}; symbol < marker(); ++symbol)
+        {
+            auto longer{*reached[state] + symbols_[symbol]};
+
+            visit(residuals.transitions[state][symbol], std::move(longer));
+        }
+    }
+
+    return std::nullopt;
 }
 
 Dfa Construction::first_pieces(const Dfa& relation) const

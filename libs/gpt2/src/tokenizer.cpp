@@ -26,10 +26,70 @@ constexpr std::string_view symbols{"\t !'0Adelmrstv"};
 constexpr std::string_view white_space{"\t "};
 
 /**
- * @brief The sets the classes read, in the order a code point is classed by them: the white space, the letters and
- *        the numbers.
+ * @brief The space, a literal.
  */
-constexpr std::array<pretok::Code_point_set, 3> sets{{
+constexpr std::array<Code_point_range, 1> space_points{{{.first = U' ', .last = U' '}}};
+
+/**
+ * @brief The apostrophe, a literal.
+ */
+constexpr std::array<Code_point_range, 1> apostrophe_points{{{.first = U'\'', .last = U'\''}}};
+
+/**
+ * @brief `d`, a contraction letter, case sensitive.
+ */
+constexpr std::array<Code_point_range, 1> d_points{{{.first = U'd', .last = U'd'}}};
+
+/**
+ * @brief `e`, a contraction letter, case sensitive.
+ */
+constexpr std::array<Code_point_range, 1> e_points{{{.first = U'e', .last = U'e'}}};
+
+/**
+ * @brief `l`, a contraction letter, case sensitive.
+ */
+constexpr std::array<Code_point_range, 1> l_points{{{.first = U'l', .last = U'l'}}};
+
+/**
+ * @brief `m`, a contraction letter, case sensitive.
+ */
+constexpr std::array<Code_point_range, 1> m_points{{{.first = U'm', .last = U'm'}}};
+
+/**
+ * @brief `r`, a contraction letter, case sensitive.
+ */
+constexpr std::array<Code_point_range, 1> r_points{{{.first = U'r', .last = U'r'}}};
+
+/**
+ * @brief `s`, a contraction letter, case sensitive.
+ */
+constexpr std::array<Code_point_range, 1> s_points{{{.first = U's', .last = U's'}}};
+
+/**
+ * @brief `t`, a contraction letter, case sensitive.
+ */
+constexpr std::array<Code_point_range, 1> t_points{{{.first = U't', .last = U't'}}};
+
+/**
+ * @brief `v`, a contraction letter, case sensitive.
+ */
+constexpr std::array<Code_point_range, 1> v_points{{{.first = U'v', .last = U'v'}}};
+
+/**
+ * @brief The sets the classes read, in the order a code point is classed by them: the literals, the white space, the
+ *        letters and the numbers.
+ */
+constexpr std::array<pretok::Code_point_set, 13> sets{{
+        {.symbol = ' ', .ranges = space_points},
+        {.symbol = '\'', .ranges = apostrophe_points},
+        {.symbol = 'd', .ranges = d_points},
+        {.symbol = 'e', .ranges = e_points},
+        {.symbol = 'l', .ranges = l_points},
+        {.symbol = 'm', .ranges = m_points},
+        {.symbol = 'r', .ranges = r_points},
+        {.symbol = 's', .ranges = s_points},
+        {.symbol = 't', .ranges = t_points},
+        {.symbol = 'v', .ranges = v_points},
         {.symbol = '\t', .ranges = white_space_ranges},
         {.symbol = 'A', .ranges = letter_ranges},
         {.symbol = '0', .ranges = number_ranges},
@@ -37,12 +97,11 @@ constexpr std::array<pretok::Code_point_set, 3> sets{{
 
 /**
  * @brief GPT-2's alphabet: the space, the apostrophe and the contraction letters of `'s|'t|'re|'ve|'m|'ll|'d` are
- *        literals, case sensitive, and the rest of the code points are classed by the sets or are `!`.
+ *        literals, case sensitive, each a class of its one code point, and the rest of the code points are classed by
+ *        the Unicode sets or are `!`.
  */
 constexpr pretok::Alphabet alphabet{
         .symbols = symbols,
-        .literals = " 'delmrstv",
-        .caseless = false,
         .sets = sets,
         .other = '!',
         .unicode_version = class_unicode_version};

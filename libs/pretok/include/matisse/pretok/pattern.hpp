@@ -23,7 +23,8 @@
 namespace matisse::pretok
 {
 /**
- * @brief A set of code points an alphabet reads, such as the general category L, and the symbol of its class.
+ * @brief A set of code points an alphabet reads, such as the general category L or the code points a literal of the
+ *        pattern matches, and the symbol of its class.
  */
 struct Code_point_set
 {
@@ -42,8 +43,12 @@ struct Code_point_set
  * @brief The class alphabet of a pattern: the partition of the code points into classes that agree on every set the
  *        pattern names and on every literal it spells, each class written as one ASCII symbol.
  *
- * A code point is of a literal's class when it is that literal, or when the alphabet is caseless and its case folding
- * is; otherwise of the class of the first set holding it; otherwise of the other class.
+ * A code point is of the class of the first set holding it, otherwise of the other class. A literal's class is a set of
+ * its own, listed before the sets the pattern names, holding the code points the literal matches: the literal alone
+ * where the pattern matches it case sensitively, and its case partners besides where it matches it caselessly, as
+ * cl100k's `(?i:s)` matches `s`, `S` and U+017F, the long s, under the simple case folding both the regex crate and
+ * Python's re apply. So a pattern that reads upper and lower case apart, or puts a code point with one literal and not
+ * its other case partners, states its partition as the sets it lists.
  */
 struct Alphabet
 {
@@ -53,25 +58,12 @@ struct Alphabet
     std::string_view symbols{};
 
     /**
-     * @brief The symbols that are literals of the pattern, each a class of that code point alone, or of its case
-     *        foldings when the alphabet is caseless.
-     */
-    std::string_view literals{};
-
-    /**
-     * @brief Whether the pattern's literal letters match caselessly, as cl100k's `(?i:...)` matches its contraction
-     *        letters: A to Z fold to a to z and U+017F, the long s, to s, the simple case folding both the regex crate
-     *        and Python's re apply.
-     */
-    bool caseless{};
-
-    /**
-     * @brief The sets the alphabet reads, in the order a code point is classed by them.
+     * @brief The sets the alphabet reads, in the order a code point is classed by them, the literals' first.
      */
     std::span<const Code_point_set> sets{};
 
     /**
-     * @brief The symbol of every code point in no set and no literal.
+     * @brief The symbol of every code point in no set.
      */
     char other{};
 

@@ -4,13 +4,18 @@
 #include <cstddef>
 #include <gtest/gtest.h>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <vector>
+
+#include <munch/regex/utf8.hpp>
 
 #include "matisse/pretok/segmenter.hpp"
 
 using namespace matisse::pretok;
+using munch::regex::utf8::Code_point_range;
 
 namespace
 {
@@ -25,9 +30,19 @@ using Marking_t = std::vector<bool>;
 constexpr std::size_t longest_text{7};
 
 /**
+ * @brief The code point of the literal `a`.
+ */
+constexpr std::array<Code_point_range, 1> a_points{{{.first = U'a', .last = U'a'}}};
+
+/**
+ * @brief The set of the literal `a`, the one set the two classes read.
+ */
+constexpr std::array<Code_point_set, 1> a_set{{{.symbol = 'a', .ranges = a_points}}};
+
+/**
  * @brief An alphabet of two classes, `a` a literal and `b` everything else.
  */
-constexpr Alphabet two_symbols{.symbols = "ab", .literals = "a", .caseless = false, .sets = {}, .other = 'b'};
+constexpr Alphabet two_symbols{.symbols = "ab", .sets = a_set, .other = 'b'};
 
 /**
  * @brief A pattern whose first alternative passes only before another `a`, as `\s+(?!\S)` passes only before white
@@ -61,6 +76,20 @@ constexpr std::array<Alternative, 4> anchored_alternatives{{
 constexpr Pattern anchored{.alphabet = two_symbols, .alternatives = anchored_alternatives};
 
 /**
+ * @brief A pattern that is not total: a `b` passes its gate only before an `a` or at the end of the input, so no
+ *        alternative matches a residual that begins with two of them.
+ */
+constexpr std::array<Alternative, 2> partial_alternatives{{
+        {.language = "a", .gate = "ab"},
+        {.language = "b", .gate = "a"},
+}};
+
+/**
+ * @brief The partial pattern over the two classes.
+ */
+constexpr Pattern partial{.alphabet = two_symbols, .alternatives = partial_alternatives};
+
+/**
  * @brief Returns whether a verifier accepts a class string under a marking.
  * @param verifier The verifier.
  * @param text The class string.
@@ -81,6 +110,25 @@ bool accepts(const munch::verifier::Verifier& verifier, const std::string_view t
     }
 
     return state && verifier.accepts(*state);
+}
+
+/**
+ * @brief Returns the refusal split_verifier() makes of a pattern, empty when it makes none.
+ * @param pattern The pattern.
+ * @return The refusal's message.
+ */
+std::string refusal_of(const Pattern& pattern)
+{
+    try
+    {
+        std::ignore = split_verifier(pattern);
+    }
+    catch (const std::invalid_argument& refusal)
+    {
+        return refusal.what();
+    }
+
+    return {};
 }
 
 /**
@@ -188,4 +236,13 @@ TEST(Verifier_test, The_factorization_lexer_certifies_a_window_whose_covering_wo
     EXPECT_EQ(lexer.is_split_window("bba"), std::optional<std::size_t>{2});
     EXPECT_FALSE(lexer.is_split_window("a").has_value());
     EXPECT_FALSE(lexer.is_split_window("ab").has_value());
+}
+
+TEST(Verifier_test, A_pattern_that_is_not_total_is_refused_with_a_shortest_residual_no_alternative_matches)
+{
+    const auto refusal{refusal_of(partial)};
+
+    EXPECT_TRUE(refusal.contains(R"(split_verifier: no alternative matches the residual "bb")")) << refusal;
+    EXPECT_TRUE(refusal_of(gated).empty());
+    EXPECT_TRUE(refusal_of(anchored).empty());
 }

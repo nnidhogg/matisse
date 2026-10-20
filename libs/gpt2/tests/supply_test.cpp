@@ -1,6 +1,5 @@
 #include "matisse/validate/supply.hpp"
 
-#include <cstddef>
 #include <gtest/gtest.h>
 
 #include "matisse/gpt2/tokenizer.hpp"
@@ -11,10 +10,15 @@ using namespace matisse::validate;
 namespace
 {
 /**
- * @brief The widest window the tests decide: the windows of width two already certify every boundary of their texts,
- *        and they decide in a fraction of the time the default width takes.
+ * @brief Returns GPT-2's report at the default width, decided once for every test of this file.
+ * @return The report.
  */
-constexpr std::size_t narrow_width{2};
+const Report& decided_report()
+{
+    static const Report report{validate(matisse::gpt2::pattern())};
+
+    return report;
+}
 
 } // namespace
 
@@ -23,7 +27,7 @@ TEST(Supply_test, The_published_hello_world_is_cut_where_its_second_piece_begins
     // GPT-2's pattern splits "Hello world" into "Hello" and " world", the space opening the second piece, which a
     // letter followed by a space certifies under both certificates: one anchor at byte 5, the one boundary, 1024 / 11 =
     // 93.1 per KiB and no gap. The longest piece is " world".
-    const auto report{validate(matisse::gpt2::pattern(), narrow_width)};
+    const auto& report{decided_report()};
 
     for (const auto inventory : {Inventory::factorization, Inventory::policy})
     {
@@ -43,7 +47,7 @@ TEST(Supply_test, An_anchor_after_letters_beyond_ascii_stands_at_their_byte_offs
 {
     // "h\u00E9llo w\u00F6rld" is "h\u00E9llo" and " w\u00F6rld", six and seven bytes, eleven code points: the cut
     // certified at the sixth code point stands at byte 6, and the gap and the share are as for its ASCII twin.
-    const auto report{validate(matisse::gpt2::pattern(), narrow_width)};
+    const auto& report{decided_report()};
 
     const auto [bytes, anchors, boundary_share, longest_piece]{
             supply(report, Inventory::policy, matisse::gpt2::pattern(), "h\u00E9llo w\u00F6rld")};
@@ -60,7 +64,7 @@ TEST(Supply_test, A_cut_only_a_window_of_the_default_width_certifies_is_an_ancho
     // "\t'dog" is "\t", "'d" and "og": the policy certificate certifies the cut before the o by "\t'dA" at 3 and by no
     // shorter window, a space before the apostrophe joining it as ` ?[^\s\p{L}\p{N}]+`; under the factorization
     // certificate the apostrophe may be a piece of its own, so only the cut after the tab is certified.
-    const auto report{validate(matisse::gpt2::pattern())};
+    const auto& report{decided_report()};
 
     const auto [policy_bytes, policy_anchors, policy_share, policy_piece]{
             supply(report, Inventory::policy, matisse::gpt2::pattern(), "\t'dog")};

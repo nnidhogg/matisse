@@ -19,7 +19,7 @@ constexpr std::array<Alternative, 1> one_piece_each{{{.language = "!", .gate = "
 /**
  * @brief An alphabet of one class, every code point's.
  */
-constexpr Alphabet one_symbol{.symbols = "!", .literals = "", .caseless = false, .sets = {}, .other = '!'};
+constexpr Alphabet one_symbol{.symbols = "!", .sets = {}, .other = '!'};
 
 /**
  * @brief A pattern over one class, every code point's, which is all the decoding of a text needs.

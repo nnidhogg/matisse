@@ -11,9 +11,11 @@
  * @brief The classes of a text under a pattern's class alphabet, classes_of().
  *
  * Two code points in the same class agree on membership in every set a pattern names and on every literal it spells, so
- * the pattern segments a text exactly as it segments the text with every code point replaced by its class's symbol. The
- * symbol is a member of the class, an ASCII byte, which makes a class string a text of the pattern again. The sets are
- * read from the Unicode tables of the tokenizer library that describes the pattern, generated into its tree by
+ * the pattern segments a text exactly as it segments the text with every code point replaced by another member of its
+ * class. Each class is written as one ASCII symbol, so a class string is a text over bytes. In GPT-2's and cl100k's
+ * alphabets every symbol is also a member of its class, which makes a class string a text of the pattern again; that is
+ * a property of those alphabets, not of the type, and a class without an ASCII member has a symbol outside it. The
+ * Unicode sets are read from the tables of the tokenizer library that describes the pattern, generated into its tree by
  * tools/unicode/generate_classes.py and pinned to the version its alphabet names.
  */
 namespace matisse::pretok

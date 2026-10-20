@@ -18,17 +18,6 @@ namespace
 using munch::regex::utf8::Code_point_range;
 
 /**
- * @brief U+017F, the long s, which `s` matches caselessly under the simple case folding both the regex crate and
- *        Python's re apply.
- */
-constexpr char32_t long_s{0x17F};
-
-/**
- * @brief One past the last ASCII code point.
- */
-constexpr char32_t ascii_end{0x80};
-
-/**
  * @brief Returns whether a byte continues a UTF-8 sequence rather than beginning one.
  * @param byte The byte.
  * @return True for a continuation byte, `10xxxxxx`.
@@ -126,41 +115,15 @@ constexpr char32_t ascii_end{0x80};
 }
 
 /**
- * @brief Returns the case folding of a code point as far as a caseless alphabet's literals reach: A to Z fold to a to
- *        z, and U+017F to s.
- * @param point The code point.
- * @return The folded code point, the code point itself when it folds to none of them.
- */
-[[nodiscard]] constexpr char32_t case_folded(const char32_t point) noexcept
-{
-    constexpr char32_t case_bit{0x20};
-
-    if (point >= U'A' && point <= U'Z')
-    {
-        return point | case_bit;
-    }
-
-    return point == long_s ? U's' : point;
-}
-
-/**
- * @brief Returns the symbol of a code point's class: its own as a literal of the alphabet, the literal its case folding
- *        is under a caseless alphabet, and otherwise the symbol of the first set holding it, or the symbol of
- *        everything else.
+ * @brief Returns the symbol of a code point's class: the symbol of the first set holding it, the literals' sets coming
+ *        first, or the symbol of everything else.
  * @param alphabet The alphabet.
  * @param point The code point.
  * @return The symbol.
  */
 [[nodiscard]] char symbol_of(const Alphabet& alphabet, const char32_t point) noexcept
 {
-    const auto& [symbols, literals, caseless, sets, other, unicode_version]{alphabet};
-
-    const auto folded{caseless ? case_folded(point) : point};
-
-    if (folded < ascii_end && literals.contains(static_cast<char>(folded)))
-    {
-        return static_cast<char>(folded);
-    }
+    const auto& [symbols, sets, other, unicode_version]{alphabet};
 
     for (const auto& [symbol, ranges] : sets)
     {

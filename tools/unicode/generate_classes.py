@@ -1,19 +1,28 @@
 #!/usr/bin/env python3
-"""Generates the code point tables behind the class alphabets of the GPT-2 and cl100k patterns from the Unicode Character
-Database.
+"""Generates the code point tables behind a pattern's class alphabet from the Unicode Character Database, one table for
+each set the tokenizer's pattern names.
 
-The patterns name three sets, which their engines read from Unicode: \\p{L}, the general category L (Lu, Ll, Lt, Lm and
-Lo), \\p{N}, the general category N (Nd, Nl and No), and \\s, the White_Space property, which is what the regex crate and
-Python's reference read it as. Reads PropList.txt and extracted/DerivedGeneralCategory.txt, published at
-https://www.unicode.org/Public/<version>/ucd/, and emits one table file for the database it is given. The generated file
-is checked in, so building matisse never touches the network; rerun this script against a newer database to move the
-pinned Unicode version.
+Each set is named on the command line as TABLE=SET: TABLE is the name of the array in the output, and SET is a general
+category of one letter, the union of its subcategories, such as L for Lu, Ll, Lt, Lm and Lo, a general category of two
+letters, such as Lu, or a property of PropList.txt, such as White_Space, which is what the regex crate and Python's re
+read \\s as. Reads PropList.txt and extracted/DerivedGeneralCategory.txt, published at
+https://www.unicode.org/Public/<version>/ucd/, and emits one table file for the database it is given, the tables in the
+order named. The pattern reads each set as itself, and a code point is classed by the first set holding it, so a code
+point in two of them would be read as in the first alone: the sets named must be disjoint, and a database where two of
+them share a code point is refused. The generated file is checked in, so building matisse never touches the network;
+rerun this script against a newer database to move the pinned Unicode version.
 
-Each tokenizer library whose pattern names these sets keeps its own output, libs/<name>/src/class_ranges.inc, GPT-2's
-and cl100k's both pinned to Unicode 15.0.0, the version of the Python reference the fixtures are written by, so that
-the fixtures replay. Pass --version to require the database to be a given version.
+Each tokenizer library keeps its own output, libs/<name>/src/class_ranges.inc, with the sets its pattern names.
+GPT-2's and cl100k's patterns name \\p{L}, \\p{N} and \\s, and both tables are pinned to Unicode 15.0.0, the version of
+the Python reference the fixtures are written by, so that the fixtures replay:
+
+    tools/unicode/generate_classes.py --version 15.0.0 PropList.txt DerivedGeneralCategory.txt \\
+        libs/gpt2/src/class_ranges.inc letter_ranges=L number_ranges=N white_space_ranges=White_Space
+
+and the same for libs/cl100k/src/class_ranges.inc. Pass --version to require the database to be a given version.
 
 Usage: tools/unicode/generate_classes.py [--version X.Y.Z] <PropList.txt> <DerivedGeneralCategory.txt> <output.inc>
+       TABLE=SET...
 """
 
 import hashlib
@@ -76,6 +85,24 @@ def version_of(lines: list[str], stem: str) -> str:
     return match.group(1)
 
 
+def table_of(argument: str, props: list[str], categories: list[str]) -> tuple[str, str, list[tuple[int, int]]]:
+    """Reads one TABLE=SET argument: the table's name, the set's name and the set's ranges, merged. A set named by one
+    capital letter is the union of the general categories that letter begins, a set named by a capital and a small
+    letter is that general category, and a set of any other name is a property of PropList.txt."""
+    table, separator, name = argument.partition("=")
+
+    if not separator or not table or not name:
+        sys.exit(__doc__)
+
+    if re.fullmatch(r"[A-Z]", name):
+        return table, name, merge(parse_ranges(categories, name + "[a-z]"))
+
+    if re.fullmatch(r"[A-Z][a-z]", name):
+        return table, name, merge(parse_ranges(categories, name))
+
+    return table, name, merge(parse_ranges(props, name))
+
+
 def main() -> None:
     arguments = sys.argv[1:]
 
@@ -87,7 +114,7 @@ def main() -> None:
 
         required, arguments = arguments[1], arguments[2:]
 
-    if len(arguments) < 3:
+    if len(arguments) < 4:
         sys.exit(__doc__)
 
     raw = [Path(argument).read_bytes() for argument in arguments[:2]]
@@ -106,24 +133,18 @@ def main() -> None:
     if required is not None and version != required:
         raise ValueError(f"the database is Unicode {version}, and {required} was asked for")
 
-    letter = merge([r for category in ("Lu", "Ll", "Lt", "Lm", "Lo") for r in parse_ranges(categories, category)])
-    number = merge([r for category in ("Nd", "Nl", "No") for r in parse_ranges(categories, category)])
-    white_space = merge(parse_ranges(props, "White_Space"))
+    tables = [table_of(argument, props, categories) for argument in arguments[3:]]
 
-    # The classes are read in the order white space, letter, number, so a code point in two sets would be classed by
-    # the first; the three are disjoint in every version, and a database where they are not is refused.
-    def holds(ranges: list[tuple[int, int]], point: int) -> bool:
-        return any(first <= point <= last for first, last in ranges)
+    # A code point is classed by the first set holding it, so two sets sharing one would be read as the first alone.
+    def shared(ranges: list[tuple[int, int]], other: list[tuple[int, int]]) -> int | None:
+        points = (point for first, last in ranges for point in range(first, last + 1))
 
-    for first, last in white_space:
-        for point in range(first, last + 1):
-            if holds(letter, point) or holds(number, point):
-                raise ValueError(f"U+{point:04X} is white space and a letter or a number")
+        return next((point for point in points if any(low <= point <= high for low, high in other)), None)
 
-    for first, last in number:
-        for point in range(first, last + 1):
-            if holds(letter, point):
-                raise ValueError(f"U+{point:04X} is a letter and a number")
+    for index, (_, name, ranges) in enumerate(tables):
+        for _, other, other_ranges in tables[index + 1:]:
+            if (point := shared(ranges, other_ranges)) is not None:
+                raise ValueError(f"U+{point:04X} is in {name} and in {other}")
 
     names = ["PropList.txt", "extracted/DerivedGeneralCategory.txt"]
 
@@ -144,8 +165,7 @@ def main() -> None:
     )
 
     output.write_text(
-        header + emit_array("letter_ranges", letter) + "\n" + emit_array("number_ranges", number) + "\n"
-        + emit_array("white_space_ranges", white_space),
+        header + "\n".join(emit_array(table, ranges) for table, _, ranges in tables),
         encoding="utf-8",
         newline="\n",
     )
@@ -153,9 +173,9 @@ def main() -> None:
     def points(ranges: list[tuple[int, int]]) -> int:
         return sum(last - first + 1 for first, last in ranges)
 
-    print(f"Unicode {version}: L {len(letter)} ranges ({points(letter)} code points), "
-          f"N {len(number)} ranges ({points(number)} code points), "
-          f"White_Space {len(white_space)} ranges ({points(white_space)} code points) -> {output}")
+    counts = ", ".join(f"{name} {len(ranges)} ranges ({points(ranges)} code points)" for _, name, ranges in tables)
+
+    print(f"Unicode {version}: {counts} -> {output}")
 
 
 if __name__ == "__main__":

@@ -93,9 +93,10 @@ TEST(Definition_test, Read_gpt2_undoes_the_byte_map_in_the_spellings_and_the_mer
     const auto encoder{written("encoder.json", R"({"a": 0, "Ġ": 1, "Ġa": 2, "\"": 3, "Ã©": 4})")};
     const auto vocab{written("vocab.bpe", "#version: 0.2\nĠ a\nÃ ©\n")};
 
-    const auto [merge_rule, spellings, merges, specials]{read_gpt2(encoder, vocab)};
+    const auto [merge_rule, whole_piece_lookup, spellings, merges, specials]{read_gpt2(encoder, vocab)};
 
     EXPECT_EQ(merge_rule, Merge_rule::pairs);
+    EXPECT_FALSE(whole_piece_lookup);
     EXPECT_EQ(spellings, (std::vector<std::string>{"a", " ", " a", "\"", "\xC3\xA9"}));
     ASSERT_EQ(merges.size(), 2U);
     EXPECT_EQ(merges[0].left, " ");
@@ -152,6 +153,34 @@ TEST(Definition_test, Read_gpt2_refuses_a_merge_line_that_is_not_two_parts)
     EXPECT_TRUE(refusal.contains("is not a merge, two parts separated by white space")) << refusal;
 }
 
+TEST(Definition_test, Read_gpt2_refuses_a_merge_whose_part_a_later_merge_forms_since_the_two_pair_rules_differ_there)
+{
+    // Under (ab, a) then (a, b), encoder.py's pass gives ab ab on abab and one join at a time aba b.
+    const auto later{gpt2_refusal(R"({"a": 0, "b": 1})", "#version: 0.2\nab a\na b\n")};
+    const auto earlier{gpt2_refusal(R"({"a": 0, "b": 1})", "#version: 0.2\na b\nab a\n")};
+
+    EXPECT_TRUE(later.contains(R"(the merge ("ab", "a") at rank 0, line 2 of)")) << later;
+    EXPECT_TRUE(later.contains(R"(has the part "ab", which the merge at rank 1 forms)")) << later;
+    EXPECT_TRUE(earlier.empty()) << earlier;
+}
+
+TEST(Definition_test, Read_gpt2_refuses_a_part_whose_latest_forming_merge_comes_after_its_use)
+{
+    // abc is formed twice, by (a, bc) at rank 2 and (ab, c) at rank 4, and (abc, d) at rank 3 joins it in between.
+    const auto refusal{gpt2_refusal(R"({"a": 0, "b": 1})", "#version: 0.2\na b\nb c\na bc\nabc d\nab c\n")};
+
+    EXPECT_TRUE(refusal.contains(R"(the merge ("abc", "d") at rank 3, line 5 of)")) << refusal;
+    EXPECT_TRUE(refusal.contains(R"(has the part "abc", which the merge at rank 4 forms)")) << refusal;
+}
+
+TEST(Definition_test, Read_gpt2_refuses_a_pair_listed_twice)
+{
+    const auto refusal{gpt2_refusal(R"({"a": 0, "b": 1})", "#version: 0.2\na b\nb a\na b\n")};
+
+    EXPECT_TRUE(refusal.contains(R"(the merge ("a", "b") at rank 2, line 4 of)")) << refusal;
+    EXPECT_TRUE(refusal.contains("repeats the merge at rank 0")) << refusal;
+}
+
 TEST(Definition_test, Read_gpt2_refuses_an_encoder_that_is_not_one_flat_object_of_spellings_and_ids)
 {
     const auto colon{gpt2_refusal(R"({"a" 0})", "#version: 0.2\n")};
@@ -196,9 +225,10 @@ TEST(Definition_test, Read_tiktoken_reads_the_ranks_as_ids_and_attaches_the_spec
 
     const std::vector<Special_token> given{{.spelling = "<|endoftext|>", .id = 3}, {.spelling = "<|end|>", .id = 4}};
 
-    const auto [merge_rule, spellings, merges, specials]{read_tiktoken(path, given)};
+    const auto [merge_rule, whole_piece_lookup, spellings, merges, specials]{read_tiktoken(path, given)};
 
     EXPECT_EQ(merge_rule, Merge_rule::ranks);
+    EXPECT_TRUE(whole_piece_lookup);
     EXPECT_EQ(spellings, (std::vector<std::string>{"!", "\"", " a"}));
     EXPECT_TRUE(merges.empty());
     ASSERT_EQ(specials.size(), 2U);

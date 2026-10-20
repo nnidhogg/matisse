@@ -27,15 +27,16 @@ namespace matisse::pretok
  * At each boundary it commits the longest gate-passing accept of the first alternative that has one, each alternative's
  * language compiled by munch as a DFA over the class symbols and run on the text's class string, and an accept passing
  * its alternative's gate when the class symbol after it is one the gate holds or the input ends there. A gate reading
- * one code point suffices for every pattern described, and a total pattern has an accept on every nonempty text, so the
- * commit always advances.
+ * one code point suffices for every pattern described. The pattern must be total, some alternative accepting on every
+ * nonempty text, so that the commit always advances; split_verifier() decides totality and refuses a pattern that is
+ * not, and the segmenter does not check it.
  */
 class Segmenter
 {
 public:
     /**
      * @brief Compiles the alternatives of a pattern.
-     * @param pattern The pattern, whose views and spans outlive the segmenter, as a tokenizer library's static
+     * @param pattern The pattern, total, whose views and spans outlive the segmenter, as a tokenizer library's static
      *        description does.
      */
     explicit Segmenter(const Pattern& pattern);

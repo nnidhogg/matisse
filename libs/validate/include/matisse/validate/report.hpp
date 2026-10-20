@@ -18,13 +18,13 @@
  *        json(), with text as a JSON string, json_string(), and the ending a noun takes for a count, plural().
  *
  * validate() decides every class window of width two to a width, four unless told, under both certificates, the policy
- * certificate by munch::verifier::miscovering() on the split verifier and the factorization certificate by
- * is_split_window() on the factorization lexer; each window table carries the right context its inventory needs,
- * decided by munch::verifier::right_context() on the split verifier, and the report carries boundary_gap() of the split
- * verifier. A window is a string of class symbols and its origin counts code points, as the pattern's alphabet classes
- * a text. render() and json() follow munch-audit's report renderings. Two units implement it, as munch-audit's report
- * is implemented: report.cpp decides and report_render.cpp writes what was decided. supply.hpp measures a report's
- * anchors on an input.
+ * certificate of munch::verifier::miscovering() on the split verifier, decided for every window in one walk, and the
+ * factorization certificate by is_split_window() on the factorization lexer; each window table carries the right
+ * context its inventory needs, decided by munch::verifier::right_context() on the split verifier, and the report
+ * carries boundary_gap() of the split verifier. A window is a string of class symbols and its origin counts code
+ * points, as the pattern's alphabet classes a text. render() and json() follow munch-audit's report renderings. Two
+ * units implement it, as munch-audit's report is implemented: report.cpp decides and report_render.cpp writes what was
+ * decided. supply.hpp measures a report's anchors on an input.
  */
 namespace matisse::validate
 {
@@ -130,21 +130,20 @@ struct Report
  *        context of each inventory and the boundary gap of the split verifier.
  *
  * The factorization table holds the windows is_split_window() certifies on the factorization lexer, at the origin it
- * returns, and the policy table the windows munch::verifier::miscovering() certifies on the split verifier. A window
- * certified at an origin is certified at the origin plus one with a symbol prepended, every occurrence of the longer
- * window holding one of the shorter, so a policy window whose last symbols are certified takes its origin from them;
- * every other one is asked of miscovering() at its last symbol, and a refutation leaves at most one origin to ask,
- * where the piece holding the refuted occurrence's last symbol begins, none when that piece begins before the
- * occurrence. Every window of a total pattern occurs, so none is certified vacuously. An inventory's right context is
- * the largest of its windows' by munch::verifier::right_context() on the split verifier, asked of the windows that hold
- * no shorter certified window whose origin lands on the same symbol, since every cut of one that does is a cut of the
+ * returns, and the policy table the windows munch::verifier::miscovering() certifies on the split verifier, decided in
+ * one walk over the windows: each window carries its cloud, the states the split verifier can be in after an occurrence
+ * of it, each with where the piece holding the occurrence's last symbol begins and whether a piece ends after it,
+ * extended by one symbol from its prefix's, and the window is certified at an origin when every entry places the piece
+ * there. Every window of a total pattern occurs, so none is certified vacuously. An inventory's right context is the
+ * largest of its windows' by munch::verifier::right_context() on the split verifier, asked of the windows that hold no
+ * shorter certified window whose origin lands on the same symbol, since every cut of one that does is a cut of the
  * shorter one at the same place, with its failing contexts and truncations. GPT-2's and cl100k's patterns need one
  * under the factorization certificate and two under the policy certificate.
- * @param pattern The pattern, total.
+ * @param pattern The pattern.
  * @param width The widest window decided, default_width unless told.
  * @return The report.
- * @throws std::invalid_argument If the right context of a certified window is unbounded, or a factorization window is
- *         not certified by the split verifier.
+ * @throws std::invalid_argument If the pattern is not total, as split_verifier() refuses it, the right context of a
+ *         certified window is unbounded, or a factorization window is not certified by the split verifier.
  * @throws munch::pattern::Syntax_error If an alternative's language is not in munch's pattern syntax.
  */
 [[nodiscard]] Report validate(const pretok::Pattern& pattern, std::size_t width = default_width);

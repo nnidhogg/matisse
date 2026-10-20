@@ -6,9 +6,12 @@
 #include <filesystem>
 #include <format>
 #include <fstream>
+#include <functional>
 #include <iterator>
 #include <limits>
+#include <map>
 #include <optional>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -39,6 +42,11 @@ using Byte_map_t = std::array<std::optional<unsigned char>, map_end>;
  *        Python's str.split() splits at; no character of the byte map is white space.
  */
 constexpr std::string_view separators{" \t\n\v\f\r"};
+
+/**
+ * @brief The line of vocab.bpe that holds the merge of rank zero, after the version line.
+ */
+constexpr std::size_t first_merge_line{2};
 
 /**
  * @brief The members of encoder.json as read, each spelling's bytes with its id, in the file's order.
@@ -574,7 +582,7 @@ std::vector<std::string> Encoder_reader::by_id(Entries_t entries) const
 
     auto start{text.find('\n')};
 
-    for (std::size_t number{2}; start != std::string_view::npos; ++number)
+    for (auto number{first_merge_line}; start != std::string_view::npos; ++number)
     {
         const auto end{text.find('\n', start + 1)};
 
@@ -595,6 +603,108 @@ std::vector<std::string> Encoder_reader::by_id(Entries_t entries) const
     return merges;
 }
 
+/**
+ * @brief Returns a part of a merge as a refusal quotes it: a printable ASCII byte as itself, the quote and the
+ *        backslash escaped, and every other byte as `\xHH`, so that a part outside ASCII reads the same in every
+ *        terminal.
+ * @param part The part's bytes.
+ * @return The part, quoted.
+ */
+[[nodiscard]] std::string quoted_part(const std::string_view part)
+{
+    constexpr unsigned char first_printable{0x20};
+    constexpr unsigned char last_printable{0x7E};
+
+    std::string out{'"'};
+
+    for (const auto byte : part)
+    {
+        const auto value{static_cast<unsigned char>(byte)};
+
+        const auto printable{value >= first_printable && value <= last_printable};
+
+        if (byte == '"' || byte == '\\')
+        {
+            out += std::format(R"(\{})", byte);
+        }
+        else if (printable)
+        {
+            out += byte;
+        }
+        else
+        {
+            out += std::format(R"(\x{:02X})", value);
+        }
+    }
+
+    out += '"';
+
+    return out;
+}
+
+/**
+ * @brief Requires a merge table on which the pair rule of Merge_rule::pairs, one join at a time, is encoder.py's loop:
+ *        no pair listed twice, and no part of a merge formed by a merge of a later rank.
+ *
+ * encoder.py joins every occurrence of the least-ranked pair in one pass. Where every part is formed before the merges
+ * that join it, a join makes no pair of lower rank than its own, so each pass is a run of single joins and the two
+ * rules give the same tokens on every piece; where a part is formed later they can differ, (ab, a) then (a, b) giving
+ * ab ab on abab under the pass and aba b one join at a time.
+ * @param merges The merges in rank order, the first on line 2 of the file.
+ * @param name The file's path, for the refusals.
+ * @throws std::invalid_argument If a pair is listed twice, or a part of a merge is formed by a merge of a later rank;
+ *         the message names the merge, its rank and its line, and the other merge's rank.
+ */
+void require_parts_formed_first(const std::span<const munch::verifier::Merge> merges, const std::string_view name)
+{
+    // The pairs listed so far by rank, and the latest rank at which each product is formed.
+    std::map<std::pair<std::string_view, std::string_view>, std::size_t> ranks{};
+
+    std::map<std::string, std::size_t, std::less<>> formed{};
+
+    for (std::size_t rank{0}; rank < merges.size(); ++rank)
+    {
+        const auto& [left, right]{merges[rank]};
+
+        const auto [listed, inserted]{ranks.try_emplace({left, right}, rank)};
+
+        if (!inserted)
+        {
+            const auto line{rank + first_merge_line};
+
+            throw std::invalid_argument{std::format(
+                    "read_gpt2: the merge ({}, {}) at rank {}, line {} of {}, repeats the merge at rank {}",
+                    quoted_part(left), quoted_part(right), rank, line, name, listed->second)};
+        }
+
+        auto product{left + right};
+
+        formed.insert_or_assign(std::move(product), rank);
+    }
+
+    for (std::size_t rank{0}; rank < merges.size(); ++rank)
+    {
+        const auto& [left, right]{merges[rank]};
+
+        for (const auto part : {std::string_view{left}, std::string_view{right}})
+        {
+            const auto forming{formed.find(part)};
+
+            if (forming == formed.end() || forming->second < rank)
+            {
+                continue;
+            }
+
+            const auto line{rank + first_merge_line};
+
+            throw std::invalid_argument{std::format(
+                    "read_gpt2: the merge ({}, {}) at rank {}, line {} of {}, has the part {}, which the merge at "
+                    "rank {} forms",
+                    quoted_part(left), quoted_part(right), rank, line, name, quoted_part(part), forming->second)};
+        }
+    }
+}
+
 } // namespace
 
 Definition read_gpt2(const std::filesystem::path& encoder, const std::filesystem::path& vocab)
@@ -609,9 +719,14 @@ Definition read_gpt2(const std::filesystem::path& encoder, const std::filesystem
 
     auto spellings{reader.read()};
 
-    auto merges{merges_of(vocab_text, vocab.string())};
+    const auto vocab_name{vocab.string()};
+
+    auto merges{merges_of(vocab_text, vocab_name)};
+
+    require_parts_formed_first(merges, vocab_name);
 
     return {.merge_rule = Merge_rule::pairs,
+            .whole_piece_lookup = false,
             .spellings = std::move(spellings),
             .merges = std::move(merges),
             .specials = {}};

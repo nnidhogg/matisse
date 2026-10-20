@@ -26,14 +26,18 @@ namespace matisse::pretok
  * marker with u in L and z empty or beginning with a symbol of g; A_k is B_k less those with a strictly longer endpoint
  * on the same residual, the longest gate-passing accept, and Match_k, the residuals on which k has an accept, is B_k
  * with its marker erased. The one-step relation Q, holding u|z exactly when the pattern commits u on uz, is the union
- * over k of A_k restricted to the residuals no earlier alternative matches. M accepts the marked strings whose last
- * symbol is unmarked and in which every position a piece begins at, the start and every position after a marked symbol,
- * is followed by the piece Q assigns to the residual there; it is built as those strings less every string with a piece
- * start followed by a residual whose first marked piece disagrees with Q, and minimized. For a total pattern M is
- * functional and total, so it is the graph of the segmentation. munch's constructor trims the table, dropping the dead
- * state, and numbers it breadth-first from the start over the marked symbols ascending.
- * @param pattern The pattern, total.
+ * over k of A_k restricted to the residuals no earlier alternative matches. The pattern is total when every nonempty
+ * residual is matched by some alternative, which the construction decides on the residuals left unmatched and refuses
+ * otherwise. M accepts the marked strings whose last symbol is unmarked and in which every position a piece begins at,
+ * the start and every position after a marked symbol, is followed by the piece Q assigns to the residual there; it is
+ * built as those strings less every string with a piece start followed by a residual whose first marked piece disagrees
+ * with Q, and minimized. For a total pattern M is functional and total, so it is the graph of the segmentation. munch's
+ * constructor trims the table, dropping the dead state, and numbers it breadth-first from the start over the marked
+ * symbols ascending.
+ * @param pattern The pattern.
  * @return The verifier, over the class symbols marked.
+ * @throws std::invalid_argument If the pattern is not total, the message naming a shortest nonempty residual no
+ *         alternative matches.
  * @throws munch::pattern::Syntax_error If an alternative's language is not in munch's pattern syntax.
  */
 [[nodiscard]] munch::verifier::Verifier split_verifier(const Pattern& pattern);

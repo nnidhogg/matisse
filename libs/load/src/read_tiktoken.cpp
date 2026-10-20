@@ -246,6 +246,7 @@ Definition read_tiktoken(const std::filesystem::path& path, const std::span<cons
     std::vector<Special_token> vendor_specials(specials.begin(), specials.end());
 
     return {.merge_rule = Merge_rule::ranks,
+            .whole_piece_lookup = true,
             .spellings = std::move(spellings),
             .merges = {},
             .specials = std::move(vendor_specials)};

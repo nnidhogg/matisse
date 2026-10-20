@@ -8,19 +8,33 @@
 #include <string_view>
 #include <tuple>
 
+#include <munch/regex/utf8.hpp>
+
 #include "matisse/validate/report.hpp"
 
 using namespace matisse::validate;
 using matisse::pretok::Alphabet;
 using matisse::pretok::Alternative;
+using matisse::pretok::Code_point_set;
 using matisse::pretok::Pattern;
+using munch::regex::utf8::Code_point_range;
 
 namespace
 {
 /**
+ * @brief The code point of the literal `a`.
+ */
+constexpr std::array<Code_point_range, 1> a_points{{{.first = U'a', .last = U'a'}}};
+
+/**
+ * @brief The set of the literal `a`, the one set the two classes read.
+ */
+constexpr std::array<Code_point_set, 1> a_set{{{.symbol = 'a', .ranges = a_points}}};
+
+/**
  * @brief An alphabet of two classes, `a` a literal and `b` everything else.
  */
-constexpr Alphabet two_symbols{.symbols = "ab", .literals = "a", .caseless = false, .sets = {}, .other = 'b'};
+constexpr Alphabet two_symbols{.symbols = "ab", .sets = a_set, .other = 'b'};
 
 /**
  * @brief A pattern whose every piece is one symbol, so that every window is certified at its last symbol and every
