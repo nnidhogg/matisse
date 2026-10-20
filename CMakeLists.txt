@@ -46,6 +46,11 @@ endif ()
 # directory, each held to its digest, and skip when it is not given.
 set(MATISSE_VOCAB_DIR "" CACHE PATH "A directory holding the pinned vocabulary files the tests read")
 
+# The three corpora of the test strategy are not in the tree either: a directory holding twitter.json,
+# munch-python@15b2863c.txt and munch-cpp@15b2863c.txt, built as docs/benchmarks.md says, which the corpus probe holds
+# to the fixtures' digests when it is given beside the vocabulary directory.
+set(MATISSE_CORPUS_DIR "" CACHE PATH "A directory holding the three corpora of the test strategy")
+
 include(GNUInstallDirs)
 
 # Installing matisse means installing targets that link munch, and an exported target can only refer to munch as an

@@ -11,11 +11,12 @@
 
 /**
  * @file
- * @brief SHA-256, sha256(), the digest the tests hold the pinned vocabularies and the generated class tables to, in
- *        its three steps: the padding, one block's message schedule and its compression.
+ * @brief SHA-256, sha256(), the digest the tests hold the pinned vocabularies and the generated class tables to, and
+ *        the probes the corpora and their ids, in its three steps: the padding, one block's message schedule and its
+ *        compression.
  *
- * The tests share it through matisse_common, a target in the build tree only, neither installed nor exported, so that
- * checking a digest needs no hashing library.
+ * The tests and the probes share it through matisse_common, a target in the build tree only, neither installed nor
+ * exported, so that checking a digest needs no hashing library.
  */
 namespace matisse::common
 {

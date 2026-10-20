@@ -1,0 +1,20 @@
+#ifndef MATISSE_TOOLS_PROBES_PROVENANCE_HPP
+#define MATISSE_TOOLS_PROBES_PROVENANCE_HPP
+
+#include <string_view>
+
+namespace matisse::tools::probes
+{
+/**
+ * @brief The commit the bench was built from, or "unknown" outside a git checkout.
+ */
+inline constexpr std::string_view commit{"@commit@"};
+
+/**
+ * @brief Whether the checkout was dirty, which makes the commit a lower bound rather than an identification.
+ */
+inline constexpr bool dirty{@dirty@};
+
+} // namespace matisse::tools::probes
+
+#endif // MATISSE_TOOLS_PROBES_PROVENANCE_HPP
