@@ -59,7 +59,7 @@ TEST(Supply_test, An_anchor_after_letters_beyond_ascii_stands_at_their_byte_offs
     EXPECT_EQ(longest_piece, 7U);
 }
 
-TEST(Supply_test, A_cut_only_a_window_of_the_default_width_certifies_is_an_anchor)
+TEST(Supply_test, A_cut_no_window_narrower_than_four_certifies_is_an_anchor)
 {
     // "\t'dog" is "\t", "'d" and "og": the policy certificate certifies the cut before the o by "\t'dA" at 3 and by no
     // shorter window, a space before the apostrophe joining it as ` ?[^\s\p{L}\p{N}]+`; under the factorization

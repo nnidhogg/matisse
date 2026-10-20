@@ -1,12 +1,15 @@
 #ifndef MATISSE_LIBS_ENCODE_INCLUDE_MATISSE_ENCODE_ENCODER_HPP
 #define MATISSE_LIBS_ENCODE_INCLUDE_MATISSE_ENCODE_ENCODER_HPP
 
+#include <cstddef>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
 #include <vector>
 
 #include "matisse/encode/merger.hpp"
+#include "matisse/encode/window_index.hpp"
 #include "matisse/load/definition.hpp"
 #include "matisse/pretok/pattern.hpp"
 #include "matisse/pretok/segmenter.hpp"
@@ -15,17 +18,19 @@
 /**
  * @file
  * @brief The encoder, Encoder with encode() and decode(): the token ids of a text under a definition, and the text of a
- *        run of ids.
+ *        run of ids; and the parallel encoding, chunk_boundaries() and encode_parallel(), which cuts the text only
+ *        where the inventory's window table certifies a cut.
  *
  * encode() splits the text at every allowed special token, segments each stretch between them as a complete input, and
  * merges every piece alone by the definition's merge rule, the pair rule or tiktoken's rank merge, a piece that is a
  * token taking its id whole where the definition's whole-piece lookup says so; Merger, in merger.hpp, holds the lookup
- * and the merge, and a Piece_cache, in piece_cache.hpp, keeps the merged pieces of one call. chunk_boundaries() will
- * walk forward from each equal byte target to the first anchor of the inventory's window table, and encode_parallel()
- * will give each chunk to a worker that segments it with the decided right context and keeps the pieces ending at its
- * cut. The encoder claims one thing: for every text the definition accepts, encode_parallel() returns the ids encode()
- * returns, at every chunk count. chunk_boundaries() and encode_parallel() are not declared yet; docs/design.md sketches
- * them.
+ * and the merge, and a Piece_cache, in piece_cache.hpp, keeps the merged pieces of one call. chunk_boundaries() walks
+ * forward from each equal byte target to the first cut, an anchor of the window table, which Window_index, in
+ * window_index.hpp, finds, or an edge of an allowed special token, and encode_parallel() gives each chunk to a worker
+ * that segments it with the table's right context and keeps the pieces ending at its cut. The encoder claims one thing:
+ * for every text the definition accepts, encode_parallel() returns the ids encode() returns, at every chunk count. That
+ * is the splice theorem of the report on pre-tokenizer certification with the proposition that a certified cut is a
+ * pre-token boundary and the decided right context.
  */
 namespace matisse::encode
 {
@@ -40,7 +45,7 @@ public:
      *        window table and the special tokens allowed.
      * @param definition The definition.
      * @param report The report validate() decided of the pattern.
-     * @param inventory The inventory whose window table the encoder keeps.
+     * @param inventory The inventory whose window table and right context the encoder keeps.
      * @param pattern The pattern, whose views and spans outlive the encoder, as a tokenizer library's static
      *        description does.
      * @param allowed The spellings of the special tokens cut out of a text; every other special token is ordinary text.
@@ -68,6 +73,42 @@ public:
     [[nodiscard]] std::vector<load::Token_id_t> encode(std::string_view text) const;
 
     /**
+     * @brief Returns where encode_parallel() cuts a text into chunks: each interior boundary the first cut at or after
+     *        the later of its equal-division target and one past the previous boundary.
+     *
+     * A cut is an anchor of the inventory's window table, the origin of an occurrence of a certified window inside one
+     * stretch between allowed special tokens, at least the width less one code points after the previous boundary, so
+     * that the occurrence begins in the chunk the cut ends, and as far after the stretch's start; or it is where an
+     * allowed special token begins or ends, a cut of its own. Every cut is a pre-token boundary of the text, at a code
+     * point and outside every special token. The spacing leaves out an anchor that stands closer to the previous
+     * boundary, and a target with no cut after it ends the walk, the last chunk then running to the text's end.
+     * @param text The text, well-formed UTF-8.
+     * @param chunks The number of chunks aimed for; fewer result when cuts are scarce, and zero behaves as one, the
+     *        whole text as a single chunk.
+     * @return Offsets from 0 to the text's size inclusive; adjacent pairs delimit the chunks.
+     * @throws std::invalid_argument If the text the walk classes is not well-formed UTF-8, as classes_of() refuses it.
+     */
+    [[nodiscard]] std::vector<std::size_t> chunk_boundaries(std::string_view text, std::size_t chunks) const;
+
+    /**
+     * @brief Returns the ids of a text encoded as concurrent chunks cut by chunk_boundaries(), which are the ids
+     *        encode() returns.
+     *
+     * Each chunk is encoded on its own thread, the last on the calling thread, with a piece cache of its own: its
+     * stretches are segmented as encode() segments them, but the last one with the right context of the inventory's
+     * window table, that many further code points of the text, read as a complete input there unless an allowed special
+     * token or the text's end comes first, and only the pieces ending at or before the chunk's end are kept. The ids of
+     * the chunks, concatenated, are the result. An exception a worker throws is kept and rethrown on the calling thread
+     * once every worker has joined, the first one when several throw.
+     * @param text The text, well-formed UTF-8.
+     * @param chunks As for chunk_boundaries().
+     * @return The ids.
+     * @throws std::invalid_argument If the text is not well-formed UTF-8, as encode() refuses it, the byte offset
+     *         counted from the start of what the walk or the worker classes.
+     */
+    [[nodiscard]] std::vector<load::Token_id_t> encode_parallel(std::string_view text, std::size_t chunks) const;
+
+    /**
      * @brief Returns the text a run of ids spells: each ordinary token's bytes and each special token's spelling.
      * @param ids The ids.
      * @return The text.
@@ -78,6 +119,22 @@ public:
 
 private:
     /**
+     * @brief An occurrence of an allowed special token in a text: where it begins and which token it is.
+     */
+    struct Occurrence
+    {
+        /**
+         * @brief The byte at which the occurrence begins.
+         */
+        std::size_t at{};
+
+        /**
+         * @brief The token's index among the allowed special tokens.
+         */
+        std::size_t special{};
+    };
+
+    /**
      * @brief Returns the special tokens of a definition that are allowed, in the order the spellings are given.
      * @param specials The definition's special tokens.
      * @param allowed The spellings allowed.
@@ -86,6 +143,54 @@ private:
      */
     [[nodiscard]] static std::vector<load::Special_token> allowed_of(
             std::span<const load::Special_token> specials, std::span<const std::string> allowed);
+
+    /**
+     * @brief Returns the occurrences of the allowed special tokens in a text that encode() cuts out, front to back:
+     *        from the end of each, the earliest next one, the longest among those that begin at one byte.
+     *
+     * Each token's next occurrence is kept until the search passes it, so that the text is read once for every token
+     * however many of its occurrences the search finds.
+     * @param text The text.
+     * @return The occurrences, ascending, none overlapping another.
+     */
+    [[nodiscard]] std::vector<Occurrence> occurrences(std::string_view text) const;
+
+    /**
+     * @brief Returns the ids of a chunk of a text, its stretches segmented as complete inputs but the last one with the
+     *        right context, only its pieces ending at or before the chunk's end kept.
+     * @param text The text.
+     * @param found The occurrences of the allowed special tokens in the text, as occurrences() finds them.
+     * @param begin The chunk's first byte, the text's start or a cut.
+     * @param end The byte after the chunk, a cut or the text's end.
+     * @return The ids.
+     * @throws std::invalid_argument If what the chunk segments is not well-formed UTF-8, as the Segmenter refuses it.
+     */
+    [[nodiscard]] std::vector<load::Token_id_t> encode_chunk(
+            std::string_view text, std::span<const Occurrence> found, std::size_t begin, std::size_t end) const;
+
+    /**
+     * @brief Returns the boundaries chunk_boundaries() returns, the occurrences of the allowed special tokens found.
+     * @param text The text.
+     * @param found The occurrences of the allowed special tokens in the text, as occurrences() finds them.
+     * @param chunks The number of chunks aimed for.
+     * @return The boundaries.
+     * @throws std::invalid_argument If the text the walk classes is not well-formed UTF-8, as classes_of() refuses it.
+     */
+    [[nodiscard]] std::vector<std::size_t> boundaries_of(
+            std::string_view text, std::span<const Occurrence> found, std::size_t chunks) const;
+
+    /**
+     * @brief Returns the first cut of a text at or after a byte: an anchor spaced from the previous boundary and from
+     *        its stretch's start, or an edge of an allowed special token.
+     * @param text The text.
+     * @param found The occurrences of the allowed special tokens in the text, as occurrences() finds them.
+     * @param previous The previous boundary.
+     * @param floor The byte, after the previous boundary.
+     * @return The cut, std::nullopt when none stands at or after the byte before the text's end.
+     * @throws std::invalid_argument If the text the walk classes is not well-formed UTF-8, as classes_of() refuses it.
+     */
+    [[nodiscard]] std::optional<std::size_t> next_cut(
+            std::string_view text, std::span<const Occurrence> found, std::size_t previous, std::size_t floor) const;
 
     /**
      * @brief The definition, whose spellings and special tokens decode() reads.
@@ -108,9 +213,14 @@ private:
     std::vector<load::Special_token> allowed_;
 
     /**
-     * @brief The inventory's window table with its right context, which the parallel encoding cuts by.
+     * @brief The inventory's certified windows by their class strings, which the parallel encoding cuts by.
      */
-    validate::Window_table table_;
+    Window_index windows_;
+
+    /**
+     * @brief The right context of the inventory, the code points a worker reads past its chunk's end.
+     */
+    std::size_t right_context_;
 };
 
 } // namespace matisse::encode

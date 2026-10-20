@@ -1,10 +1,13 @@
 #include "matisse/pretok/verifier.hpp"
 
+#include <algorithm>
+#include <array>
 #include <charconv>
 #include <cstddef>
 #include <fstream>
 #include <gtest/gtest.h>
 #include <optional>
+#include <random>
 #include <set>
 #include <sstream>
 #include <string>
@@ -347,6 +350,43 @@ std::vector<std::string> windows_of(const std::size_t length)
     return windows;
 }
 
+/**
+ * @brief Returns a seeded random text of the shapes the pattern meets: white space runs before letters and punctuation,
+ *        newlines followed by tab runs, contractions in both cases, digits, and letters and emoji beyond ASCII.
+ * @param random The random sequence.
+ * @param fragments The number of fragments joined.
+ * @return The text, well-formed UTF-8.
+ */
+std::string random_text(std::mt19937& random, const std::size_t fragments)
+{
+    constexpr std::array<std::string_view, 18> shapes{" ",    "  ",       "   a",   "\t\t!", "\t !",    "\n\n\t\t",
+                                                      "\r\n", "Hello",    " world", "don't", "DON'T",   "'s",
+                                                      "'LL",  " 1234567", "!!",     "héllo", " 日本語", "\U0001F642"};
+
+    std::uniform_int_distribution<std::size_t> shape{0, shapes.size() - 1};
+
+    std::string text{};
+
+    for (std::size_t count{0}; count < fragments; ++count)
+    {
+        text += shapes[shape(random)];
+    }
+
+    return text;
+}
+
+/**
+ * @brief Returns the number of code points of a UTF-8 text.
+ * @param text The text.
+ * @return The count.
+ */
+std::size_t code_points(const std::string_view text)
+{
+    const auto begins_one{[](const char byte) { return (static_cast<unsigned char>(byte) & 0xC0U) != 0x80U; }};
+
+    return static_cast<std::size_t>(std::ranges::count_if(text, begins_one));
+}
+
 } // namespace
 
 TEST(Verifier_test, Cl100k_s_split_verifier_is_the_fixture_s_table_state_for_state)
@@ -404,4 +444,34 @@ TEST(Verifier_test, Every_window_cl100k_s_factorization_lexer_certifies_is_polic
     }
 
     EXPECT_GT(certified, 0U);
+}
+
+TEST(Verifier_test, Cl100k_s_split_verifier_accepts_the_segmenter_s_marking_of_seeded_random_texts)
+{
+    const auto verifier{split_verifier(matisse::cl100k::pattern())};
+
+    const Segmenter segmenter{matisse::cl100k::pattern()};
+
+    std::mt19937 random{29};
+
+    for (std::size_t count{0}; count < 300; ++count)
+    {
+        const auto text{random_text(random, 40)};
+
+        const auto symbols{class_string(text)};
+
+        Marking_t marking(symbols.size(), false);
+
+        for (const auto end : segmenter.boundaries(text))
+        {
+            const auto points{code_points(text.substr(0, end))};
+
+            if (points < symbols.size())
+            {
+                marking[points - 1] = true;
+            }
+        }
+
+        EXPECT_TRUE(accepts(verifier, symbols, marking)) << text;
+    }
 }

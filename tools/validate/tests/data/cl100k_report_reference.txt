@@ -1,25 +1,25 @@
 # written by matisse-validate from the repository's root with --tiktoken cl100k tools/validate/tests/data/bytes.tiktoken --input tools/validate/tests/data/sample.txt; regenerate with it, never by hand
 == tools/validate/tests/data/bytes.tiktoken
 -- tokenizer cl100k: 256 tokens, 5 special tokens
-verdict                     windows certify a cut: 30576 under the factorization certificate and 58580 under the policy certificate, up to width 4
-factorization windows       30576: 112 at width 2, 1792 at width 3, 28672 at width 4
+verdict                     windows certify a cut: 489328 under the factorization certificate and 1003880 under the policy certificate, up to width 5
+factorization windows       489328: 112 at width 2, 1792 at width 3, 28672 at width 4, 458752 at width 5
                             " 0" at 1
                             "! " at 1
                             "!0" at 1
                             "' " at 1
                             "'0" at 1
                             "0 " at 1
-                            ... 30570 more
+                            ... 489322 more
 factorization context       1 code point read past the cut
                             0 fails at cut 2 of "\t\t!", boundaries 1 2
-policy windows              58580: 132 at width 2, 3028 at width 3, 55420 at width 4
+policy windows              1003880: 132 at width 2, 3028 at width 3, 55420 at width 4, 945300 at width 5
                             " !" at 0
                             " '" at 0
                             " 0" at 1
                             " A" at 0
                             " d" at 0
                             " e" at 0
-                            ... 58574 more
+                            ... 1003874 more
 policy context              2 code points read past the cut
                             0 fails at cut 2 of "\t\t!", boundaries 1 2
                             1 fails at cut 1 of "\t\tA", boundaries 1
@@ -28,4 +28,4 @@ boundary gap                unbounded: "\t" repeats with no boundary
 certified-anchor supply on tools/validate/tests/data/sample.txt, 163 bytes
   longest piece              10 bytes, the floor no cut rule goes below
   factorization              34 anchors, 213.6 per KiB, 82.93% of the pre-token boundaries, gaps p50 5, p90 9, p99 12, max 12
-  policy                     37 anchors, 232.4 per KiB, 90.24% of the pre-token boundaries, gaps p50 4, p90 7, p99 10, max 10
+  policy                     38 anchors, 238.7 per KiB, 92.68% of the pre-token boundaries, gaps p50 4, p90 7, p99 10, max 10

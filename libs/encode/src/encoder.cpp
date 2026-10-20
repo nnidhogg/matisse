@@ -2,13 +2,17 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <exception>
 #include <format>
+#include <iterator>
+#include <mutex>
 #include <optional>
 #include <ranges>
 #include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -19,102 +23,138 @@ namespace matisse::encode
 namespace
 {
 /**
- * @brief An occurrence of an allowed special token in a text: where it begins and which token it is.
+ * @brief Returns the window table of an inventory in a report.
+ * @param report The report.
+ * @param inventory The inventory.
+ * @return The table.
  */
-struct Occurrence
+[[nodiscard]] const validate::Window_table& table_of(
+        const validate::Report& report, const validate::Inventory inventory) noexcept
 {
-    /**
-     * @brief The byte at which the occurrence begins.
-     */
-    std::size_t at{};
-
-    /**
-     * @brief The token's index among the allowed special tokens.
-     */
-    std::size_t special{};
-};
+    return inventory == validate::Inventory::factorization ? report.factorization : report.policy;
+}
 
 /**
- * @brief The search of a text for its allowed special tokens, front to back.
- *
- * Each token's next occurrence is kept until the search passes it, so that the text is read once for every token
- * however many of its occurrences the search finds.
+ * @brief Returns whether a byte continues a UTF-8 sequence rather than beginning one.
+ * @param byte The byte.
+ * @return True for a continuation byte, `10xxxxxx`.
  */
-class Special_search
+[[nodiscard]] constexpr bool is_continuation(const unsigned char byte) noexcept
+{
+    return (byte & 0xC0U) == 0x80U;
+}
+
+/**
+ * @brief Returns the byte offset a number of code points after an offset of a UTF-8 text, or a limit when fewer stand
+ *        before it.
+ * @param text The text.
+ * @param from The offset, at the start of a code point.
+ * @param points The number of code points.
+ * @param limit The offset not passed, at the start of a code point or at the text's end, at or after the offset.
+ * @return The offset, at the start of a code point.
+ */
+[[nodiscard]] std::size_t byte_after(
+        const std::string_view text, const std::size_t from, const std::size_t points, const std::size_t limit) noexcept
+{
+    auto byte{from};
+
+    for (std::size_t point{0}; point < points && byte < limit; ++point)
+    {
+        ++byte;
+
+        while (byte < limit && is_continuation(static_cast<unsigned char>(text[byte])))
+        {
+            ++byte;
+        }
+    }
+
+    return byte;
+}
+
+/**
+ * @brief The equal-division targets of a text, the offsets size * index / parts for index 1, 2 and so on, in turn.
+ *
+ * The product overflows for a large text divided very finely, and so does any form that multiplies the remainder by the
+ * index. Adding the quotient each step and carrying the remainder when it fills a whole divisor yields exactly the same
+ * offsets and multiplies nothing, the target never exceeding the size and the carry never reaching the divisor; this is
+ * munch's Lexer::Division_targets, duplicated rather than shared.
+ */
+class Division_targets
 {
 public:
     /**
-     * @brief Finds each allowed special token's first occurrence in a text.
-     * @param text The text, which outlives the search.
-     * @param allowed The allowed special tokens, which outlive the search.
+     * @brief Constructs the walk over a text divided into parts, positioned before the first target.
+     * @param size The text's size.
+     * @param parts The number of parts; zero leaves every step at zero.
      */
-    Special_search(std::string_view text, std::span<const load::Special_token> allowed);
+    constexpr Division_targets(const std::size_t size, const std::size_t parts) noexcept
+        : step_{parts == 0 ? 0UZ : size / parts}, remainder_{parts == 0 ? 0UZ : size % parts}, parts_{parts}
+    {}
 
     /**
-     * @brief Returns the first occurrence of an allowed special token at or after a byte, the longest token among those
-     *        that begin at one byte.
-     * @param from The byte, at or after the byte of the previous call.
-     * @return The occurrence, std::nullopt when no allowed special token occurs at or after the byte.
+     * @brief Advances to the next target.
+     * @return The next equal-division offset.
      */
-    [[nodiscard]] std::optional<Occurrence> next(std::size_t from);
+    constexpr std::size_t next() noexcept
+    {
+        target_ += step_;
+
+        carry_ += remainder_;
+
+        if (carry_ >= parts_)
+        {
+            ++target_;
+
+            carry_ -= parts_;
+        }
+
+        return target_;
+    }
 
 private:
     /**
-     * @brief The text.
+     * @brief The quotient of the size by the parts, added at every step.
      */
-    std::string_view text_;
+    std::size_t step_;
 
     /**
-     * @brief The allowed special tokens.
+     * @brief The remainder of the size by the parts, accumulated into the carry at every step.
      */
-    std::span<const load::Special_token> allowed_;
+    std::size_t remainder_;
 
     /**
-     * @brief The byte of each token's next occurrence, std::string_view::npos when it occurs no more.
+     * @brief The number of parts, the divisor the carry is reduced by.
      */
-    std::vector<std::size_t> next_;
+    std::size_t parts_;
+
+    /**
+     * @brief The latest target, zero before the first step.
+     */
+    std::size_t target_{0};
+
+    /**
+     * @brief The accumulated remainders not yet carried into the target, always below the divisor.
+     */
+    std::size_t carry_{0};
 };
 
-Special_search::Special_search(const std::string_view text, const std::span<const load::Special_token> allowed)
-    : text_{text}, allowed_{allowed}, next_(allowed.size())
+/**
+ * @brief Returns the first offset of a UTF-8 text at or after an offset at which a code point begins, or the text's
+ *        end.
+ * @param text The text.
+ * @param at The offset, at most the text's size.
+ * @return The offset.
+ */
+[[nodiscard]] std::size_t point_start(const std::string_view text, const std::size_t at) noexcept
 {
-    for (std::size_t special{0}; special < allowed.size(); ++special)
+    auto byte{at};
+
+    while (byte < text.size() && is_continuation(static_cast<unsigned char>(text[byte])))
     {
-        next_[special] = text.find(allowed[special].spelling);
-    }
-}
-
-std::optional<Occurrence> Special_search::next(const std::size_t from)
-{
-    std::optional<Occurrence> first{};
-
-    for (std::size_t special{0}; special < allowed_.size(); ++special)
-    {
-        const auto& spelling{allowed_[special].spelling};
-
-        if (next_[special] < from)
-        {
-            next_[special] = text_.find(spelling, from);
-        }
-
-        const auto at{next_[special]};
-
-        if (at == std::string_view::npos)
-        {
-            continue;
-        }
-
-        const auto earlier{!first || at < first->at};
-
-        const auto longer{first && at == first->at && spelling.size() > allowed_[first->special].spelling.size()};
-
-        if (earlier || longer)
-        {
-            first = Occurrence{.at = at, .special = special};
-        }
+        ++byte;
     }
 
-    return first;
+    return byte;
 }
 
 } // namespace
@@ -126,7 +166,8 @@ Encoder::Encoder(
     , merger_{definition_}
     , segmenter_{pattern}
     , allowed_{allowed_of(definition_.specials, allowed)}
-    , table_{inventory == validate::Inventory::factorization ? report.factorization : report.policy}
+    , windows_{table_of(report, inventory), pattern.alphabet}
+    , right_context_{table_of(report, inventory).right_context}
 {}
 
 std::vector<load::Special_token> Encoder::allowed_of(
@@ -151,6 +192,72 @@ std::vector<load::Special_token> Encoder::allowed_of(
 }
 
 std::vector<load::Token_id_t> Encoder::encode(const std::string_view text) const
+{
+    const auto found{occurrences(text)};
+
+    return encode_chunk(text, found, 0, text.size());
+}
+
+std::vector<Encoder::Occurrence> Encoder::occurrences(const std::string_view text) const
+{
+    // The byte of each token's next occurrence at or after the search, std::string_view::npos when it occurs no more.
+    std::vector<std::size_t> next(allowed_.size());
+
+    for (const auto [special, token] : std::views::enumerate(allowed_))
+    {
+        next[special] = text.find(token.spelling);
+    }
+
+    std::vector<Occurrence> found{};
+
+    std::size_t from{0};
+
+    while (true)
+    {
+        std::optional<Occurrence> first{};
+
+        for (std::size_t special{0}; special < allowed_.size(); ++special)
+        {
+            const auto& spelling{allowed_[special].spelling};
+
+            if (next[special] < from)
+            {
+                next[special] = text.find(spelling, from);
+            }
+
+            const auto at{next[special]};
+
+            if (at == std::string_view::npos)
+            {
+                continue;
+            }
+
+            const auto earlier{!first || at < first->at};
+
+            const auto longer{first && at == first->at && spelling.size() > allowed_[first->special].spelling.size()};
+
+            if (earlier || longer)
+            {
+                first = Occurrence{.at = at, .special = special};
+            }
+        }
+
+        if (!first)
+        {
+            return found;
+        }
+
+        const auto [at, special]{*first};
+
+        found.push_back(*first);
+
+        from = at + allowed_[special].spelling.size();
+    }
+}
+
+std::vector<load::Token_id_t> Encoder::encode_chunk(
+        const std::string_view text, const std::span<const Occurrence> found, const std::size_t begin,
+        const std::size_t end) const
 {
     std::vector<load::Token_id_t> ids{};
 
@@ -181,35 +288,209 @@ std::vector<load::Token_id_t> Encoder::encode(const std::string_view text) const
         cache.store(piece, std::move(merged));
     }};
 
-    const auto encode_stretch{[&](const std::string_view stretch) {
+    // Encodes the pieces of a stretch, segmented as a complete input, that end at or before a byte of it.
+    const auto encode_stretch{[&](const std::string_view stretch, const std::size_t kept) {
         std::size_t start{0};
 
-        for (const auto end : segmenter_.boundaries(stretch))
+        for (const auto piece_end : segmenter_.boundaries(stretch))
         {
-            encode_piece(stretch.substr(start, end - start));
+            if (piece_end > kept)
+            {
+                return;
+            }
 
-            start = end;
+            encode_piece(stretch.substr(start, piece_end - start));
+
+            start = piece_end;
         }
     }};
 
-    Special_search search{text, allowed_};
+    const auto before_chunk{[begin](const Occurrence& occurrence) { return occurrence.at < begin; }};
 
-    std::size_t start{0};
+    auto next{std::ranges::partition_point(found, before_chunk)};
 
-    for (auto found{search.next(start)}; found; found = search.next(start))
+    std::size_t start{begin};
+
+    for (; next != found.end() && next->at < end; ++next)
     {
-        const auto [at, special]{*found};
+        const auto [at, special]{*next};
 
         const auto& [spelling, id]{allowed_[special]};
 
-        encode_stretch(text.substr(start, at - start));
+        encode_stretch(text.substr(start, at - start), at - start);
 
         ids.push_back(id);
 
         start = at + spelling.size();
     }
 
-    encode_stretch(text.substr(start));
+    // The last stretch reads the right context past the chunk's end, unless a special token or the text's end comes
+    // first.
+    const auto stretch_end{next == found.end() ? text.size() : next->at};
+
+    const auto context_end{byte_after(text, end, right_context_, stretch_end)};
+
+    encode_stretch(text.substr(start, context_end - start), end - start);
+
+    return ids;
+}
+
+std::vector<std::size_t> Encoder::chunk_boundaries(const std::string_view text, const std::size_t chunks) const
+{
+    const auto found{occurrences(text)};
+
+    return boundaries_of(text, found, chunks);
+}
+
+std::vector<std::size_t> Encoder::boundaries_of(
+        const std::string_view text, const std::span<const Occurrence> found, const std::size_t chunks) const
+{
+    std::vector<std::size_t> boundaries{0};
+
+    // A chunk needs at least one byte, so asking for more chunks than bytes only adds targets that can find nothing.
+    const auto usable{std::min(chunks, text.size())};
+
+    Division_targets targets{text.size(), usable};
+
+    for (std::size_t index{1}; index < usable; ++index)
+    {
+        const auto target{targets.next()};
+
+        // Start at the target or one past the previous boundary, whichever is later, so that adjacent cuts each open a
+        // chunk.
+        const auto floor{std::max(target, boundaries.back() + 1)};
+
+        const auto cut{next_cut(text, found, boundaries.back(), floor)};
+
+        // A later target starts no earlier, so it finds no cut either.
+        if (!cut)
+        {
+            break;
+        }
+
+        boundaries.push_back(*cut);
+    }
+
+    boundaries.push_back(text.size());
+
+    return boundaries;
+}
+
+std::optional<std::size_t> Encoder::next_cut(
+        const std::string_view text, const std::span<const Occurrence> found, const std::size_t previous,
+        const std::size_t floor) const
+{
+    const auto end_of{[this](const Occurrence& occurrence) {
+        return occurrence.at + allowed_[occurrence.special].spelling.size();
+    }};
+
+    const auto interior{[&text](const std::size_t cut) -> std::optional<std::size_t> {
+        if (cut < text.size())
+        {
+            return cut;
+        }
+
+        return std::nullopt;
+    }};
+
+    // The first special token that ends after the floor: the floor is inside it, at its start, or before it.
+    const auto ends_by_floor{[&](const Occurrence& occurrence) { return end_of(occurrence) <= floor; }};
+
+    const auto next{std::ranges::partition_point(found, ends_by_floor)};
+
+    if (next != found.end() && next->at == floor)
+    {
+        return floor;
+    }
+
+    if (next != found.end() && next->at < floor)
+    {
+        return interior(end_of(*next));
+    }
+
+    const auto stretch_begin{next == found.begin() ? 0UZ : end_of(*std::ranges::prev(next))};
+
+    const auto stretch_end{next == found.end() ? text.size() : next->at};
+
+    // A special token ends at the floor.
+    if (floor == stretch_begin)
+    {
+        return interior(floor);
+    }
+
+    const auto spacing_from{std::max(previous, stretch_begin)};
+
+    // The occurrence of the window that certifies an anchor begins at most the width less one code points before it.
+    const auto spaced{byte_after(text, spacing_from, windows_.width() - 1, stretch_end)};
+
+    const auto at_code_point{point_start(text, floor)};
+
+    const auto from{std::max(at_code_point, spaced)};
+
+    const auto stretch{text.substr(stretch_begin, stretch_end - stretch_begin)};
+
+    if (const auto anchor{windows_.first_anchor(stretch, from - stretch_begin)})
+    {
+        return stretch_begin + *anchor;
+    }
+
+    return interior(stretch_end);
+}
+
+std::vector<load::Token_id_t> Encoder::encode_parallel(const std::string_view text, const std::size_t chunks) const
+{
+    const auto found{occurrences(text)};
+
+    const auto boundaries{boundaries_of(text, found, chunks)};
+
+    const auto count{boundaries.size() - 1};
+
+    std::vector<std::vector<load::Token_id_t>> encoded(count);
+
+    std::mutex failure_mutex{};
+
+    std::exception_ptr failure{};
+
+    const auto encode_one{[&](const std::size_t chunk) {
+        try
+        {
+            encoded[chunk] = encode_chunk(text, found, boundaries[chunk], boundaries[chunk + 1]);
+        }
+        catch (...)
+        {
+            const std::scoped_lock lock{failure_mutex};
+
+            if (!failure)
+            {
+                failure = std::current_exception();
+            }
+        }
+    }};
+
+    {
+        std::vector<std::jthread> workers{};
+
+        workers.reserve(count - 1);
+
+        for (std::size_t chunk{0}; chunk + 1 < count; ++chunk)
+        {
+            workers.emplace_back(encode_one, chunk);
+        }
+
+        encode_one(count - 1);
+    }
+
+    if (failure)
+    {
+        std::rethrow_exception(failure);
+    }
+
+    std::vector<load::Token_id_t> ids{};
+
+    for (const auto& chunk_ids : encoded)
+    {
+        ids.insert(ids.end(), chunk_ids.begin(), chunk_ids.end());
+    }
 
     return ids;
 }

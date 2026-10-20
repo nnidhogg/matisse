@@ -7,6 +7,7 @@ add_library(${PROJECT_NAME}
         src/encoder.cpp
         src/merger.cpp
         src/piece_cache.cpp
+        src/window_index.cpp
 )
 
 # The exported target carries the standard it needs.
@@ -32,6 +33,7 @@ if (MATISSE_BUILD_TESTS)
             tests/encoder_test.cpp
             tests/merger_test.cpp
             tests/piece_cache_test.cpp
+            tests/window_index_test.cpp
     )
 
     target_link_libraries(${PROJECT_NAME}_tests

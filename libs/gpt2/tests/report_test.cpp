@@ -25,6 +25,11 @@ using namespace matisse::validate;
 namespace
 {
 /**
+ * @brief The widest window the windows fixture holds, which its script decides to width four.
+ */
+constexpr std::size_t fixture_width{4};
+
+/**
  * @brief The certified windows of a table with their origins, found by their class symbols.
  */
 using Origins_t = std::map<std::string, std::size_t, std::less<>>;
@@ -90,7 +95,7 @@ struct Fixture_check
     /**
      * @brief GPT-2's report.
      */
-    Report report{validate(matisse::gpt2::pattern())};
+    Report report{validate(matisse::gpt2::pattern(), fixture_width)};
 
     /**
      * @brief GPT-2's split verifier.
@@ -556,7 +561,7 @@ TEST(Report_test, Gpt2_s_report_holds_the_windows_and_right_context_fixtures_and
     EXPECT_EQ(check.counts.universes, 2U);
     EXPECT_EQ(check.counts.certified["factorization"], factorization.windows.size());
     EXPECT_EQ(check.counts.certified["policy"], policy.windows.size());
-    EXPECT_EQ(check.counts.refused, 2 * (default_width - 1));
+    EXPECT_EQ(check.counts.refused, 2 * (fixture_width - 1));
     EXPECT_EQ(check.counts.suffixes, 1U);
     EXPECT_EQ(check.counts.holding["factorization"], 1U);
     EXPECT_EQ(check.counts.holding["policy"], 1U);

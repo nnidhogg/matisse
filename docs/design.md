@@ -3,14 +3,14 @@
 The decisions behind matisse, in the order a reader meets them: what the library is and is not, the repository and its
 build, the libraries' interfaces, how the vendor verifiers move from their Python reference into C++, how the result is
 tested against the real tokenizers, what matisse needs from munch, the choices still open, and the order of work. Steps
-1 to 11 of the order of work are built, `read_tokenizer_json()` waiting on open choice 5: load reads GPT-2's files and
+1 to 12 of the order of work are built, `read_tokenizer_json()` waiting on open choice 5: load reads GPT-2's files and
 tiktoken rank files, pretok classes and segments a text and builds a pattern's split verifier and factorization lexer,
 validate decides a pattern's window tables under both certificates with their right contexts, measures their anchor
 supply on an input and renders the report as text and as JSON, the gpt2 and cl100k libraries describe their patterns,
 lookup finds them, `matisse-validate` reports a rank file read under a pattern, and encode encodes a text and decodes
 its ids under both merge rules, with the whole-piece lookup, the special-token cuts, the fast merge and the piece cache,
-while `validate_merges()`, `chunk_boundaries()` and `encode_parallel()` are still to be written. The sketches below give
-names and types, and they change as the code is written.
+and encodes it in parallel, cut only at the certified cuts of either inventory, while `validate_merges()` is still to be
+written. The sketches below give names and types, and they change as the code is written.
 
 ## **What matisse is and is not**
 
@@ -433,7 +433,7 @@ enum class Inventory : std::uint8_t
     policy
 };
 
-inline constexpr std::size_t default_width{4};
+inline constexpr std::size_t default_width{5};
 
 struct Certified_window
 {
@@ -503,7 +503,7 @@ struct Merge_window
 } // namespace matisse::validate
 ```
 
-`validate()` decides every class window of a pattern of width two to `width` (four by default) under both certificates:
+`validate()` decides every class window of a pattern of width two to `width` (five by default) under both certificates:
 the policy certificate of `munch::verifier::miscovering()` on the split verifier, the factorization certificate by
 `is_split_window()` on the factorization lexer. A table holds its certified windows as munch-audit's report holds them,
 `Certified_window` duplicated rather than linked, widths ascending and each width's windows in the order the class
@@ -514,16 +514,18 @@ its cloud, the states of the split verifier an occurrence can leave it in with w
 last symbol begins and whether a piece ends after it, extended by one symbol from its prefix's cloud, the window
 certified at an origin when every entry places the piece there. That is `miscovering()`'s certificate, and it takes
 `validate()` to width four in 0.19 s for GPT-2 and 0.45 s for cl100k, and to width five in 1.1 s and 2.4 s, where a
-`miscovering()` search per window would take 3.8 s and 9.3 s, and 92 s and 213 s. Each table carries the right context
-its inventory needs, decided on the split verifier (section "What matisse needs from munch 3.0.0"), with the shortest
-truncation at every context that fails, asked of the windows that hold no shorter certified window whose origin lands on
-the same symbol, since every cut of one that does is a cut of the shorter one; for GPT-2 that is 87 and 540 windows of
-18,357 and 32,218, for cl100k 112 and 678 of 30,576 and 58,580. The report carries `boundary_gap()` of the split
-verifier, which is unbounded for both patterns since a letter run of any length is one piece. A definition without a
-pre-tokenizer goes to `validate_merges()` instead, which builds `munch::verifier::token_automaton()` once and decides
-each candidate window by `miscovering()` on it, the lazy certification. Its candidates are given by the caller; the
-command line draws them from an input, every byte and the most frequent byte pairs and triples, since all byte windows
-of width three are too many to decide at full scale.
+`miscovering()` search per window would take 3.8 s and 9.3 s, and 92 s and 213 s. The default is five for that reason
+and because GPT-2's policy anchors are complete at width five, every cut a wider window certifies being one of them, as
+the report on pre-tokenizer certification proves. Each table carries the right context its inventory needs, decided on
+the split verifier (section "What matisse needs from munch 3.0.0"), with the shortest truncation at every context that
+fails, asked of the windows that hold no shorter certified window whose origin lands on the same symbol, since every cut
+of one that does is a cut of the shorter one; to width four, for GPT-2 that is 87 and 540 windows of 18,357 and 32,218,
+for cl100k 112 and 678 of 30,576 and 58,580. The report carries `boundary_gap()` of the split verifier, which is
+unbounded for both patterns since a letter run of any length is one piece. A definition without a pre-tokenizer goes to
+`validate_merges()` instead, which builds `munch::verifier::token_automaton()` once and decides each candidate window by
+`miscovering()` on it, the lazy certification. Its candidates are given by the caller; the command line draws them from
+an input, every byte and the most frequent byte pairs and triples, since all byte windows of width three are too many to
+decide at full scale.
 
 `supply()` measures one inventory's anchors on an input, the interior positions where an occurrence of a certified
 window places its origin, counted at the byte offsets of their code points. It takes the pattern the report was decided
@@ -589,6 +591,16 @@ public:
     void store(std::string_view piece, std::vector<load::Token_id_t> ids);
 };
 
+class Window_index
+{
+public:
+    Window_index(const validate::Window_table& table, const pretok::Alphabet& alphabet);
+
+    [[nodiscard]] std::size_t width() const noexcept;
+
+    [[nodiscard]] std::optional<std::size_t> first_anchor(std::string_view stretch, std::size_t from) const;
+};
+
 class Encoder
 {
 public:
@@ -620,12 +632,22 @@ ordinary text, which is tiktoken's `encode()` with that `allowed_special` and an
 encoder.py's behavior when none is allowed; tiktoken leaves the choice between allowed spellings that begin at one byte
 to the order of its table, and no allowed spelling begins another on any definition in scope. `decode()` spells each
 ordinary id's bytes and each special id's spelling, and refuses an id that is neither, naming it and its index.
-`chunk_boundaries()` aims for `chunks` pieces of equal size: from each byte target it walks forward to the first anchor,
-a position `t + o` for an occurrence at `t` of a window the table certifies at origin `o`, at least the width less one
-codepoints after the previous cut, inside one stretch; special tokens are cuts of their own. `encode_parallel()` gives
-each chunk to a worker, which segments its chunk followed by `right_context` further codepoints of the real text, read
-as a complete input there unless a special token or the text's end comes first, keeps the pieces that end at or before
-its cut, and merges them. The ids of the chunks, concatenated, are the result.
+`chunk_boundaries()` aims for `chunks` pieces of equal size, as `core::Lexer`'s does: each interior boundary is the
+first cut at or after the later of its equal-division target and one past the previous boundary, and a target with no
+cut after it ends the walk. A cut is an anchor, a position `t + o` for an occurrence at `t` inside one stretch of a
+window the table certifies at origin `o`, at least the width less one codepoints after the previous boundary, so that
+the occurrence certifying it begins in the chunk the cut ends, as the splice needs, and as far after the stretch's
+start, as the Python reference spaces its first cut from the text's start; or it is where an allowed special token
+begins or ends, a cut of its own. The spacing is the Python reference's, and it leaves out an anchor that stands closer
+than that to the previous boundary even when its occurrence begins after it. `Window_index` holds the table's windows by
+their class strings and finds the least anchor of a stretch at or after a byte, classing the text in blocks of 256 bytes
+from there, so that a walk reads the text near its target and no more. `encode_parallel()` finds the allowed special
+tokens once and gives each chunk to a worker, one `std::jthread` per chunk beyond the last, which runs on the calling
+thread, as `tokenize_all_parallel()` does (open choice 4). A worker segments its chunk's stretches as `encode()` does,
+the last one followed by `right_context` further codepoints of the real text, read as a complete input there unless a
+special token or the text's end comes first, keeps the pieces that end at or before its cut, and merges them with a
+piece cache of its own. The ids of the chunks, concatenated, are the result, and an exception a worker throws is
+rethrown on the calling thread once every worker has joined.
 
 `Merger` holds a definition's whole-piece lookup and its merge, built once: the id of every spelling and of every byte,
 and under the pair rule the rank and product of every pair of the merge table keyed by the ids of its parts, a pair
@@ -651,19 +673,24 @@ o200k, all but `<|endoftext|>` on GPT-2, and all but 588 on Llama 3, which Llama
 `encode()` looks each piece up whole first where the definition says so, then in a `Piece_cache`, and only then merges
 it, storing its ids. The ids of a piece are a function of its bytes and the definition alone, the merge building its
 parts afresh for every piece, so a cache keyed by the whole of a piece's bytes and filled under one definition never
-changes an id. A cache serves one call of `encode()`, and will serve one worker of `encode_parallel()`, with no lock and
-no lifetime beyond the call; it holds 16,384 pieces of up to 255 bytes and then stops filling, with no eviction, as
-Hugging Face's BPE model's cache stops. On the three corpora of the test strategy GPT-2's pattern makes 3,684 to 14,032
-distinct pieces and cl100k's leaves 1,527 to 9,218 distinct pieces that are not looked up whole, so the bound holds
-every piece the merge makes on them. The tests hold `encode()` to the known answers and to every piece looked up or
-merged with no cache, on seeded random texts and on a text whose distinct pieces fill the cache past its bound, and
-`decode()` of `encode()` to the text, special tokens allowed and not.
+changes an id. A cache serves one call of `encode()` or one worker of `encode_parallel()`, with no lock and no lifetime
+beyond the call; it holds 16,384 pieces of up to 255 bytes and then stops filling, with no eviction, as Hugging Face's
+BPE model's cache stops. On the three corpora of the test strategy GPT-2's pattern makes 3,684 to 14,032 distinct pieces
+and cl100k's leaves 1,527 to 9,218 distinct pieces that are not looked up whole, so the bound holds every piece the
+merge makes on them. The tests hold `encode()` to the known answers and to every piece looked up or merged with no
+cache, on seeded random texts and on a text whose distinct pieces fill the cache past its bound, and `decode()` of
+`encode()` to the text, special tokens allowed and not.
 
 The encoder claims one thing. For every text the definition accepts, `encode_parallel()` returns the ids `encode()`
 returns, at every chunk count. That is the splice theorem with the proposition that the cut transfers and the decided
 right context, given the four hypotheses (N), (S), (P) and (B), which the loader's refusals enforce, and given that the
-`Segmenter` is the engine's segmentation. Nothing is claimed about speed until it is measured, and nothing about the
-vendor's own implementation beyond the known answers and corpus ids of the test strategy.
+`Segmenter` is the engine's segmentation. The tests hold the claim on seeded texts under both inventories, at every
+chunk count from one to sixteen, at sixty-four and at every cut the rule takes, on a pattern of the tests' own and on
+GPT-2's and cl100k's with their pinned vocabularies, special tokens allowed and not on the tests' pattern and cl100k's;
+they hold `chunk_boundaries()` on the tests' pattern to brute force over every certified cut of the report, and a cut in
+white space, at the right-context counterexamples, to the right context each inventory decided. Nothing is claimed about
+speed until it is measured, and nothing about the vendor's own implementation beyond the known answers and corpus ids of
+the test strategy.
 
 ## **The vendor verifiers, from Python into C++**
 
@@ -706,7 +733,8 @@ checked by its tokenizer's tests. The fixtures, one per subject:
   identical table state for state; and the reference's decisions that M is functional and total and that the pattern
   covers every nonempty residual.
 - **Windows**: every certified window to width four under both certificates with its origin (18,357 and 32,218 for
-  GPT-2, 30,576 and 58,580 for cl100k), and every refused one by count.
+  GPT-2, 30,576 and 58,580 for cl100k), and every refused one by count; the tokenizers' report tests decide theirs at
+  width four to hold them to it, the default being five.
 - **Right context**: the decided R of each inventory, and the counterexample of each failing R with its replay
   (`"\t\t!"` at cut two for R = 0, `"\t !"` and `"\t\tA"` at cut one for the policy inventory at R = 1).
 - **Known answers**: the ids of short strings under each reference, among them the published `"Hello world"`, 15496 995
@@ -740,7 +768,8 @@ Three layers, each against something independent of the code under test:
 1. **The fixtures** of the previous section, in CTest: classes, segmentation, M, windows, right context, known answers,
    lazy verdicts.
 2. **Self-consistency**, in CTest, on texts generated with a fixed seed as hopper's probe generates its corpus:
-   `encode_parallel()` against `encode()` at every chunk count from one to the number of anchors, and at every anchor;
+   `encode_parallel()` against `encode()` under both inventories at every chunk count from one to sixteen, at
+   sixty-four, and at every cut the rule takes; the cuts of `chunk_boundaries()` against brute force over the report;
    `decode(encode(x)) == x`; M accepts the `Segmenter`'s marking of every text; every anchor is a `Segmenter` boundary.
    The texts mix the known counterexample shapes, whitespace runs before letters and punctuation, newlines followed by
    tab runs, long letter runs, contractions in both cases, and allowed and disallowed special tokens.
@@ -823,9 +852,9 @@ matisse's by the division.
    built and decided first. Then WordPiece through munch's `trie_chain()` with bert-vocab.txt, which brings BERT's
    normalizer and so the first normalizer. Character-level SentencePiece waits on munch's alphabet.
 4. **Threading model.** munch's `tokenize_all_parallel()` spawns one `std::jthread` per chunk beyond the last, runs the
-   last on the calling thread, joins at scope end, and rethrows the first exception on the calling thread.
-   Recommendation: the same, with no pool and no executor, the caller choosing the chunk count; a pool is a question for
-   later, settled by measurement.
+   last on the calling thread, joins at scope end, and rethrows the first exception on the calling thread. Settled: the
+   same, with no pool and no executor, the caller choosing the chunk count; a pool is a question for later, settled by
+   measurement.
 5. **The JSON reader.** tokenizer.json and encoder.json are JSON, with `\u` escapes and surrogate pairs in GPT-2's
    vocabulary. hopper has a complete RFC 8259 parser (`hopper::json::Parser`, held to the JSONTestSuite), munch has
    none, and a third-party library would be a new vendored dependency. Taking hopper means a second submodule, and
@@ -856,8 +885,8 @@ matisse's by the division.
    less, its cut holding for every complete factorization into the gate-erased languages whatever the engine does inside
    its matches; the policy inventory needs two and rests on Q, validated and not machine-checked, but lands on more
    boundaries (93.91 to 100.00 per cent against 57.30 to 92.88). Both reach a longest uncut stretch within 24 bytes of
-   the longest piece on all six runs. Recommendation: the factorization inventory by default, the policy inventory by
-   choice.
+   the longest piece on all six runs, at width four. Recommendation: the factorization inventory by default, the policy
+   inventory by choice.
 
 ## **Order of work**
 

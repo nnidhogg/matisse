@@ -1,5 +1,6 @@
 #include "matisse/encode/encoder.hpp"
 
+#include <algorithm>
 #include <array>
 #include <charconv>
 #include <cstddef>
@@ -9,6 +10,7 @@
 #include <iterator>
 #include <optional>
 #include <random>
+#include <ranges>
 #include <set>
 #include <sstream>
 #include <string>
@@ -20,6 +22,7 @@
 #include "matisse/common/sha256.hpp"
 #include "matisse/encode/merger.hpp"
 #include "matisse/encode/piece_cache.hpp"
+#include "matisse/encode/window_index.hpp"
 #include "matisse/gpt2/tokenizer.hpp"
 #include "matisse/pretok/segmenter.hpp"
 #include "matisse/validate/report.hpp"
@@ -27,6 +30,7 @@
 using namespace matisse::encode;
 using matisse::load::Definition;
 using matisse::load::Token_id_t;
+using matisse::validate::Inventory;
 
 namespace
 {
@@ -128,7 +132,18 @@ std::optional<Definition> pinned_gpt2()
 }
 
 /**
- * @brief Returns GPT-2's encoder, its report decided once and its factorization inventory kept, with no special token,
+ * @brief Returns GPT-2's report at the default width, decided once for every test of this file.
+ * @return The report.
+ */
+const matisse::validate::Report& decided_report()
+{
+    static const auto report{matisse::validate::validate(matisse::gpt2::pattern())};
+
+    return report;
+}
+
+/**
+ * @brief Returns GPT-2's encoder, the report decided once and its factorization inventory kept, with no special token,
  *        since encoder.py reads `<|endoftext|>` as text.
  * @param definition GPT-2's definition.
  * @return The encoder.
@@ -137,9 +152,7 @@ Encoder gpt2_encoder(Definition definition)
 {
     const auto pattern{matisse::gpt2::pattern()};
 
-    const auto report{matisse::validate::validate(pattern)};
-
-    return {std::move(definition), report, matisse::validate::Inventory::factorization, pattern, {}};
+    return {std::move(definition), decided_report(), matisse::validate::Inventory::factorization, pattern, {}};
 }
 
 /**
@@ -392,6 +405,50 @@ std::string random_text(std::mt19937& random, const std::size_t fragments)
     return text;
 }
 
+/**
+ * @brief Returns the chunk counts the self-consistency checks ask for: one to sixteen, sixty-four, and one more than
+ *        the text's bytes, which takes every cut the rule offers.
+ * @param text The text.
+ * @return The counts.
+ */
+std::vector<std::size_t> chunk_counts(const std::string_view text)
+{
+    std::vector<std::size_t> counts{};
+
+    for (std::size_t chunks{1}; chunks <= 16; ++chunks)
+    {
+        counts.push_back(chunks);
+    }
+
+    counts.push_back(64);
+
+    counts.push_back(text.size() + 1);
+
+    return counts;
+}
+
+/**
+ * @brief Expects every anchor of a text, read as one stretch, to be a boundary of the pattern's segmentation of it.
+ * @param index The window index of an inventory.
+ * @param segmenter The pattern's segmenter.
+ * @param text The text, well-formed UTF-8.
+ */
+void expect_anchors_are_boundaries(
+        const Window_index& index, const matisse::pretok::Segmenter& segmenter, const std::string_view text)
+{
+    const auto pieces{segmenter.boundaries(text)};
+
+    for (std::size_t at{0}; at < text.size(); ++at)
+    {
+        const auto begins_code_point{(static_cast<unsigned char>(text[at]) & 0xC0U) != 0x80U};
+
+        if (begins_code_point && index.first_anchor(text, at) == at)
+        {
+            EXPECT_TRUE(std::ranges::contains(pieces, at)) << text << " anchor " << at;
+        }
+    }
+}
+
 } // namespace
 
 TEST(Encoder_test, The_published_known_answer_hello_world_is_15496_995)
@@ -501,4 +558,76 @@ TEST(Encoder_test, The_ids_are_those_of_no_cache_on_a_text_whose_distinct_pieces
     const auto encoder{gpt2_encoder(*definition)};
 
     EXPECT_EQ(encoder.encode(text), uncached_ids(*definition, text));
+}
+
+TEST(Encoder_test, Encode_parallel_gives_encode_s_ids_under_both_inventories_and_every_anchor_ends_a_piece)
+{
+    auto definition{pinned_gpt2()};
+
+    if (!definition)
+    {
+        GTEST_SKIP() << "MATISSE_VOCAB_DIR names no directory holding gpt2-vocab.json and gpt2-merges.txt";
+    }
+
+    const auto pattern{matisse::gpt2::pattern()};
+
+    const auto& report{decided_report()};
+
+    const matisse::pretok::Segmenter segmenter{pattern};
+
+    for (const auto inventory : {Inventory::factorization, Inventory::policy})
+    {
+        const Encoder encoder{*definition, report, inventory, pattern, {}};
+
+        const Window_index index{
+                inventory == Inventory::factorization ? report.factorization : report.policy, pattern.alphabet};
+
+        std::mt19937 random{23};
+
+        for (std::size_t count{0}; count < 60; ++count)
+        {
+            const auto text{random_text(random, 60)};
+
+            const auto ids{encoder.encode(text)};
+
+            for (const auto chunks : chunk_counts(text))
+            {
+                EXPECT_EQ(encoder.encode_parallel(text, chunks), ids) << text << " in " << chunks;
+            }
+
+            expect_anchors_are_boundaries(index, segmenter, text);
+        }
+    }
+}
+
+TEST(Encoder_test, A_cut_in_white_space_holds_with_the_right_context_each_inventory_decided)
+{
+    auto definition{pinned_gpt2()};
+
+    if (!definition)
+    {
+        GTEST_SKIP() << "MATISSE_VOCAB_DIR names no directory holding gpt2-vocab.json and gpt2-merges.txt";
+    }
+
+    const auto pattern{matisse::gpt2::pattern()};
+
+    const auto& report{decided_report()};
+
+    const Encoder factorization{*definition, report, Inventory::factorization, pattern, {}};
+
+    const Encoder policy{*definition, report, Inventory::policy, pattern, {}};
+
+    // The right-context fixture's counterexamples, the first with newlines, which GPT-2 joins into one token, where the
+    // fixture has tabs: a worker reading one code point less past the cut before the punctuation, or the one between
+    // the tab and the space, reads the white space as one piece.
+    const std::string before_punctuation{"aaaa\n\n!aaaaa"};
+
+    const std::string before_a_space{"aaaa\t !aaaa"};
+
+    EXPECT_EQ(report.factorization.right_context, 1U);
+    EXPECT_EQ(report.policy.right_context, 2U);
+    EXPECT_EQ(factorization.chunk_boundaries(before_punctuation, 2), (std::vector<std::size_t>{0, 6, 12}));
+    EXPECT_EQ(factorization.encode_parallel(before_punctuation, 2), factorization.encode(before_punctuation));
+    EXPECT_EQ(policy.chunk_boundaries(before_a_space, 2), (std::vector<std::size_t>{0, 5, 11}));
+    EXPECT_EQ(policy.encode_parallel(before_a_space, 2), policy.encode(before_a_space));
 }

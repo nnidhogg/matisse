@@ -17,7 +17,7 @@
  *        cut, at which origin and with which right context; and the report rendered as text, render(), and as JSON,
  *        json(), with text as a JSON string, json_string(), and the ending a noun takes for a count, plural().
  *
- * validate() decides every class window of width two to a width, four unless told, under both certificates, the policy
+ * validate() decides every class window of width two to a width, five unless told, under both certificates, the policy
  * certificate of munch::verifier::miscovering() on the split verifier, decided for every window in one walk, and the
  * factorization certificate by is_split_window() on the factorization lexer; each window table carries the right
  * context its inventory needs, decided by munch::verifier::right_context() on the split verifier, and the report
@@ -47,9 +47,12 @@ enum class Inventory : std::uint8_t
 };
 
 /**
- * @brief The widest window validate() decides unless told otherwise, four class symbols.
+ * @brief The widest window validate() decides unless told otherwise, five class symbols.
+ *
+ * At width five GPT-2's policy anchors are complete, every cut any wider window certifies being one of them, as the
+ * report on pre-tokenizer certification proves, and the walk over the windows decides width five in seconds.
  */
-inline constexpr std::size_t default_width{4};
+inline constexpr std::size_t default_width{5};
 
 /**
  * @brief A certified window: its class symbols and the origin, the symbol of the window at which the piece holding an

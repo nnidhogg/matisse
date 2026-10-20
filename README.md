@@ -28,15 +28,17 @@ Not yet released; matisse depends on munch 3.0.0, the release its submodule is p
 encoder.json and vocab.bpe and tiktoken rank files, and pretok maps a text to each pattern's classes, from tables pinned
 to Unicode 15.0.0, the version of the reference the fixtures are written by, segments it as the pattern's engine does,
 and builds the pattern's split verifier and factorization lexer, the automata the policy and factorization certificates
-are decided on; validate decides each pattern's certified windows to width four under both certificates, with the right
+are decided on; validate decides each pattern's certified windows to width five under both certificates, with the right
 context each inventory needs, measures each inventory's anchor supply on an input and renders its report as text and as
 JSON; gpt2 and cl100k describe their patterns and lookup finds them by name; `matisse-validate` reports a tiktoken rank
 file read under a pattern, with the supply on an input when one is given; encode encodes a text and decodes its ids
 under both merge rules, with the whole-piece lookup, the special-token cuts and a bounded cache of merged pieces, its
 merge held to the plain references on every multi-byte token of four vocabularies and its ids to the fixtures' known
-answers, while the tokenizer.json reader, the lazy certification of merge tables and the parallel encoder are still to
-be written. The version is 0.1.0, pre-1.0, and nothing is stable yet. What each library will hold, the proved results
-the loaders rest on and the order of work are in [docs/design.md](docs/design.md).
+answers, and encodes it in parallel, cut only at the certified cuts of either inventory, its ids held to the sequential
+encoding's on seeded texts at one to sixteen chunks, at sixty-four and at every cut, while the tokenizer.json reader and
+the lazy certification of merge tables are still to be written. The version is 0.1.0, pre-1.0, and nothing is stable
+yet. What each library will hold, the proved results the loaders rest on and the order of work are in
+[docs/design.md](docs/design.md).
 
 ## **Libraries**
 

@@ -230,7 +230,8 @@ std::vector<Starts_t> factorizations(const Words& words, const std::string_view 
 
 /**
  * @brief Returns the window certificates brute force finds over segmented texts: for every window of width two to
- *        four that occurs, the origin at which the piece holding its last symbol begins at every occurrence, or none.
+ *        default_width that occurs, the origin at which the piece holding its last symbol begins at every occurrence,
+ *        or none.
  * @param segmentations The texts, each with the piece starts of its segmentations.
  * @return The certified origin of every window that occurs, std::nullopt for a refused one.
  */
@@ -462,8 +463,8 @@ TEST(Report_test, A_pattern_of_one_symbol_pieces_certifies_every_window_at_its_l
 {
     const auto [factorization, policy, gap]{validate(single)};
 
-    EXPECT_EQ(factorization.windows.size(), 4U + 8U + 16U);
-    EXPECT_EQ(policy.windows.size(), 4U + 8U + 16U);
+    EXPECT_EQ(factorization.windows.size(), 4U + 8U + 16U + 32U);
+    EXPECT_EQ(policy.windows.size(), 4U + 8U + 16U + 32U);
 
     for (const auto& table : {factorization, policy})
     {
@@ -580,7 +581,7 @@ TEST(Report_test, A_pattern_that_certifies_no_window_says_so_in_both_forms)
     const auto text{render(report)};
 
     EXPECT_TRUE(text.starts_with(
-            "verdict                     no window up to width 4 certifies a cut under either certificate\n"
+            "verdict                     no window up to width 5 certifies a cut under either certificate\n"
             "factorization windows       none\n"
             "factorization context       0 code points read past the cut\n"
             "policy windows              none\n"))
@@ -588,9 +589,9 @@ TEST(Report_test, A_pattern_that_certifies_no_window_says_so_in_both_forms)
 
     const auto document{json(report)};
 
-    EXPECT_TRUE(document.contains(R"("verdict": "no window up to width 4 certifies a cut under either certificate")"))
+    EXPECT_TRUE(document.contains(R"("verdict": "no window up to width 5 certifies a cut under either certificate")"))
             << document;
-    EXPECT_TRUE(document.contains(R"("policy": {"width": 4, "windows": [], "right_context": 0, "failing": []})"))
+    EXPECT_TRUE(document.contains(R"("policy": {"width": 5, "windows": [], "right_context": 0, "failing": []})"))
             << document;
 }
 

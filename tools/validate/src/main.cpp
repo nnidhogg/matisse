@@ -61,7 +61,7 @@ policy certificate.
 
   --tiktoken PATTERN    read FILE as a tiktoken rank file whose pre-tokenizer is PATTERN, gpt2 or cl100k, since the
                         file names none; a tokenizer.json, read without it, has no reader yet
-  --windows N           the widest window decided, 2 to 5, 4 unless given
+  --windows N           the widest window decided, 2 to 5, 5 unless given
   --input FILE          measure each inventory's certified-anchor supply on this file: the anchors, per kibibyte, the
                         gaps between them, the share of the pre-token boundaries they reach and the longest piece
   --json                one JSON document instead of text
