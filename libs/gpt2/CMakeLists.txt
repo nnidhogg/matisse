@@ -28,6 +28,7 @@ if (MATISSE_BUILD_TESTS)
     add_executable(${PROJECT_NAME}_tests
             tests/classes_test.cpp
             tests/definition_test.cpp
+            tests/encoder_test.cpp
             tests/report_test.cpp
             tests/segmenter_test.cpp
             tests/supply_test.cpp
@@ -38,6 +39,7 @@ if (MATISSE_BUILD_TESTS)
             PRIVATE
             ${PROJECT_NAME}
             matisse_common
+            matisse_encode
             matisse_validate
             GTest::gtest_main
     )

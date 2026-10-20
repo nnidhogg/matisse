@@ -3,12 +3,14 @@
 The decisions behind matisse, in the order a reader meets them: what the library is and is not, the repository and its
 build, the libraries' interfaces, how the vendor verifiers move from their Python reference into C++, how the result is
 tested against the real tokenizers, what matisse needs from munch, the choices still open, and the order of work. Steps
-1 to 10 of the order of work are built, `read_tokenizer_json()` waiting on open choice 5: load reads GPT-2's files and
+1 to 11 of the order of work are built, `read_tokenizer_json()` waiting on open choice 5: load reads GPT-2's files and
 tiktoken rank files, pretok classes and segments a text and builds a pattern's split verifier and factorization lexer,
 validate decides a pattern's window tables under both certificates with their right contexts, measures their anchor
 supply on an input and renders the report as text and as JSON, the gpt2 and cl100k libraries describe their patterns,
-lookup finds them, and `matisse-validate` reports a rank file read under a pattern, while `validate_merges()` and encode
-are still to be written. The sketches below give names and types, and they change as the code is written.
+lookup finds them, `matisse-validate` reports a rank file read under a pattern, and encode encodes a text and decodes
+its ids under both merge rules, with the whole-piece lookup, the special-token cuts, the fast merge and the piece cache,
+while `validate_merges()`, `chunk_boundaries()` and `encode_parallel()` are still to be written. The sketches below give
+names and types, and they change as the code is written.
 
 ## **What matisse is and is not**
 
@@ -155,9 +157,12 @@ joins the adjacent pair whose concatenation has the least rank, leftmost first, 
 occurrence, which is its BPE model's `merge_all`. encoder.py's loop joins every occurrence of the least pair in one pass
 instead, and the two give the same tokens on every piece of a table in which no part of a pair is formed by a pair of a
 later rank, condition C, each pass then being a run of single joins; without C they can differ, (ab, a) then (a, b)
-giving ab ab on abab under the pass and aba b one join at a time, and a tokenizers model with that list loads. GPT-2's
-table satisfies C. `read_gpt2()` checks it once at load and refuses a table outside it, naming the merge, its rank and
-its line; it also refuses a pair listed twice, which both vendors would read at its last rank. So on every file
+giving ab ab on abab under the pass and aba b one join at a time, and a tokenizers model with that list loads. The
+agreement under C is not a new result: it is Lemma 1 of Berglund and van der Merwe's Formalizing BPE Tokenization (NCMA
+2023), the equivalence of its Definition 3, one merge at a time at the leftmost occurrence, and its Definition 4, the
+pass, which holds under the ordering condition that clause (b) of their revised Definition 5 (2024) states, which is C.
+GPT-2's table satisfies C. `read_gpt2()` checks it once at load and refuses a table outside it, naming the merge, its
+rank and its line; it also refuses a pair listed twice, which both vendors would read at its last rank. So on every file
 `read_gpt2()` accepts, the pair rule is encoder.py's by that proof. On a tokenizer.json it is Hugging Face's rule
 itself, Llama 3's list included, which violates C in 149,956 places. `whole_piece_lookup` says whether a piece that is
 itself an ordinary token is that one token, looked up before any merge: tiktoken looks every piece up, so
@@ -560,6 +565,30 @@ the gap figures and the density are munch-audit's, as `supply()` defines them.
 ```cpp
 namespace matisse::encode
 {
+class Merger
+{
+public:
+    explicit Merger(const load::Definition& definition);
+
+    [[nodiscard]] std::optional<load::Token_id_t> whole_piece(std::string_view piece) const;
+
+    [[nodiscard]] std::vector<load::Token_id_t> merged(std::string_view piece) const;
+};
+
+inline constexpr std::size_t piece_cache_capacity{16384};
+
+inline constexpr std::size_t longest_cached_piece{255};
+
+class Piece_cache
+{
+public:
+    explicit Piece_cache(std::size_t capacity);
+
+    [[nodiscard]] std::optional<std::span<const load::Token_id_t>> find(std::string_view piece) const;
+
+    void store(std::string_view piece, std::vector<load::Token_id_t> ids);
+};
+
 class Encoder
 {
 public:
@@ -583,17 +612,52 @@ takes the report `validate()` decided of the pattern, as `supply()` takes it, an
 right context, so that a pattern is validated once however many encoders are built, a fuzz harness's and the
 thread-sanitizer job's among them; it takes a pattern, so a definition without a pre-tokenizer has no encoder in the
 first version, and it refuses an `allowed` spelling that is not one of the definition's special tokens. `encode()` is
-the sequential encoding: the text is split at every occurrence of an allowed special token, which emits its id, and each
-stretch between them is segmented by the `Segmenter` as a complete input, every piece then looked up whole where the
-definition's whole-piece lookup says so and otherwise merged alone by its merge rule, the pair rule or tiktoken's rank
-merge. Special tokens not allowed are ordinary text, which is tiktoken's `encode()` with that `allowed_special` and an
-empty `disallowed_special`, encoder.py's behavior when none is allowed. `chunk_boundaries()` aims for `chunks` pieces of
-equal size: from each byte target it walks forward to the first anchor, a position `t + o` for an occurrence at `t` of a
-window the table certifies at origin `o`, at least the width less one codepoints after the previous cut, inside one
-stretch; special tokens are cuts of their own. `encode_parallel()` gives each chunk to a worker, which segments its
-chunk followed by `right_context` further codepoints of the real text, read as a complete input there unless a special
-token or the text's end comes first, keeps the pieces that end at or before its cut, and merges them. The ids of the
-chunks, concatenated, are the result.
+the sequential encoding: the text is split at every occurrence of an allowed special token, the earliest first and the
+longest of those that begin at one byte, which emits its id, and each stretch between them is segmented by the
+`Segmenter` as a complete input, every piece then looked up whole where the definition's whole-piece lookup says so and
+otherwise merged alone by its merge rule, the pair rule or tiktoken's rank merge. Special tokens not allowed are
+ordinary text, which is tiktoken's `encode()` with that `allowed_special` and an empty `disallowed_special`,
+encoder.py's behavior when none is allowed; tiktoken leaves the choice between allowed spellings that begin at one byte
+to the order of its table, and no allowed spelling begins another on any definition in scope. `decode()` spells each
+ordinary id's bytes and each special id's spelling, and refuses an id that is neither, naming it and its index.
+`chunk_boundaries()` aims for `chunks` pieces of equal size: from each byte target it walks forward to the first anchor,
+a position `t + o` for an occurrence at `t` of a window the table certifies at origin `o`, at least the width less one
+codepoints after the previous cut, inside one stretch; special tokens are cuts of their own. `encode_parallel()` gives
+each chunk to a worker, which segments its chunk followed by `right_context` further codepoints of the real text, read
+as a complete input there unless a special token or the text's end comes first, keeps the pieces that end at or before
+its cut, and merges them. The ids of the chunks, concatenated, are the result.
+
+`Merger` holds a definition's whole-piece lookup and its merge, built once: the id of every spelling and of every byte,
+and under the pair rule the rank and product of every pair of the merge table keyed by the ids of its parts, a pair
+listed twice taking its last rank as both vendors read it. It refuses a definition in which a byte is not a token and,
+under the pair rule, a merge whose part or product is not one, naming the byte, or the merge, its rank and the spelling.
+The merge keeps the parts of a piece as a doubly linked list over its bytes, as Hugging Face's `Word` keeps its symbols,
+and the candidate joins in a binary heap ordered by rank and then by where the left part starts, each entry recording
+that start and the ends of both parts; an entry popped whose parts no longer stand as recorded is discarded. The rule
+enters only in the lookup of a pair: the rank of the parts' concatenation under `Merge_rule::ranks`, the rank of the
+pair of parts in the merge table under `Merge_rule::pairs`. It is exact on every table and every piece. A part's end
+only grows and a part joined into the one before it never stands again, so an entry once stale stays stale, and every
+adjacent pair the rule can join has a live entry, since the initial pairs are pushed and each join pushes the two pairs
+it makes. So each join is of the pair of least rank present, the leftmost on a tie: under the rank rule that is
+tiktoken's `_byte_pair_merge`, a join that makes a pair of lower rank than its own, such as `.:.:` on Llama 3's rank
+file, needing no case of its own, and under the pair rule it is Hugging Face's `merge_all`. A piece of n bytes takes at
+most n - 1 joins and fewer than 3n entries. The tests hold the merge to the plain pair loop and to tiktoken's scan,
+written out in the tests, on every multi-byte token of GPT-2's, cl100k's, o200k's and Llama 3's files (50,001, 100,000,
+199,742 and 127,744 tokens) and on 20,000 seeded random pieces of each, GPT-2's to encoder.py's pass as well, and on
+3,000 random tables over three symbols, which make ties, overlaps, joins that make a pair of lower rank, and tables on
+which the pass and one join at a time differ. The merge forms every multi-byte token from its own bytes on cl100k and
+o200k, all but `<|endoftext|>` on GPT-2, and all but 588 on Llama 3, which Llama 3's whole-piece lookup gives whole.
+
+`encode()` looks each piece up whole first where the definition says so, then in a `Piece_cache`, and only then merges
+it, storing its ids. The ids of a piece are a function of its bytes and the definition alone, the merge building its
+parts afresh for every piece, so a cache keyed by the whole of a piece's bytes and filled under one definition never
+changes an id. A cache serves one call of `encode()`, and will serve one worker of `encode_parallel()`, with no lock and
+no lifetime beyond the call; it holds 16,384 pieces of up to 255 bytes and then stops filling, with no eviction, as
+Hugging Face's BPE model's cache stops. On the three corpora of the test strategy GPT-2's pattern makes 3,684 to 14,032
+distinct pieces and cl100k's leaves 1,527 to 9,218 distinct pieces that are not looked up whole, so the bound holds
+every piece the merge makes on them. The tests hold `encode()` to the known answers and to every piece looked up or
+merged with no cache, on seeded random texts and on a text whose distinct pieces fill the cache past its bound, and
+`decode()` of `encode()` to the text, special tokens allowed and not.
 
 The encoder claims one thing. For every text the definition accepts, `encode_parallel()` returns the ids `encode()`
 returns, at every chunk count. That is the splice theorem with the proposition that the cut transfers and the decided
@@ -663,6 +727,8 @@ SHA-256:
 | gpt2-merges.txt (vocab.bpe) | 1ce1664773c50f3e0cc8842619a93edc4624525b728b188a9e0be33b7726adc5 |
 | gpt2-vocab.json (encoder.json) | 196139668be63f3b5d6574427317ae82f612a97c5d1cdaf36ed2256dbf636783 |
 | cl100k_base.tiktoken | 223921b76ee99bde995b7ff738513eef100fb51d18c93597a113bcffe865b2a7 |
+| o200k_base.tiktoken | 446a9538cb6c348e3516120d7c08b09f57c36495e2acfffe59a5bf8b0cfb1a2d |
+| llama3.tiktoken | 82e9d31979e92ab929cd544440f129d9ecd797b69e327f80f17e1c50d5551b55 |
 | twitter.json | 30721e496a8d73cfc50658923c34eb2c0fbe15ee6835005e43ee624d8dedf200 |
 
 No GPT-2 or cl100k tokenizer.json is pinned yet; the loader's tests need one of each, taken once and pinned the same
@@ -814,7 +880,7 @@ Each step lands green on its own, its tests first where a fixture exists.
     `decode()` with both merge rules, the whole-piece lookup and special-token cuts, held to the known answers; a fast
     BPE merge, linear or near-linear per piece in the manner of the GitHub bpe crate and tiktoken's rank merge, held
     byte-identical to the simple pair loop and to the known answers, with its exactness argued before it lands; and a
-    bounded piece cache keyed by pre-token bytes, per worker or thread-safe, which never changes an id.
+    bounded piece cache keyed by pre-token bytes, one per call and per worker, which never changes an id.
 12. encode: `chunk_boundaries()` and `encode_parallel()`, with the self-consistency suite of layer 2 and the
     thread-sanitizer job.
 13. The corpus probe on the three corpora, its figures into this page. The timing compares against tiktoken, Hugging

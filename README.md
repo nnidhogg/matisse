@@ -31,10 +31,12 @@ and builds the pattern's split verifier and factorization lexer, the automata th
 are decided on; validate decides each pattern's certified windows to width four under both certificates, with the right
 context each inventory needs, measures each inventory's anchor supply on an input and renders its report as text and as
 JSON; gpt2 and cl100k describe their patterns and lookup finds them by name; `matisse-validate` reports a tiktoken rank
-file read under a pattern, with the supply on an input when one is given; encode builds, links and registers its tests
-with CTest, while the tokenizer.json reader, the lazy certification of merge tables and the encoder are still to be
-written. The version is 0.1.0, pre-1.0, and nothing is stable yet. What each library will hold, the proved results the
-loaders rest on and the order of work are in [docs/design.md](docs/design.md).
+file read under a pattern, with the supply on an input when one is given; encode encodes a text and decodes its ids
+under both merge rules, with the whole-piece lookup, the special-token cuts and a bounded cache of merged pieces, its
+merge held to the plain references on every multi-byte token of four vocabularies and its ids to the fixtures' known
+answers, while the tokenizer.json reader, the lazy certification of merge tables and the parallel encoder are still to
+be written. The version is 0.1.0, pre-1.0, and nothing is stable yet. What each library will hold, the proved results
+the loaders rest on and the order of work are in [docs/design.md](docs/design.md).
 
 ## **Libraries**
 
@@ -106,9 +108,10 @@ ctest --test-dir build --timeout 300 --output-on-failure
 Tests and warnings-as-errors are enabled by default only when matisse is the top-level project; a build consuming
 matisse through `add_subdirectory` opts in with `-DMATISSE_BUILD_TESTS=ON` or `-DMATISSE_WERROR=ON`.
 
-The vocabulary files the loaders' tests read, GPT-2's gpt2-vocab.json and gpt2-merges.txt and cl100k_base.tiktoken, are
-not in the tree. A directory holding them is named with `-DMATISSE_VOCAB_DIR=DIR`, each file is held to the SHA-256
-docs/design.md gives, and the tests that need them skip when no directory is named; nothing is fetched at test time.
+The vocabulary files the loaders' and the encoder's tests read, GPT-2's gpt2-vocab.json and gpt2-merges.txt,
+cl100k_base.tiktoken, and for the merge's tests also o200k_base.tiktoken and llama3.tiktoken, are not in the tree. A
+directory holding them is named with `-DMATISSE_VOCAB_DIR=DIR`, each file is held to the SHA-256 docs/design.md gives,
+and the tests that need them skip when no directory is named; nothing is fetched at test time.
 
 ## **License**
 
