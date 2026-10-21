@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <exception>
 #include <format>
+#include <functional>
 #include <iterator>
 #include <mutex>
 #include <optional>
@@ -490,7 +491,14 @@ std::vector<load::Token_id_t> Encoder::encode_parallel(const std::string_view te
         std::rethrow_exception(failure);
     }
 
+    const auto sizes{encoded | std::views::transform(&std::vector<load::Token_id_t>::size)};
+
+    const auto total{std::ranges::fold_left(sizes, 0UZ, std::plus{})};
+
     std::vector<load::Token_id_t> ids{};
+
+    // The chunks' ids are copied once, into a vector that holds them all.
+    ids.reserve(total);
 
     for (const auto& chunk_ids : encoded)
     {
