@@ -606,6 +606,14 @@ public:
     [[nodiscard]] std::optional<Join> find(load::Token_id_t left, load::Token_id_t right) const noexcept;
 };
 
+class Spelling_table
+{
+public:
+    explicit Spelling_table(std::span<const std::string> spellings);
+
+    [[nodiscard]] std::optional<load::Token_id_t> find(std::string_view spelling) const noexcept;
+};
+
 class Merger
 {
 public:
@@ -695,38 +703,44 @@ and the rank and product of every pair of parts the merge may join, keyed by the
 every split of a spelling into two spellings, joining at the rank of the spelling, which is its id, 233,378 pairs on
 cl100k's file, and under the pair rule every pair of the merge table, a pair listed twice taking its last rank as both
 vendors read it. It refuses a definition in which a byte is not a token and, under the pair rule, a merge whose part or
-product is not one, naming the byte, or the merge, its rank and the spelling. The merge keeps the parts of a piece as a
-doubly linked list over its bytes, as Hugging Face's `Word` keeps its symbols, and the candidate joins in a binary heap
-ordered by rank and then by where the left part starts, each entry recording that start and the ends of both parts; an
-entry popped whose parts no longer stand as recorded is discarded. The merge looks every pair up by its parts' ids, and
-the rule enters only in that table: under `Merge_rule::ranks` a pair is in it exactly when the parts' concatenation is a
-spelling, at that spelling's rank, and under `Merge_rule::pairs` exactly when the merge table lists it. That table is a
-`Join_table`, a flat table with open addressing built from the map of the joins: the least power of two of slots at
-least twice the joins, 524,288 on cl100k's file, a key's walk starting at its hash by `hash_combine` from Boost's
-container_hash, the header-only module munch fetches, and running to the next slot until it meets the key or a free one.
-Every key is placed at the first free slot of its walk; the slots that placement passed over were full then and no slot
-is ever emptied, so a lookup meets every key the map holds before a free slot and stops at a free slot for any other.
-The tests hold the table to its map on every pair of 300 ids, a third of the pairs drawn into the map. It is exact on
-every table and every piece. A part's end only grows and a part joined into the one before it never stands again, so an
-entry once stale stays stale, and every adjacent pair the rule can join has a live entry, since the initial pairs are
-pushed and each join pushes the two pairs it makes. So each join is of the pair of least rank present, the leftmost on a
-tie: under the rank rule that is tiktoken's `_byte_pair_merge`, a join that makes a pair of lower rank than its own,
-such as `.:.:` on Llama 3's rank file, needing no case of its own, and under the pair rule it is Hugging Face's
-`merge_all`. A piece of n bytes takes at most n - 1 joins and fewer than 3n entries, each entry's and each node's
-offsets held in 32 bits, so the heap merges a piece shorter than 2^32 bytes and refuses a longer one. A piece of at most
-128 bytes is merged instead by a scan of its parts, held in an array on the stack, each part with the join it makes with
-the next: the scan finds the least rank from the left, so the leftmost on a tie, makes that join and looks up the joined
-part's pairs with its two neighbours, which is the join the heap makes and the two pairs it pushes, so both make the
-same joins in the same order. On Chinese the encoding with no cache gains as the threshold rises to 128 and no further.
-The heap and the scan read the first pairs, every part a byte to begin with, from a table of the joins of all 65,536
-pairs of bytes, filled from the join table at construction, which makes `encode()` on Chinese 1.20 and 1.16 times faster
-under GPT-2 and cl100k. The tests hold the merge to the plain pair loop and to tiktoken's scan, written out in the
-tests, on every multi-byte token of GPT-2's, cl100k's, o200k's and Llama 3's files (50,001, 100,000, 199,742 and 127,744
-tokens) and on 20,000 seeded random pieces of each, a quarter of them 100 to 300 bytes long, either side of the scan's
-threshold, GPT-2's to encoder.py's pass as well, and on 3,000 random tables over three symbols, each with one piece of
-100 to 160 symbols beside its short ones, which make ties, overlaps, joins that make a pair of lower rank, and tables on
-which the pass and one join at a time differ. The merge forms every multi-byte token from its own bytes on cl100k and
-o200k, all but `<|endoftext|>` on GPT-2, and all but 588 on Llama 3, which Llama 3's whole-piece lookup gives whole.
+product is not one, naming the byte, or the merge, its rank and the spelling. The id of every spelling is a
+`Spelling_table`, a flat table with open addressing over the spellings' bytes kept once in a string, each slot holding a
+spelling's hash, where its bytes stand, their length and its id, the least power of two of slots at least twice the
+spellings; a lookup hashes the piece by `std::hash<std::string_view>` once and compares bytes only in a slot of the same
+hash and length, and the tests hold it to a map keeping the first id of each spelling on 20,000 seeded random spellings.
+The whole-piece lookup reads it, which makes `encode()` on every corpus 1.08 to 1.28 times faster under cl100k. The
+merge keeps the parts of a piece as a doubly linked list over its bytes, as Hugging Face's `Word` keeps its symbols, and
+the candidate joins in a binary heap ordered by rank and then by where the left part starts, each entry recording that
+start and the ends of both parts; an entry popped whose parts no longer stand as recorded is discarded. The merge looks
+every pair up by its parts' ids, and the rule enters only in that table: under `Merge_rule::ranks` a pair is in it
+exactly when the parts' concatenation is a spelling, at that spelling's rank, and under `Merge_rule::pairs` exactly when
+the merge table lists it. That table is a `Join_table`, a flat table with open addressing built from the map of the
+joins: the least power of two of slots at least twice the joins, 524,288 on cl100k's file, a key's walk starting at its
+hash by `hash_combine` from Boost's container_hash, the header-only module munch fetches, and running to the next slot
+until it meets the key or a free one. Every key is placed at the first free slot of its walk; the slots that placement
+passed over were full then and no slot is ever emptied, so a lookup meets every key the map holds before a free slot and
+stops at a free slot for any other. The tests hold the table to its map on every pair of 300 ids, a third of the pairs
+drawn into the map. It is exact on every table and every piece. A part's end only grows and a part joined into the one
+before it never stands again, so an entry once stale stays stale, and every adjacent pair the rule can join has a live
+entry, since the initial pairs are pushed and each join pushes the two pairs it makes. So each join is of the pair of
+least rank present, the leftmost on a tie: under the rank rule that is tiktoken's `_byte_pair_merge`, a join that makes
+a pair of lower rank than its own, such as `.:.:` on Llama 3's rank file, needing no case of its own, and under the pair
+rule it is Hugging Face's `merge_all`. A piece of n bytes takes at most n - 1 joins and fewer than 3n entries, each
+entry's and each node's offsets held in 32 bits, so the heap merges a piece shorter than 2^32 bytes and refuses a longer
+one. A piece of at most 128 bytes is merged instead by a scan of its parts, held in an array on the stack, each part
+with the join it makes with the next: the scan finds the least rank from the left, so the leftmost on a tie, makes that
+join and looks up the joined part's pairs with its two neighbours, which is the join the heap makes and the two pairs it
+pushes, so both make the same joins in the same order. On Chinese the encoding with no cache gains as the threshold
+rises to 128 and no further. The heap and the scan read the first pairs, every part a byte to begin with, from a table
+of the joins of all 65,536 pairs of bytes, filled from the join table at construction, which makes `encode()` on Chinese
+1.20 and 1.16 times faster under GPT-2 and cl100k. The tests hold the merge to the plain pair loop and to tiktoken's
+scan, written out in the tests, on every multi-byte token of GPT-2's, cl100k's, o200k's and Llama 3's files (50,001,
+100,000, 199,742 and 127,744 tokens) and on 20,000 seeded random pieces of each, a quarter of them 100 to 300 bytes
+long, either side of the scan's threshold, GPT-2's to encoder.py's pass as well, and on 3,000 random tables over three
+symbols, each with one piece of 100 to 160 symbols beside its short ones, which make ties, overlaps, joins that make a
+pair of lower rank, and tables on which the pass and one join at a time differ. The merge forms every multi-byte token
+from its own bytes on cl100k and o200k, all but `<|endoftext|>` on GPT-2, and all but 588 on Llama 3, which Llama 3's
+whole-piece lookup gives whole.
 
 `encode()` looks each piece up whole first where the definition says so, then in a `Piece_cache`, and only then merges
 it, storing its ids. The ids of a piece are a function of its bytes and the definition alone, the merge building its

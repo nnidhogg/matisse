@@ -2,16 +2,12 @@
 #define MATISSE_LIBS_ENCODE_INCLUDE_MATISSE_ENCODE_MERGER_HPP
 
 #include <array>
-#include <cstddef>
-#include <functional>
 #include <optional>
-#include <span>
-#include <string>
 #include <string_view>
-#include <unordered_map>
 #include <vector>
 
 #include "matisse/encode/join_table.hpp"
+#include "matisse/encode/spelling_table.hpp"
 #include "matisse/load/definition.hpp"
 
 /**
@@ -76,29 +72,6 @@ public:
 
 private:
     /**
-     * @brief A hash of spellings that a string_view looks up without a copy.
-     */
-    struct Spelling_hash
-    {
-        /**
-         * @brief Marks the hash as taking every type that converts to a string_view.
-         */
-        using is_transparent = void;
-
-        /**
-         * @brief Returns the hash of a spelling.
-         * @param spelling The spelling's bytes.
-         * @return The standard hash of its bytes.
-         */
-        [[nodiscard]] std::size_t operator()(std::string_view spelling) const noexcept;
-    };
-
-    /**
-     * @brief The id of every spelling.
-     */
-    using Ids_t = std::unordered_map<std::string, load::Token_id_t, Spelling_hash, std::equal_to<>>;
-
-    /**
      * @brief The id of every byte as a token of one byte, by its value.
      */
     using Byte_ids_t = std::array<load::Token_id_t, 256>;
@@ -110,19 +83,12 @@ private:
     using Byte_pairs_t = std::vector<Join_table::Join>;
 
     /**
-     * @brief Returns the id of every spelling.
-     * @param spellings The bytes of every ordinary token, by id.
-     * @return The ids, by spelling.
-     */
-    [[nodiscard]] static Ids_t ids_of(std::span<const std::string> spellings);
-
-    /**
      * @brief Returns the id of every byte as a token of one byte.
      * @param ids The id of every spelling.
      * @return The ids, by byte value.
      * @throws std::invalid_argument If a byte is not a token; the message names the byte.
      */
-    [[nodiscard]] static Byte_ids_t byte_ids_of(const Ids_t& ids);
+    [[nodiscard]] static Byte_ids_t byte_ids_of(const Spelling_table& ids);
 
     /**
      * @brief Returns the join of every pair of parts a definition's merge may join: under the rank rule every split of
@@ -134,7 +100,7 @@ private:
      * @throws std::invalid_argument If under the pair rule a merge names a part or a product that is not a token; the
      *         message names the merge, its rank and the spelling.
      */
-    [[nodiscard]] static Join_table::Joins_t joins_of(const load::Definition& definition, const Ids_t& ids);
+    [[nodiscard]] static Join_table::Joins_t joins_of(const load::Definition& definition, const Spelling_table& ids);
 
     /**
      * @brief Returns the join of every pair of bytes as tokens of one byte, which every piece's merge looks up first,
@@ -151,9 +117,9 @@ private:
     bool whole_piece_lookup_;
 
     /**
-     * @brief The id of every spelling.
+     * @brief The id of every spelling, in the flat table the whole-piece lookup reads.
      */
-    Ids_t ids_;
+    Spelling_table ids_;
 
     /**
      * @brief The id of every byte as a token of one byte.

@@ -8,6 +8,7 @@ add_library(${PROJECT_NAME}
         src/join_table.cpp
         src/merger.cpp
         src/piece_cache.cpp
+        src/spelling_table.cpp
         src/window_index.cpp
 )
 
@@ -39,6 +40,7 @@ if (MATISSE_BUILD_TESTS)
             tests/join_table_test.cpp
             tests/merger_test.cpp
             tests/piece_cache_test.cpp
+            tests/spelling_table_test.cpp
             tests/window_index_test.cpp
     )
 

@@ -560,30 +560,13 @@ std::vector<load::Token_id_t> Parts::ids() const
 
 Merger::Merger(const load::Definition& definition)
     : whole_piece_lookup_{definition.whole_piece_lookup}
-    , ids_{ids_of(definition.spellings)}
+    , ids_{definition.spellings}
     , byte_ids_{byte_ids_of(ids_)}
     , joins_{joins_of(definition, ids_)}
     , byte_pairs_{byte_pairs_of(byte_ids_, joins_)}
 {}
 
-Merger::Ids_t Merger::ids_of(const std::span<const std::string> spellings)
-{
-    Ids_t ids{};
-
-    for (std::size_t id{0}; id < spellings.size(); ++id)
-    {
-        ids.emplace(spellings[id], static_cast<load::Token_id_t>(id));
-    }
-
-    return ids;
-}
-
-std::size_t Merger::Spelling_hash::operator()(const std::string_view spelling) const noexcept
-{
-    return std::hash<std::string_view>{}(spelling);
-}
-
-Merger::Byte_ids_t Merger::byte_ids_of(const Ids_t& ids)
+Merger::Byte_ids_t Merger::byte_ids_of(const Spelling_table& ids)
 {
     Byte_ids_t byte_ids{};
 
@@ -593,19 +576,19 @@ Merger::Byte_ids_t Merger::byte_ids_of(const Ids_t& ids)
 
         const auto found{ids.find(byte)};
 
-        if (found == ids.end())
+        if (!found)
         {
             throw std::invalid_argument{
                     std::format("Merger: the byte {} is not a token of the definition", quoted_spelling(byte))};
         }
 
-        byte_ids[value] = found->second;
+        byte_ids[value] = *found;
     }
 
     return byte_ids;
 }
 
-Join_table::Joins_t Merger::joins_of(const load::Definition& definition, const Ids_t& ids)
+Join_table::Joins_t Merger::joins_of(const load::Definition& definition, const Spelling_table& ids)
 {
     const auto& [merge_rule, whole_piece_lookup, spellings, merges, specials]{definition};
 
@@ -631,12 +614,12 @@ Join_table::Joins_t Merger::joins_of(const load::Definition& definition, const I
 
                 const auto right_found{ids.find(right)};
 
-                if (left_found == ids.end() || right_found == ids.end())
+                if (!left_found || !right_found)
                 {
                     continue;
                 }
 
-                const auto key{Join_table::key_of(left_found->second, right_found->second)};
+                const auto key{Join_table::key_of(*left_found, *right_found)};
 
                 joins.emplace(key, Join_table::Join{.rank = product_id, .product = product_id});
             }
@@ -654,14 +637,14 @@ Join_table::Joins_t Merger::joins_of(const load::Definition& definition, const I
         const auto id_of{[&](const std::string_view spelling) {
             const auto found{ids.find(spelling)};
 
-            if (found == ids.end())
+            if (!found)
             {
                 throw std::invalid_argument{std::format(
                         "Merger: the merge ({}, {}) at rank {} names {}, which is not a token of the definition",
                         quoted_spelling(left), quoted_spelling(right), rank, quoted_spelling(spelling))};
             }
 
-            return found->second;
+            return *found;
         }};
 
         const auto left_id{id_of(left)};
@@ -715,14 +698,7 @@ std::optional<load::Token_id_t> Merger::whole_piece(const std::string_view piece
         return std::nullopt;
     }
 
-    const auto found{ids_.find(piece)};
-
-    if (found == ids_.end())
-    {
-        return std::nullopt;
-    }
-
-    return found->second;
+    return ids_.find(piece);
 }
 
 std::vector<load::Token_id_t> Merger::merged(const std::string_view piece) const
