@@ -734,13 +734,17 @@ parts afresh for every piece, so a cache keyed by the whole of a piece's bytes a
 changes an id. A cache serves one caller and has no lock: `encode(text)` makes one for the call, `encode(text, cache)`
 reads and fills one the caller keeps across its calls, one per thread, and every worker of `encode_parallel()` makes its
 own; it holds 16,384 pieces of up to 255 bytes and then stops filling, with no eviction, as Hugging Face's BPE model's
-cache stops. On the three corpora of the test strategy GPT-2's pattern makes 3,684 to 14,032 distinct pieces and
-cl100k's leaves 1,527 to 9,218 distinct pieces that are not looked up whole, so the bound holds every piece the merge
-makes on them. The tests hold `encode()` to the known answers and to every piece looked up or merged with no cache, on
-seeded random texts and on a text whose distinct pieces fill the cache past its bound, encoded twice more with one kept
-cache, and `decode()` of `encode()` to the text, special tokens allowed and not; and they hold `encode()` with a cache
-kept across 500 seeded texts, and on four threads each keeping a cache of its own, to `encode()` with a cache of its
-own.
+cache stops. The cache is a flat table with open addressing over the bytes and the ids of its pieces, each kept once in
+a string and a vector of its own: a slot holds a piece's hash, where its bytes and ids stand and their lengths, the
+slots a power of two in number from 64 on, doubled when the pieces fill half of them, so that a call that stores nothing
+takes no memory and a lookup hashes the piece once and compares its bytes only in a slot of the same hash and length; a
+piece's ids are valid until the next store. On the three corpora of the test strategy GPT-2's pattern makes 3,684 to
+14,032 distinct pieces and cl100k's leaves 1,527 to 9,218 distinct pieces that are not looked up whole, so the bound
+holds every piece the merge makes on them. The tests hold `encode()` to the known answers and to every piece looked up
+or merged with no cache, on seeded random texts and on a text whose distinct pieces fill the cache past its bound,
+encoded twice more with one kept cache, and `decode()` of `encode()` to the text, special tokens allowed and not; and
+they hold `encode()` with a cache kept across 500 seeded texts, and on four threads each keeping a cache of its own, to
+`encode()` with a cache of its own.
 
 The encoder claims one thing. For every text the definition accepts, `encode_parallel()` returns the ids `encode()`
 returns, at every chunk count. That is the splice theorem with the proposition that the cut transfers and the decided

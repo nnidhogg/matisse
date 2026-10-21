@@ -83,3 +83,31 @@ TEST(Piece_cache_test, A_piece_longer_than_the_longest_cached_is_not_stored)
     EXPECT_EQ(held(cache, longest), std::vector<Token_id_t>{1});
     EXPECT_FALSE(held(cache, longer).has_value());
 }
+
+TEST(Piece_cache_test, Every_stored_piece_is_found_with_its_ids_as_the_table_grows)
+{
+    // 1,000 pieces take the slots from 64 to 2,048 through five doublings.
+    constexpr std::size_t pieces{1000};
+
+    Piece_cache cache{pieces};
+
+    for (std::size_t index{0}; index < pieces; ++index)
+    {
+        const auto piece{std::to_string(index)};
+
+        const auto id{static_cast<Token_id_t>(index)};
+
+        cache.store(piece, {id, id + 1});
+    }
+
+    for (std::size_t index{0}; index < pieces; ++index)
+    {
+        const auto piece{std::to_string(index)};
+
+        const auto id{static_cast<Token_id_t>(index)};
+
+        EXPECT_EQ(held(cache, piece), (std::vector<Token_id_t>{id, id + 1})) << piece;
+    }
+
+    EXPECT_FALSE(held(cache, "1000").has_value());
+}

@@ -2,12 +2,12 @@
 #define MATISSE_LIBS_ENCODE_INCLUDE_MATISSE_ENCODE_PIECE_CACHE_HPP
 
 #include <cstddef>
-#include <functional>
+#include <cstdint>
+#include <limits>
 #include <optional>
 #include <span>
 #include <string>
 #include <string_view>
-#include <unordered_map>
 #include <vector>
 
 #include "matisse/load/definition.hpp"
@@ -23,7 +23,12 @@
  * model's cache does, with no eviction; one cache serves one caller, a call of the encoder or a thread's calls, which
  * is where repetition lives. On twitter.json and munch's Python and C++ sources at 15b2863c, GPT-2's pattern makes
  * 111,510 to 1,118,131 pieces of which 3,684 to 14,032 are distinct, and cl100k's leaves 1,527 to 9,218 distinct pieces
- * that are not looked up whole, so 16,384 entries hold every piece the merge makes on them.
+ * that are not looked up whole, so 16,384 entries hold every piece the merge makes on them. The cache is a flat table
+ * with open addressing, linear probing from a piece's hash modulo a power of two of slots, each slot holding where a
+ * piece's bytes and ids stand in a string and a vector of their own; no slot is ever emptied and growth places every
+ * piece again, so a lookup meets the piece before a free slot and stops at a free slot for any other piece; the slots
+ * start at 64 on the first store and double whenever the pieces fill half of them, so a cache that stores nothing takes
+ * no memory.
  */
 namespace matisse::encode
 {
@@ -45,7 +50,7 @@ class Piece_cache
 {
 public:
     /**
-     * @brief Makes an empty cache.
+     * @brief Makes an empty cache, which takes no memory until it stores a piece.
      * @param capacity The number of pieces it holds before it stops filling.
      */
     explicit Piece_cache(std::size_t capacity);
@@ -53,7 +58,7 @@ public:
     /**
      * @brief Returns the ids stored for a piece.
      * @param piece The piece's bytes, compared whole.
-     * @return The ids, valid until the cache is destroyed; std::nullopt when the piece is not stored.
+     * @return The ids, valid until the next call of store(); std::nullopt when the piece is not stored.
      */
     [[nodiscard]] std::optional<std::span<const load::Token_id_t>> find(std::string_view piece) const;
 
@@ -67,27 +72,59 @@ public:
 
 private:
     /**
-     * @brief A hash of pieces that a string_view looks up without a copy.
+     * @brief One slot of the table: where a stored piece's bytes and ids stand, or nothing.
      */
-    struct Piece_hash
+    struct Slot
     {
         /**
-         * @brief Marks the hash as taking every type that converts to a string_view.
+         * @brief The hash of the piece's bytes.
          */
-        using is_transparent = void;
+        std::size_t hash{};
 
         /**
-         * @brief Returns the hash of a piece.
-         * @param piece The piece's bytes.
-         * @return The standard hash of its bytes.
+         * @brief The offset of the piece's bytes in the stored bytes, free_slot when the slot holds no piece.
          */
-        [[nodiscard]] std::size_t operator()(std::string_view piece) const noexcept;
+        std::size_t bytes_at{};
+
+        /**
+         * @brief The offset of the piece's ids in the stored ids.
+         */
+        std::size_t ids_at{};
+
+        /**
+         * @brief The piece's length in bytes.
+         */
+        std::uint16_t length{};
+
+        /**
+         * @brief The number of its ids.
+         */
+        std::uint16_t count{};
     };
 
     /**
-     * @brief The ids of every stored piece, by its bytes.
+     * @brief The bytes_at of a free slot.
      */
-    using Entries_t = std::unordered_map<std::string, std::vector<load::Token_id_t>, Piece_hash, std::equal_to<>>;
+    static constexpr std::size_t free_slot{std::numeric_limits<std::size_t>::max()};
+
+    /**
+     * @brief The number of slots of the table the first stored piece makes, doubled whenever the pieces fill half of
+     *        them.
+     */
+    static constexpr std::size_t first_slot_count{64};
+
+    /**
+     * @brief Returns the slot a piece's walk ends at: the slot holding the piece, or the first free slot from its home.
+     * @param piece The piece's bytes.
+     * @param hash The hash of its bytes.
+     * @return The slot, of a table with at least one free slot.
+     */
+    [[nodiscard]] std::size_t slot_of(std::string_view piece, std::size_t hash) const noexcept;
+
+    /**
+     * @brief Doubles the slots, placing every stored piece again at the first free slot from its home.
+     */
+    void grow();
 
     /**
      * @brief The number of pieces held before the cache stops filling.
@@ -95,9 +132,25 @@ private:
     std::size_t capacity_;
 
     /**
-     * @brief The stored pieces.
+     * @brief The number of pieces stored.
      */
-    Entries_t entries_;
+    std::size_t size_{0};
+
+    /**
+     * @brief The slots, a power of two in number and at least twice the pieces stored, none before the first piece is
+     *        stored.
+     */
+    std::vector<Slot> slots_;
+
+    /**
+     * @brief The bytes of every stored piece, one after another.
+     */
+    std::string bytes_;
+
+    /**
+     * @brief The ids of every stored piece, one after another.
+     */
+    std::vector<load::Token_id_t> ids_;
 };
 
 } // namespace matisse::encode
