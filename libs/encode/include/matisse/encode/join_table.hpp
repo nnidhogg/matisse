@@ -43,7 +43,7 @@ public:
         /**
          * @brief The rank, the id of the concatenation under the rank rule and the merge's index under the pair rule.
          */
-        std::size_t rank{};
+        std::uint32_t rank{};
 
         /**
          * @brief The id of the token the join makes.

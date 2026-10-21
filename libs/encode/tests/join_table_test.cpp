@@ -40,7 +40,7 @@ TEST(Join_table_test, A_table_finds_the_join_of_every_pair_its_map_holds_and_of_
 
     std::bernoulli_distribution drawn{1.0 / 3.0};
 
-    std::uniform_int_distribution<std::size_t> rank{0, 1000000};
+    std::uniform_int_distribution<std::uint32_t> rank{0, 1000000};
 
     Join_table::Joins_t joins{};
 

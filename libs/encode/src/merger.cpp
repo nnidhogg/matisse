@@ -1,7 +1,10 @@
 #include "matisse/encode/merger.hpp"
 
+#include <algorithm>
+#include <array>
 #include <compare>
 #include <cstddef>
+#include <cstdint>
 #include <format>
 #include <functional>
 #include <limits>
@@ -62,6 +65,148 @@ constexpr std::size_t byte_count{256};
 }
 
 /**
+ * @brief The longest piece merged by a scan of its parts, a longer piece by the heap.
+ *
+ * Measured with no cache, the encoding of Chinese gains as the threshold rises to 128 bytes, 6 to 9 per cent on wiki-zh
+ * under both tokenizers over a threshold of 64, and no further, 256, 512 and 1,024 measuring level with 128; every
+ * other corpus measures level from 16 bytes on.
+ */
+constexpr std::size_t longest_scanned_piece{128};
+
+/**
+ * @brief The rank of no join, above every rank a join table holds, a definition holding fewer than 2^32 tokens and
+ *        merges.
+ */
+constexpr std::uint32_t no_rank{std::numeric_limits<std::uint32_t>::max()};
+
+/**
+ * @brief One part of a piece under a scan: its id and the join it makes with the part after it.
+ */
+struct Scanned_part
+{
+    /**
+     * @brief The id of the token the part spells.
+     */
+    load::Token_id_t id{};
+
+    /**
+     * @brief The rank of the join with the part after it, no_rank when there is none.
+     */
+    std::uint32_t rank{};
+
+    /**
+     * @brief The id of the token that join makes, read only when the rank is not no_rank.
+     */
+    load::Token_id_t product{};
+};
+
+/**
+ * @brief Returns the ids of a piece merged by a scan of its parts: each part holding the join it makes with the part
+ *        after it, the least rank found by a scan from the left, that join made, and the joins of the joined part with
+ *        its neighbours looked up again.
+ *
+ * The scan makes the join the heap makes: the heap's entries that stand are one for every adjacent pair with a join,
+ * and it joins the least of them by rank and then by start, which is the least rank the scan finds, the leftmost on a
+ * tie since a later part replaces the least only at a rank below it; and both look up the same two pairs after a join,
+ * the joined part's with the part before it and with the part after it, every other pair standing as it stood.
+ * @param piece The piece's bytes, at most longest_scanned_piece.
+ * @param byte_ids The id of every byte as a token of one byte.
+ * @param joins The join of every pair of parts the merge may join.
+ * @return The ids of the parts the merge ends with, in order.
+ */
+[[nodiscard]] std::vector<load::Token_id_t> merged_by_scan(
+        const std::string_view piece, const std::span<const load::Token_id_t, byte_count> byte_ids,
+        const Join_table& joins)
+{
+    std::array<Scanned_part, longest_scanned_piece> parts{};
+
+    auto count{piece.size()};
+
+    // Sets the join of the part at an index with the part after it, none after the last part.
+    const auto look_up{[&](const std::size_t at) {
+        auto& [id, rank, product]{parts[at]};
+
+        rank = no_rank;
+
+        if (at + 1 == count)
+        {
+            return;
+        }
+
+        const auto next_id{parts[at + 1].id};
+
+        const auto join{joins.find(id, next_id)};
+
+        if (!join)
+        {
+            return;
+        }
+
+        rank = join->rank;
+
+        product = join->product;
+    }};
+
+    for (std::size_t at{0}; at < count; ++at)
+    {
+        const auto byte{static_cast<unsigned char>(piece[at])};
+
+        parts[at].id = byte_ids[byte];
+    }
+
+    for (std::size_t at{0}; at < count; ++at)
+    {
+        look_up(at);
+    }
+
+    while (true)
+    {
+        auto least{count};
+
+        auto least_rank{no_rank};
+
+        for (std::size_t at{0}; at < count; ++at)
+        {
+            if (parts[at].rank < least_rank)
+            {
+                least = at;
+
+                least_rank = parts[at].rank;
+            }
+        }
+
+        if (least == count)
+        {
+            break;
+        }
+
+        parts[least].id = parts[least].product;
+
+        const auto rest{std::ranges::subrange(parts.begin() + least + 2, parts.begin() + count)};
+
+        std::ranges::copy(rest, parts.begin() + least + 1);
+
+        --count;
+
+        look_up(least);
+
+        if (least > 0)
+        {
+            look_up(least - 1);
+        }
+    }
+
+    const auto merged{std::span{parts}.first(count) | std::views::transform(&Scanned_part::id)};
+
+    return {merged.begin(), merged.end()};
+}
+
+/**
+ * @brief A byte offset into a piece the heap merges, which is shorter than 2^32 bytes.
+ */
+using Offset_t = std::uint32_t;
+
+/**
  * @brief A candidate join of the merge: the claim that the part starting at `start` and ending at `end_left` and the
  *        part after it, ending at `end_right`, are adjacent parts of the piece, with the join's rank and product.
  *
@@ -73,22 +218,22 @@ struct Entry
     /**
      * @brief The join's rank.
      */
-    std::size_t rank{};
+    std::uint32_t rank{};
 
     /**
      * @brief The byte at which the left part starts.
      */
-    std::size_t start{};
+    Offset_t start{};
 
     /**
      * @brief The byte after the left part.
      */
-    std::size_t end_left{};
+    Offset_t end_left{};
 
     /**
      * @brief The byte after the right part.
      */
-    std::size_t end_right{};
+    Offset_t end_right{};
 
     /**
      * @brief The id of the token the join makes.
@@ -113,7 +258,7 @@ public:
     /**
      * @brief The index that names no node, before the first and after the last.
      */
-    static constexpr std::size_t none{std::numeric_limits<std::size_t>::max()};
+    static constexpr Offset_t none{std::numeric_limits<Offset_t>::max()};
 
     /**
      * @brief Makes every byte of a piece a part of its own, with the id of its byte.
@@ -127,21 +272,21 @@ public:
      * @param start The byte at which the part starts.
      * @return The byte at which the next part starts, none after the last.
      */
-    [[nodiscard]] std::size_t next(std::size_t start) const noexcept;
+    [[nodiscard]] Offset_t next(Offset_t start) const noexcept;
 
     /**
      * @brief Returns the byte after a live part.
      * @param start The byte at which the part starts.
      * @return The byte after its last.
      */
-    [[nodiscard]] std::size_t end(std::size_t start) const noexcept;
+    [[nodiscard]] Offset_t end(Offset_t start) const noexcept;
 
     /**
      * @brief Returns the id of a live part.
      * @param start The byte at which the part starts.
      * @return The id of the token the part spells.
      */
-    [[nodiscard]] load::Token_id_t id(std::size_t start) const noexcept;
+    [[nodiscard]] load::Token_id_t id(Offset_t start) const noexcept;
 
     /**
      * @brief Returns whether an entry's parts are still adjacent parts of the piece: its left part live and ending
@@ -151,21 +296,21 @@ public:
      * @param end_right The byte after the right part, as recorded.
      * @return True when both parts stand as recorded.
      */
-    [[nodiscard]] bool holds(std::size_t start, std::size_t end_left, std::size_t end_right) const noexcept;
+    [[nodiscard]] bool holds(Offset_t start, Offset_t end_left, Offset_t end_right) const noexcept;
 
     /**
      * @brief Joins a live part with the part after it.
      * @param start The byte at which the left part starts, a part with one after it.
      * @param product The id of the token the join makes.
      */
-    void join(std::size_t start, load::Token_id_t product) noexcept;
+    void join(Offset_t start, load::Token_id_t product) noexcept;
 
     /**
      * @brief Returns the part before a live part.
      * @param start The byte at which the part starts.
      * @return The byte at which the part before it starts, none before the first.
      */
-    [[nodiscard]] std::size_t previous(std::size_t start) const noexcept;
+    [[nodiscard]] Offset_t previous(Offset_t start) const noexcept;
 
     /**
      * @brief Returns the ids of the live parts, in order.
@@ -182,17 +327,17 @@ private:
         /**
          * @brief The byte after the part's last.
          */
-        std::size_t end{};
+        Offset_t end{};
 
         /**
          * @brief The start of the part before it, none before the first.
          */
-        std::size_t previous{};
+        Offset_t previous{};
 
         /**
          * @brief The start of the part after it, none after the last.
          */
-        std::size_t next{};
+        Offset_t next{};
 
         /**
          * @brief The id of the token the part spells.
@@ -214,7 +359,7 @@ private:
 Parts::Parts(const std::string_view piece, const std::span<const load::Token_id_t, byte_count> byte_ids)
     : nodes_(piece.size())
 {
-    for (std::size_t start{0}; start < piece.size(); ++start)
+    for (Offset_t start{0}; start < piece.size(); ++start)
     {
         const auto byte{static_cast<unsigned char>(piece[start])};
 
@@ -226,29 +371,29 @@ Parts::Parts(const std::string_view piece, const std::span<const load::Token_id_
     }
 }
 
-std::size_t Parts::next(const std::size_t start) const noexcept
+Offset_t Parts::next(const Offset_t start) const noexcept
 {
     return nodes_[start].next;
 }
 
-std::size_t Parts::end(const std::size_t start) const noexcept
+Offset_t Parts::end(const Offset_t start) const noexcept
 {
     return nodes_[start].end;
 }
 
-load::Token_id_t Parts::id(const std::size_t start) const noexcept
+load::Token_id_t Parts::id(const Offset_t start) const noexcept
 {
     return nodes_[start].id;
 }
 
-bool Parts::holds(const std::size_t start, const std::size_t end_left, const std::size_t end_right) const noexcept
+bool Parts::holds(const Offset_t start, const Offset_t end_left, const Offset_t end_right) const noexcept
 {
     const auto& [end, previous, next, id, live]{nodes_[start]};
 
     return live && end == end_left && next != none && nodes_[next].end == end_right;
 }
 
-void Parts::join(const std::size_t start, const load::Token_id_t product) noexcept
+void Parts::join(const Offset_t start, const load::Token_id_t product) noexcept
 {
     auto& left{nodes_[start]};
 
@@ -268,7 +413,7 @@ void Parts::join(const std::size_t start, const load::Token_id_t product) noexce
     }
 }
 
-std::size_t Parts::previous(const std::size_t start) const noexcept
+Offset_t Parts::previous(const Offset_t start) const noexcept
 {
     return nodes_[start].previous;
 }
@@ -286,6 +431,87 @@ std::vector<load::Token_id_t> Parts::ids() const
     }
 
     return ids;
+}
+
+/**
+ * @brief Returns the ids of a piece merged by the heap: every adjacent pair with a join pushed as an entry, the least
+ *        entry popped, discarded when its parts no longer stand as it recorded and otherwise joined, and the two pairs
+ *        the join makes pushed.
+ * @param piece The piece's bytes, shorter than 2^32 bytes.
+ * @param byte_ids The id of every byte as a token of one byte.
+ * @param joins The join of every pair of parts the merge may join.
+ * @return The ids of the parts the merge ends with, in order.
+ * @throws std::length_error If the piece is 2^32 bytes or longer; the message names its length.
+ */
+[[nodiscard]] std::vector<load::Token_id_t> merged_by_heap(
+        const std::string_view piece, const std::span<const load::Token_id_t, byte_count> byte_ids,
+        const Join_table& joins)
+{
+    if (piece.size() > std::numeric_limits<Offset_t>::max())
+    {
+        throw std::length_error{
+                std::format("Merger: a piece of {} bytes is longer than the merge's 32-bit offsets", piece.size())};
+    }
+
+    Parts parts{piece, byte_ids};
+
+    std::priority_queue<Entry, std::vector<Entry>, std::greater<>> heap{};
+
+    const auto push{[&](const Offset_t start) {
+        const auto next{parts.next(start)};
+
+        const auto left{parts.id(start)};
+
+        const auto right{parts.id(next)};
+
+        const auto join{joins.find(left, right)};
+
+        if (!join)
+        {
+            return;
+        }
+
+        const auto [rank, product]{*join};
+
+        const auto end_left{parts.end(start)};
+
+        const auto end_right{parts.end(next)};
+
+        heap.push({.rank = rank, .start = start, .end_left = end_left, .end_right = end_right, .product = product});
+    }};
+
+    for (Offset_t start{0}; start + 1 < piece.size(); ++start)
+    {
+        push(start);
+    }
+
+    while (!heap.empty())
+    {
+        const auto [rank, start, end_left, end_right, product]{heap.top()};
+
+        heap.pop();
+
+        if (!parts.holds(start, end_left, end_right))
+        {
+            continue;
+        }
+
+        parts.join(start, product);
+
+        const auto previous{parts.previous(start)};
+
+        if (previous != Parts::none)
+        {
+            push(previous);
+        }
+
+        if (parts.next(start) != Parts::none)
+        {
+            push(start);
+        }
+    }
+
+    return parts.ids();
 }
 
 } // namespace
@@ -403,7 +629,9 @@ Join_table::Joins_t Merger::joins_of(const load::Definition& definition, const I
 
         const auto key{Join_table::key_of(left_id, right_id)};
 
-        joins.insert_or_assign(key, Join_table::Join{.rank = rank, .product = product_id});
+        const auto merge_rank{static_cast<std::uint32_t>(rank)};
+
+        joins.insert_or_assign(key, Join_table::Join{.rank = merge_rank, .product = product_id});
     }
 
     return joins;
@@ -428,65 +656,12 @@ std::optional<load::Token_id_t> Merger::whole_piece(const std::string_view piece
 
 std::vector<load::Token_id_t> Merger::merged(const std::string_view piece) const
 {
-    Parts parts{piece, byte_ids_};
-
-    std::priority_queue<Entry, std::vector<Entry>, std::greater<>> heap{};
-
-    const auto push{[&](const std::size_t start) {
-        const auto next{parts.next(start)};
-
-        const auto left{parts.id(start)};
-
-        const auto right{parts.id(next)};
-
-        const auto join{joins_.find(left, right)};
-
-        if (!join)
-        {
-            return;
-        }
-
-        const auto [rank, product]{*join};
-
-        const auto end_left{parts.end(start)};
-
-        const auto end_right{parts.end(next)};
-
-        heap.push({.rank = rank, .start = start, .end_left = end_left, .end_right = end_right, .product = product});
-    }};
-
-    for (std::size_t start{0}; start + 1 < piece.size(); ++start)
+    if (piece.size() <= longest_scanned_piece)
     {
-        push(start);
+        return merged_by_scan(piece, byte_ids_, joins_);
     }
 
-    while (!heap.empty())
-    {
-        const auto [rank, start, end_left, end_right, product]{heap.top()};
-
-        heap.pop();
-
-        if (!parts.holds(start, end_left, end_right))
-        {
-            continue;
-        }
-
-        parts.join(start, product);
-
-        const auto previous{parts.previous(start)};
-
-        if (previous != Parts::none)
-        {
-            push(previous);
-        }
-
-        if (parts.next(start) != Parts::none)
-        {
-            push(start);
-        }
-    }
-
-    return parts.ids();
+    return merged_by_heap(piece, byte_ids_, joins_);
 }
 
 } // namespace matisse::encode

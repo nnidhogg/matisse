@@ -69,6 +69,7 @@ public:
      * @return The ids.
      * @throws std::invalid_argument If the text is not well-formed UTF-8, as the Segmenter refuses it, the byte offset
      *         counted from the start of the stretch that holds the ill-formed sequence.
+     * @throws std::length_error If a piece is 2^32 bytes or longer, as Merger::merged() refuses it.
      */
     [[nodiscard]] std::vector<load::Token_id_t> encode(std::string_view text) const;
 
@@ -83,6 +84,7 @@ public:
      * @param cache The cache, filled by this encoder alone.
      * @return The ids.
      * @throws std::invalid_argument If the text is not well-formed UTF-8, as encode() refuses it.
+     * @throws std::length_error If a piece is 2^32 bytes or longer, as encode() refuses it.
      */
     [[nodiscard]] std::vector<load::Token_id_t> encode(std::string_view text, Piece_cache& cache) const;
 
@@ -119,6 +121,7 @@ public:
      * @return The ids.
      * @throws std::invalid_argument If the text is not well-formed UTF-8, as encode() refuses it, the byte offset
      *         counted from the start of what the walk or the worker classes.
+     * @throws std::length_error If a piece is 2^32 bytes or longer, as encode() refuses it.
      */
     [[nodiscard]] std::vector<load::Token_id_t> encode_parallel(std::string_view text, std::size_t chunks) const;
 
@@ -179,6 +182,7 @@ private:
      * @param cache The cache of merged pieces the chunk's pieces are looked up in and stored to.
      * @return The ids.
      * @throws std::invalid_argument If what the chunk segments is not well-formed UTF-8, as the Segmenter refuses it.
+     * @throws std::length_error If a piece is 2^32 bytes or longer, as Merger::merged() refuses it.
      */
     [[nodiscard]] std::vector<load::Token_id_t> encode_chunk(
             std::string_view text, std::span<const Occurrence> found, std::size_t begin, std::size_t end,

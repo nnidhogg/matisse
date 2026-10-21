@@ -30,7 +30,9 @@
  * pair of lower rank than its own included, and under the pair rule it is Hugging Face's merge_all, one join at a time,
  * the pair of least rank at its leftmost occurrence; each on every table and every piece, since a discarded entry names
  * parts that never stand together again and every adjacent pair the rule can join has an entry. A piece of n bytes
- * takes at most n - 1 joins and fewer than 3n entries.
+ * takes at most n - 1 joins and fewer than 3n entries. A piece of at most 128 bytes is merged instead by a scan of its
+ * parts held in an array on the stack, each with the join it makes with the next, which makes the same joins in the
+ * same order: the least rank present, the leftmost on a tie, and after each join the two pairs it makes looked up.
  */
 namespace matisse::encode
 {
@@ -65,6 +67,8 @@ public:
      *        lookup.
      * @param piece The piece's bytes.
      * @return The ids of the parts the merge ends with, in order; none for the empty piece.
+     * @throws std::length_error If the piece is 2^32 bytes or longer, past the merge's 32-bit offsets; the message
+     *         names its length.
      */
     [[nodiscard]] std::vector<load::Token_id_t> merged(std::string_view piece) const;
 

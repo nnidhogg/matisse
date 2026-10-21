@@ -707,13 +707,19 @@ entry once stale stays stale, and every adjacent pair the rule can join has a li
 pushed and each join pushes the two pairs it makes. So each join is of the pair of least rank present, the leftmost on a
 tie: under the rank rule that is tiktoken's `_byte_pair_merge`, a join that makes a pair of lower rank than its own,
 such as `.:.:` on Llama 3's rank file, needing no case of its own, and under the pair rule it is Hugging Face's
-`merge_all`. A piece of n bytes takes at most n - 1 joins and fewer than 3n entries. The tests hold the merge to the
-plain pair loop and to tiktoken's scan, written out in the tests, on every multi-byte token of GPT-2's, cl100k's,
-o200k's and Llama 3's files (50,001, 100,000, 199,742 and 127,744 tokens) and on 20,000 seeded random pieces of each,
-GPT-2's to encoder.py's pass as well, and on 3,000 random tables over three symbols, which make ties, overlaps, joins
-that make a pair of lower rank, and tables on which the pass and one join at a time differ. The merge forms every
-multi-byte token from its own bytes on cl100k and o200k, all but `<|endoftext|>` on GPT-2, and all but 588 on Llama 3,
-which Llama 3's whole-piece lookup gives whole.
+`merge_all`. A piece of n bytes takes at most n - 1 joins and fewer than 3n entries, each entry's and each node's
+offsets held in 32 bits, so the heap merges a piece shorter than 2^32 bytes and refuses a longer one. A piece of at most
+128 bytes is merged instead by a scan of its parts, held in an array on the stack, each part with the join it makes with
+the next: the scan finds the least rank from the left, so the leftmost on a tie, makes that join and looks up the joined
+part's pairs with its two neighbours, which is the join the heap makes and the two pairs it pushes, so both make the
+same joins in the same order; on Chinese the encoding with no cache gains as the threshold rises to 128 and no further.
+The tests hold the merge to the plain pair loop and to tiktoken's scan, written out in the tests, on every multi-byte
+token of GPT-2's, cl100k's, o200k's and Llama 3's files (50,001, 100,000, 199,742 and 127,744 tokens) and on 20,000
+seeded random pieces of each, a quarter of them 100 to 300 bytes long, either side of the scan's threshold, GPT-2's to
+encoder.py's pass as well, and on 3,000 random tables over three symbols, each with one piece of 100 to 160 symbols
+beside its short ones, which make ties, overlaps, joins that make a pair of lower rank, and tables on which the pass and
+one join at a time differ. The merge forms every multi-byte token from its own bytes on cl100k and o200k, all but
+`<|endoftext|>` on GPT-2, and all but 588 on Llama 3, which Llama 3's whole-piece lookup gives whole.
 
 `encode()` looks each piece up whole first where the definition says so, then in a `Piece_cache`, and only then merges
 it, storing its ids. The ids of a piece are a function of its bytes and the definition alone, the merge building its
