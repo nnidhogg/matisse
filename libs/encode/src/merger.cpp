@@ -101,6 +101,21 @@ struct Scanned_part
 };
 
 /**
+ * @brief Returns the index of the pair of a piece's bytes at an offset in the table of byte pairs.
+ * @param piece The piece's bytes.
+ * @param at The offset of the left byte, the right byte after it.
+ * @return The left byte's value times 256 plus the right byte's.
+ */
+[[nodiscard]] std::size_t byte_pair_of(const std::string_view piece, const std::size_t at) noexcept
+{
+    const auto left{static_cast<unsigned char>(piece[at])};
+
+    const auto right{static_cast<unsigned char>(piece[at + 1])};
+
+    return left * byte_count + right;
+}
+
+/**
  * @brief Returns the ids of a piece merged by a scan of its parts: each part holding the join it makes with the part
  *        after it, the least rank found by a scan from the left, that join made, and the joins of the joined part with
  *        its neighbours looked up again.
@@ -111,12 +126,14 @@ struct Scanned_part
  * the joined part's with the part before it and with the part after it, every other pair standing as it stood.
  * @param piece The piece's bytes, at most longest_scanned_piece.
  * @param byte_ids The id of every byte as a token of one byte.
+ * @param byte_pairs The join of every pair of bytes as tokens of one byte, by the left byte's value times 256 plus the
+ *        right byte's.
  * @param joins The join of every pair of parts the merge may join.
  * @return The ids of the parts the merge ends with, in order.
  */
 [[nodiscard]] std::vector<load::Token_id_t> merged_by_scan(
         const std::string_view piece, const std::span<const load::Token_id_t, byte_count> byte_ids,
-        const Join_table& joins)
+        const std::span<const Join_table::Join> byte_pairs, const Join_table& joins)
 {
     std::array<Scanned_part, longest_scanned_piece> parts{};
 
@@ -152,11 +169,20 @@ struct Scanned_part
         const auto byte{static_cast<unsigned char>(piece[at])};
 
         parts[at].id = byte_ids[byte];
+
+        parts[at].rank = no_rank;
     }
 
-    for (std::size_t at{0}; at < count; ++at)
+    // Every part is a byte to begin with, so the first pairs are read from the table of byte pairs.
+    for (std::size_t at{0}; at + 1 < count; ++at)
     {
-        look_up(at);
+        const auto pair{byte_pair_of(piece, at)};
+
+        const auto [rank, product]{byte_pairs[pair]};
+
+        parts[at].rank = rank;
+
+        parts[at].product = product;
     }
 
     while (true)
@@ -439,13 +465,15 @@ std::vector<load::Token_id_t> Parts::ids() const
  *        the join makes pushed.
  * @param piece The piece's bytes, shorter than 2^32 bytes.
  * @param byte_ids The id of every byte as a token of one byte.
+ * @param byte_pairs The join of every pair of bytes as tokens of one byte, by the left byte's value times 256 plus the
+ *        right byte's.
  * @param joins The join of every pair of parts the merge may join.
  * @return The ids of the parts the merge ends with, in order.
  * @throws std::length_error If the piece is 2^32 bytes or longer; the message names its length.
  */
 [[nodiscard]] std::vector<load::Token_id_t> merged_by_heap(
         const std::string_view piece, const std::span<const load::Token_id_t, byte_count> byte_ids,
-        const Join_table& joins)
+        const std::span<const Join_table::Join> byte_pairs, const Join_table& joins)
 {
     if (piece.size() > std::numeric_limits<Offset_t>::max())
     {
@@ -480,9 +508,23 @@ std::vector<load::Token_id_t> Parts::ids() const
         heap.push({.rank = rank, .start = start, .end_left = end_left, .end_right = end_right, .product = product});
     }};
 
+    // Every part is a byte to begin with, so the first pairs are read from the table of byte pairs.
     for (Offset_t start{0}; start + 1 < piece.size(); ++start)
     {
-        push(start);
+        const auto pair{byte_pair_of(piece, start)};
+
+        const auto [rank, product]{byte_pairs[pair]};
+
+        if (rank == no_rank)
+        {
+            continue;
+        }
+
+        const auto end_left{start + 1};
+
+        const auto end_right{start + 2};
+
+        heap.push({.rank = rank, .start = start, .end_left = end_left, .end_right = end_right, .product = product});
     }
 
     while (!heap.empty())
@@ -521,6 +563,7 @@ Merger::Merger(const load::Definition& definition)
     , ids_{ids_of(definition.spellings)}
     , byte_ids_{byte_ids_of(ids_)}
     , joins_{joins_of(definition, ids_)}
+    , byte_pairs_{byte_pairs_of(byte_ids_, joins_)}
 {}
 
 Merger::Ids_t Merger::ids_of(const std::span<const std::string> spellings)
@@ -637,6 +680,34 @@ Join_table::Joins_t Merger::joins_of(const load::Definition& definition, const I
     return joins;
 }
 
+Merger::Byte_pairs_t Merger::byte_pairs_of(const Byte_ids_t& byte_ids, const Join_table& joins)
+{
+    Byte_pairs_t byte_pairs(byte_count * byte_count, Join_table::Join{.rank = no_rank, .product = {}});
+
+    for (std::size_t left{0}; left < byte_count; ++left)
+    {
+        for (std::size_t right{0}; right < byte_count; ++right)
+        {
+            const auto left_id{byte_ids[left]};
+
+            const auto right_id{byte_ids[right]};
+
+            const auto join{joins.find(left_id, right_id)};
+
+            if (!join)
+            {
+                continue;
+            }
+
+            const auto pair{left * byte_count + right};
+
+            byte_pairs[pair] = *join;
+        }
+    }
+
+    return byte_pairs;
+}
+
 std::optional<load::Token_id_t> Merger::whole_piece(const std::string_view piece) const
 {
     if (!whole_piece_lookup_)
@@ -658,10 +729,10 @@ std::vector<load::Token_id_t> Merger::merged(const std::string_view piece) const
 {
     if (piece.size() <= longest_scanned_piece)
     {
-        return merged_by_scan(piece, byte_ids_, joins_);
+        return merged_by_scan(piece, byte_ids_, byte_pairs_, joins_);
     }
 
-    return merged_by_heap(piece, byte_ids_, joins_);
+    return merged_by_heap(piece, byte_ids_, byte_pairs_, joins_);
 }
 
 } // namespace matisse::encode

@@ -13,7 +13,7 @@
 /**
  * @file
  * @brief The joins of a merge by the ids of their parts, Join_table: a flat table with open addressing that the merge
- *        looks every pair up in.
+ *        looks every pair up in, the pairs of two bytes once, at construction.
  *
  * The table is built from a map of the joins and holds exactly its entries. Every key is placed once, at the first free
  * slot of its walk, the slots from its home on; the slots that placement passed over were full then and no slot is ever

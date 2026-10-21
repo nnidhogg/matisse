@@ -33,6 +33,8 @@
  * takes at most n - 1 joins and fewer than 3n entries. A piece of at most 128 bytes is merged instead by a scan of its
  * parts held in an array on the stack, each with the join it makes with the next, which makes the same joins in the
  * same order: the least rank present, the leftmost on a tie, and after each join the two pairs it makes looked up.
+ * Every part is a byte to begin with, so both read the first pairs from a table of the joins of all 65,536 pairs of
+ * bytes, filled from the join table at construction, and look later pairs up in the join table.
  */
 namespace matisse::encode
 {
@@ -102,6 +104,12 @@ private:
     using Byte_ids_t = std::array<load::Token_id_t, 256>;
 
     /**
+     * @brief The join of every pair of bytes as tokens of one byte, by the left byte's value times 256 plus the right
+     *        byte's, a rank of all ones where the pair has none.
+     */
+    using Byte_pairs_t = std::vector<Join_table::Join>;
+
+    /**
      * @brief Returns the id of every spelling.
      * @param spellings The bytes of every ordinary token, by id.
      * @return The ids, by spelling.
@@ -129,6 +137,15 @@ private:
     [[nodiscard]] static Join_table::Joins_t joins_of(const load::Definition& definition, const Ids_t& ids);
 
     /**
+     * @brief Returns the join of every pair of bytes as tokens of one byte, which every piece's merge looks up first,
+     *        read from the join table once so that those lookups index a table of 65,536 joins rather than hash.
+     * @param byte_ids The id of every byte as a token of one byte.
+     * @param joins The join of every pair of parts the merge may join.
+     * @return The joins, by the left byte's value times 256 plus the right byte's.
+     */
+    [[nodiscard]] static Byte_pairs_t byte_pairs_of(const Byte_ids_t& byte_ids, const Join_table& joins);
+
+    /**
      * @brief Whether a piece that is a token is looked up whole before any merge.
      */
     bool whole_piece_lookup_;
@@ -147,6 +164,11 @@ private:
      * @brief The join of every pair of parts the merge may join, in the flat table the merge looks pairs up in.
      */
     Join_table joins_;
+
+    /**
+     * @brief The join of every pair of bytes as tokens of one byte.
+     */
+    Byte_pairs_t byte_pairs_;
 };
 
 } // namespace matisse::encode
