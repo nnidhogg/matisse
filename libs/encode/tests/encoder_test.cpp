@@ -13,6 +13,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <tuple>
 #include <utility>
 #include <vector>
@@ -700,7 +701,74 @@ TEST(Encoder_test, The_ids_are_those_of_no_cache_on_a_text_whose_distinct_pieces
 
     const auto encoder{encoder_of(definition)};
 
-    EXPECT_EQ(encoder.encode(text), uncached_ids(definition, text));
+    const auto expected{uncached_ids(definition, text)};
+
+    EXPECT_EQ(encoder.encode(text), expected);
+
+    // A kept cache, full after the first call, gives the same ids on the second.
+    Piece_cache cache{piece_cache_capacity};
+
+    EXPECT_EQ(encoder.encode(text, cache), expected);
+    EXPECT_EQ(encoder.encode(text, cache), expected);
+}
+
+TEST(Encoder_test, A_cache_kept_across_calls_gives_encode_s_ids_on_texts_whose_pieces_repeat_from_call_to_call)
+{
+    const auto encoder{encoder_of(test_definition(), {"<|end|>"})};
+
+    std::mt19937 random{11};
+
+    Piece_cache cache{piece_cache_capacity};
+
+    for (std::size_t count{0}; count < 500; ++count)
+    {
+        const auto text{random_text(random, 20)};
+
+        EXPECT_EQ(encoder.encode(text, cache), encoder.encode(text)) << text;
+    }
+}
+
+TEST(Encoder_test, Threads_that_each_keep_a_cache_of_their_own_give_encode_s_ids_on_every_document)
+{
+    const auto encoder{encoder_of(test_definition())};
+
+    std::mt19937 random{13};
+
+    std::vector<std::string> documents{};
+
+    for (std::size_t count{0}; count < 400; ++count)
+    {
+        documents.push_back(random_text(random, 20));
+    }
+
+    constexpr std::size_t threads{4};
+
+    std::vector<std::vector<Token_id_t>> encoded(documents.size());
+
+    // Each thread takes every fourth document and writes its own slots, so the threads share only the encoder and the
+    // documents, both read.
+    const auto work{[&](const std::size_t first) {
+        Piece_cache cache{piece_cache_capacity};
+
+        for (auto index{first}; index < documents.size(); index += threads)
+        {
+            encoded[index] = encoder.encode(documents[index], cache);
+        }
+    }};
+
+    {
+        std::vector<std::jthread> workers{};
+
+        for (std::size_t worker{0}; worker < threads; ++worker)
+        {
+            workers.emplace_back(work, worker);
+        }
+    }
+
+    for (const auto [index, document] : std::views::enumerate(documents))
+    {
+        EXPECT_EQ(encoded[index], encoder.encode(document)) << document;
+    }
 }
 
 TEST(Encoder_test, The_ids_are_those_of_no_cache_and_decode_spells_the_text_back_on_seeded_random_texts)

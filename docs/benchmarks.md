@@ -22,14 +22,15 @@ chunks, and 136,695,218 to 148,173,524 cuts per tokenizer and inventory are chec
 line, the count and the SHA-256 of the ids as little-endian 32-bit words, which every other encoder's ids are compared
 by, and the certified-anchor supply.
 
-`matisse_bench` times `encode()`, the same encoding with no cache, the segmentation alone, one call per prompt,
-`encode_parallel()` at each worker count on one long text and `encode()` over a batch of documents spread over a pool of
-threads that each take the next document from a shared counter. Every row runs one pass that warms the caches and gives
-the result every timed pass must reproduce; that pass is held to `encode()`'s ids in the rows of the encoding with no
-cache, of `encode_parallel()` and of the batch, and every mode prints the ids line of `encode()`, so no figure is taken
-of an encoding other than the one whose ids are compared. Both programs run as CTest entries when `-DMATISSE_VOCAB_DIR`
-names the vocabulary directory, the bench for one pass of the single mode's rows on the validator's sample, and
-`-DMATISSE_CORPUS_DIR` adds the probe on the three corpora of the test strategy.
+`matisse_bench` times `encode()`, the same encoding with no cache, the segmentation alone, one call per prompt, with a
+piece cache of its own and with one cache kept across the calls, `encode_parallel()` at each worker count on one long
+text and `encode()` over a batch of documents spread over a pool of threads that each take the next document from a
+shared counter and keep one cache across the documents they take. Every row runs one pass that warms the caches and
+gives the result every timed pass must reproduce; that pass is held to `encode()`'s ids in the rows of the encoding with
+no cache, of the prompts with a kept cache, of `encode_parallel()` and of the batch, and every mode prints the ids line
+of `encode()`, so no figure is taken of an encoding other than the one whose ids are compared. Both programs run as
+CTest entries when `-DMATISSE_VOCAB_DIR` names the vocabulary directory, the bench for one pass of the single mode's
+rows on the validator's sample, and `-DMATISSE_CORPUS_DIR` adds the probe on the three corpora of the test strategy.
 
 The other encoders run from harnesses kept beside the corpora outside the repository, so that nothing a vendor ships
 enters it, and print rows and ids lines in the same format:

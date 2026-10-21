@@ -20,10 +20,10 @@
  * The ids of a piece are a function of the piece's bytes and the definition alone, the merge building its parts afresh
  * for every piece, so a cache keyed by the whole of a piece's bytes and filled under one definition returns the ids the
  * merge would, and never changes an id. The cache fills until it holds its bound and then stops, as Hugging Face's BPE
- * model's cache does, with no eviction; one cache serves one call of the encoder, which is where repetition lives. On
- * twitter.json and munch's Python and C++ sources at 15b2863c, GPT-2's pattern makes 111,510 to 1,118,131 pieces of
- * which 3,684 to 14,032 are distinct, and cl100k's leaves 1,527 to 9,218 distinct pieces that are not looked up whole,
- * so 16,384 entries hold every piece the merge makes on them.
+ * model's cache does, with no eviction; one cache serves one caller, a call of the encoder or a thread's calls, which
+ * is where repetition lives. On twitter.json and munch's Python and C++ sources at 15b2863c, GPT-2's pattern makes
+ * 111,510 to 1,118,131 pieces of which 3,684 to 14,032 are distinct, and cl100k's leaves 1,527 to 9,218 distinct pieces
+ * that are not looked up whole, so 16,384 entries hold every piece the merge makes on them.
  */
 namespace matisse::encode
 {

@@ -632,6 +632,8 @@ public:
 
     [[nodiscard]] std::vector<load::Token_id_t> encode(std::string_view text) const;
 
+    [[nodiscard]] std::vector<load::Token_id_t> encode(std::string_view text, Piece_cache& cache) const;
+
     [[nodiscard]] std::vector<std::size_t> chunk_boundaries(std::string_view text, std::size_t chunks) const;
 
     [[nodiscard]] std::vector<load::Token_id_t> encode_parallel(std::string_view text, std::size_t chunks) const;
@@ -696,13 +698,16 @@ o200k, all but `<|endoftext|>` on GPT-2, and all but 588 on Llama 3, which Llama
 `encode()` looks each piece up whole first where the definition says so, then in a `Piece_cache`, and only then merges
 it, storing its ids. The ids of a piece are a function of its bytes and the definition alone, the merge building its
 parts afresh for every piece, so a cache keyed by the whole of a piece's bytes and filled under one definition never
-changes an id. A cache serves one call of `encode()` or one worker of `encode_parallel()`, with no lock and no lifetime
-beyond the call; it holds 16,384 pieces of up to 255 bytes and then stops filling, with no eviction, as Hugging Face's
-BPE model's cache stops. On the three corpora of the test strategy GPT-2's pattern makes 3,684 to 14,032 distinct pieces
-and cl100k's leaves 1,527 to 9,218 distinct pieces that are not looked up whole, so the bound holds every piece the
-merge makes on them. The tests hold `encode()` to the known answers and to every piece looked up or merged with no
-cache, on seeded random texts and on a text whose distinct pieces fill the cache past its bound, and `decode()` of
-`encode()` to the text, special tokens allowed and not.
+changes an id. A cache serves one caller and has no lock: `encode(text)` makes one for the call, `encode(text, cache)`
+reads and fills one the caller keeps across its calls, one per thread, and every worker of `encode_parallel()` makes its
+own; it holds 16,384 pieces of up to 255 bytes and then stops filling, with no eviction, as Hugging Face's BPE model's
+cache stops. On the three corpora of the test strategy GPT-2's pattern makes 3,684 to 14,032 distinct pieces and
+cl100k's leaves 1,527 to 9,218 distinct pieces that are not looked up whole, so the bound holds every piece the merge
+makes on them. The tests hold `encode()` to the known answers and to every piece looked up or merged with no cache, on
+seeded random texts and on a text whose distinct pieces fill the cache past its bound, encoded twice more with one kept
+cache, and `decode()` of `encode()` to the text, special tokens allowed and not; and they hold `encode()` with a cache
+kept across 500 seeded texts, and on four threads each keeping a cache of its own, to `encode()` with a cache of its
+own.
 
 The encoder claims one thing. For every text the definition accepts, `encode_parallel()` returns the ids `encode()`
 returns, at every chunk count. That is the splice theorem with the proposition that the cut transfers and the decided
@@ -943,7 +948,8 @@ Each step lands green on its own, its tests first where a fixture exists.
     `decode()` with both merge rules, the whole-piece lookup and special-token cuts, held to the known answers; a fast
     BPE merge, linear or near-linear per piece in the manner of the GitHub bpe crate and tiktoken's rank merge, held
     byte-identical to the simple pair loop and to the known answers, with its exactness argued before it lands; and a
-    bounded piece cache keyed by pre-token bytes, one per call and per worker, which never changes an id.
+    bounded piece cache keyed by pre-token bytes, one per caller, a call, a thread or a worker, which never changes an
+    id.
 12. encode: `chunk_boundaries()` and `encode_parallel()`, with the self-consistency suite of layer 2 and the
     thread-sanitizer job.
 13. The corpus probe on the three corpora, its figures into [benchmarks.md](benchmarks.md). The timing compares against

@@ -16,8 +16,6 @@
 #include <utility>
 #include <vector>
 
-#include "matisse/encode/piece_cache.hpp"
-
 namespace matisse::encode
 {
 namespace
@@ -193,9 +191,16 @@ std::vector<load::Special_token> Encoder::allowed_of(
 
 std::vector<load::Token_id_t> Encoder::encode(const std::string_view text) const
 {
+    Piece_cache cache{piece_cache_capacity};
+
+    return encode(text, cache);
+}
+
+std::vector<load::Token_id_t> Encoder::encode(const std::string_view text, Piece_cache& cache) const
+{
     const auto found{occurrences(text)};
 
-    return encode_chunk(text, found, 0, text.size());
+    return encode_chunk(text, found, 0, text.size(), cache);
 }
 
 std::vector<Encoder::Occurrence> Encoder::occurrences(const std::string_view text) const
@@ -257,11 +262,9 @@ std::vector<Encoder::Occurrence> Encoder::occurrences(const std::string_view tex
 
 std::vector<load::Token_id_t> Encoder::encode_chunk(
         const std::string_view text, const std::span<const Occurrence> found, const std::size_t begin,
-        const std::size_t end) const
+        const std::size_t end, Piece_cache& cache) const
 {
     std::vector<load::Token_id_t> ids{};
-
-    Piece_cache cache{piece_cache_capacity};
 
     const auto append{
             [&ids](const std::span<const load::Token_id_t> more) { ids.insert(ids.end(), more.begin(), more.end()); }};
@@ -454,7 +457,9 @@ std::vector<load::Token_id_t> Encoder::encode_parallel(const std::string_view te
     const auto encode_one{[&](const std::size_t chunk) {
         try
         {
-            encoded[chunk] = encode_chunk(text, found, boundaries[chunk], boundaries[chunk + 1]);
+            Piece_cache cache{piece_cache_capacity};
+
+            encoded[chunk] = encode_chunk(text, found, boundaries[chunk], boundaries[chunk + 1], cache);
         }
         catch (...)
         {

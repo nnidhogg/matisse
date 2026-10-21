@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "matisse/encode/merger.hpp"
+#include "matisse/encode/piece_cache.hpp"
 #include "matisse/encode/window_index.hpp"
 #include "matisse/load/definition.hpp"
 #include "matisse/pretok/pattern.hpp"
@@ -24,13 +25,13 @@
  * encode() splits the text at every allowed special token, segments each stretch between them as a complete input, and
  * merges every piece alone by the definition's merge rule, the pair rule or tiktoken's rank merge, a piece that is a
  * token taking its id whole where the definition's whole-piece lookup says so; Merger, in merger.hpp, holds the lookup
- * and the merge, and a Piece_cache, in piece_cache.hpp, keeps the merged pieces of one call. chunk_boundaries() walks
- * forward from each equal byte target to the first cut, an anchor of the window table, which Window_index, in
- * window_index.hpp, finds, or an edge of an allowed special token, and encode_parallel() gives each chunk to a worker
- * that segments it with the table's right context and keeps the pieces ending at its cut. The encoder claims one thing:
- * for every text the definition accepts, encode_parallel() returns the ids encode() returns, at every chunk count. That
- * is the splice theorem of the report on pre-tokenizer certification with the proposition that a certified cut is a
- * pre-token boundary and the decided right context.
+ * and the merge, and a Piece_cache, in piece_cache.hpp, keeps the merged pieces of one call or of one caller's calls.
+ * chunk_boundaries() walks forward from each equal byte target to the first cut, an anchor of the window table, which
+ * Window_index, in window_index.hpp, finds, or an edge of an allowed special token, and encode_parallel() gives each
+ * chunk to a worker that segments it with the table's right context and keeps the pieces ending at its cut. The encoder
+ * claims one thing: for every text the definition accepts, encode_parallel() returns the ids encode() returns, at every
+ * chunk count. That is the splice theorem of the report on pre-tokenizer certification with the proposition that a
+ * certified cut is a pre-token boundary and the decided right context.
  */
 namespace matisse::encode
 {
@@ -70,6 +71,20 @@ public:
      *         counted from the start of the stretch that holds the ill-formed sequence.
      */
     [[nodiscard]] std::vector<load::Token_id_t> encode(std::string_view text) const;
+
+    /**
+     * @brief Returns the ids of a text as encode() does, the merged pieces kept in a cache the caller owns across its
+     *        calls.
+     *
+     * The cache holds the ids of a piece as this encoder's definition merges them, so a cache filled by one encoder is
+     * not passed to another; the encoder is not changed by a call and the cache is the only state a call shares with
+     * its caller, so it serves one thread at a time with no lock, each thread of a pool holding its own.
+     * @param text The text, well-formed UTF-8.
+     * @param cache The cache, filled by this encoder alone.
+     * @return The ids.
+     * @throws std::invalid_argument If the text is not well-formed UTF-8, as encode() refuses it.
+     */
+    [[nodiscard]] std::vector<load::Token_id_t> encode(std::string_view text, Piece_cache& cache) const;
 
     /**
      * @brief Returns where encode_parallel() cuts a text into chunks: each interior boundary the first cut at or after
@@ -161,11 +176,13 @@ private:
      * @param found The occurrences of the allowed special tokens in the text, as occurrences() finds them.
      * @param begin The chunk's first byte, the text's start or a cut.
      * @param end The byte after the chunk, a cut or the text's end.
+     * @param cache The cache of merged pieces the chunk's pieces are looked up in and stored to.
      * @return The ids.
      * @throws std::invalid_argument If what the chunk segments is not well-formed UTF-8, as the Segmenter refuses it.
      */
     [[nodiscard]] std::vector<load::Token_id_t> encode_chunk(
-            std::string_view text, std::span<const Occurrence> found, std::size_t begin, std::size_t end) const;
+            std::string_view text, std::span<const Occurrence> found, std::size_t begin, std::size_t end,
+            Piece_cache& cache) const;
 
     /**
      * @brief Returns the boundaries chunk_boundaries() returns, the occurrences of the allowed special tokens found.

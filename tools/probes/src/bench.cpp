@@ -1,17 +1,18 @@
 // Times matisse's encoder on GPT-2's and cl100k's pinned vocabularies, every figure taken after the result it times is
 // held to a reference, so that a row measures a proved-identical encoding: the encoding with no cache,
-// encode_parallel() and the batch to encode()'s ids, and encode() itself to the digest it prints, which the fixtures'
-// and the vendors' digests are compared by.
+// encode_parallel(), the batch and the prompts with a kept cache to encode()'s ids, and encode() itself to the digest
+// it prints, which the fixtures' and the vendors' digests are compared by.
 //
 // The modes. single times, on one corpus, encode(), the same encoding with no cache, each piece looked up whole where
 // the definition says so and otherwise merged alone, and the segmentation alone, the pattern's Segmenter over the whole
-// text. prompts times encode() called once per prompt, the prompts of a file separated by NUL bytes, and reports the
-// latency of a call beside the throughput of a pass. parallel times encode_parallel() on one long text under the
-// factorization inventory, the default, at each worker count given, beside encode() in the same run. batch times
-// encode() over the documents of a file separated by NUL bytes, spread over a pool of threads that each take the next
-// document from a shared counter, at each thread count given. Every mode prints the ids line, `ids TOKENIZER NAME COUNT
-// DIGEST`, the SHA-256 of the ids as little-endian 32-bit words, the prompts' and the documents' ids concatenated in
-// order.
+// text. prompts times encode() called once per prompt, the prompts of a file separated by NUL bytes, each call with a
+// piece cache of its own and then with one cache kept across every call, and reports the latency of a call beside the
+// throughput of a pass. parallel times encode_parallel() on one long text under the factorization inventory, the
+// default, at each worker count given, beside encode() in the same run. batch times encode() over the documents of a
+// file separated by NUL bytes, spread over a pool of threads that each take the next document from a shared counter and
+// keep one piece cache across the documents they take, at each thread count given. Every mode prints the ids line, `ids
+// TOKENIZER NAME COUNT DIGEST`, the SHA-256 of the ids as little-endian 32-bit words, the prompts' and the documents'
+// ids concatenated in order.
 //
 // Every row runs one pass first, which warms the caches and gives the result every timed pass must reproduce, then
 // PASSES timed passes over input already in memory, and reports the best, median and worst pass in MiB/s and the best
@@ -56,6 +57,7 @@
 #include "matisse/common/sha256.hpp"
 #include "matisse/encode/encoder.hpp"
 #include "matisse/encode/merger.hpp"
+#include "matisse/encode/piece_cache.hpp"
 #include "matisse/gpt2/tokenizer.hpp"
 #include "matisse/load/definition.hpp"
 #include "matisse/pretok/segmenter.hpp"
@@ -185,6 +187,28 @@ struct Timing
      * @brief The tokens, or the pieces, of the result.
      */
     std::size_t count{};
+};
+
+/**
+ * @brief The timing of encode() called once per prompt: the ids of the first pass, and the seconds of every timed pass
+ *        and of every timed call.
+ */
+struct Prompt_timing
+{
+    /**
+     * @brief The ids of each prompt in the first pass, which every timed pass reproduces.
+     */
+    Batch_ids first{};
+
+    /**
+     * @brief The timed passes in seconds, each the sum of its calls, ascending.
+     */
+    std::vector<double> seconds{};
+
+    /**
+     * @brief Every timed call in seconds, ascending.
+     */
+    std::vector<double> latencies{};
 };
 
 /**
@@ -659,25 +683,18 @@ Ids concatenated(const std::span<const Ids> encoded)
 }
 
 /**
- * @brief Times encode() called once per prompt, and prints the latency of a call beside the throughput of a pass.
- * @param tokenizer_name The tokenizer's name.
- * @param encoder The tokenizer's encoder.
- * @param name The prompt file's name.
+ * @brief Times one way of calling encode() once per prompt: a first pass, then the timed passes, each call timed alone.
+ * @tparam Encode Callable returning the ids of one prompt.
  * @param prompts The prompts.
  * @param passes The timed passes.
- * @throws std::invalid_argument If there is no prompt.
+ * @param encode_one The call.
+ * @return The timing.
  * @throws std::runtime_error If a timed pass gives other ids than the first.
  */
-void run_prompts(
-        const std::string_view tokenizer_name, const Encoder& encoder, const std::string_view name,
-        const std::span<const std::string_view> prompts, const std::size_t passes)
+template <typename Encode>
+Prompt_timing time_prompts(
+        const std::span<const std::string_view> prompts, const std::size_t passes, const Encode& encode_one)
 {
-    if (prompts.empty() || bytes_of(prompts) == 0)
-    {
-        throw std::invalid_argument{std::format("{} holds no prompt", name)};
-    }
-
-    // Each call is timed alone, so a pass is the sum of its calls and the latencies are those of every timed call.
     std::vector<double> latencies{};
 
     const auto encode_all{[&](const bool timed_pass) {
@@ -689,7 +706,7 @@ void run_prompts(
         {
             const auto start{std::chrono::steady_clock::now()};
 
-            auto ids{encoder.encode(prompt)};
+            auto ids{encode_one(prompt)};
 
             const std::chrono::duration<double> elapsed{std::chrono::steady_clock::now() - start};
 
@@ -730,15 +747,31 @@ void run_prompts(
 
     std::ranges::sort(latencies);
 
+    return {.first = first, .seconds = std::move(seconds), .latencies = std::move(latencies)};
+}
+
+/**
+ * @brief Prints the row of a prompt timing and the latency of a call beside it.
+ * @param tokenizer_name The tokenizer's name.
+ * @param row The row's name.
+ * @param latency_row The name of the latency line.
+ * @param name The prompt file's name.
+ * @param prompts The prompts.
+ * @param timing The timing.
+ */
+void print_prompt_rows(
+        const std::string_view tokenizer_name, const std::string_view row, const std::string_view latency_row,
+        const std::string_view name, const std::span<const std::string_view> prompts, const Prompt_timing& timing)
+{
+    const auto& [first, seconds, latencies]{timing};
+
     const auto sizes{first | std::views::transform(&Ids::size)};
 
     const auto tokens{std::ranges::fold_left(sizes, 0UZ, std::plus{})};
 
     const auto bytes{bytes_of(prompts)};
 
-    print_ids(tokenizer_name, name, concatenated(first));
-
-    print_row(tokenizer_name, "prompts", name, bytes, {.seconds = seconds, .count = tokens}, "tokens");
+    print_row(tokenizer_name, row, name, bytes, {.seconds = seconds, .count = tokens}, "tokens");
 
     // The order statistic at floor(q (n - 1)) of the n latencies ascending, as the vendors' harnesses take it.
     const auto microseconds{[&](const double quantile) {
@@ -760,10 +793,56 @@ void run_prompts(
     const auto p99{microseconds(0.99)};
 
     std::printf(
-            "%-7.*s %-15s %-24.*s %zu calls of %.0f bytes on average: per call mean %.2f, p50 %.2f, p90 %.2f, p99 "
+            "%-7.*s %-15.*s %-24.*s %zu calls of %.0f bytes on average: per call mean %.2f, p50 %.2f, p90 %.2f, p99 "
             "%.2f us\n",
-            static_cast<int>(tokenizer_name.size()), tokenizer_name.data(), "latency", static_cast<int>(name.size()),
-            name.data(), prompts.size(), average_bytes, mean, p50, p90, p99);
+            static_cast<int>(tokenizer_name.size()), tokenizer_name.data(), static_cast<int>(latency_row.size()),
+            latency_row.data(), static_cast<int>(name.size()), name.data(), prompts.size(), average_bytes, mean, p50,
+            p90, p99);
+}
+
+/**
+ * @brief Times encode() called once per prompt, each call with a cache of its own and then with one cache kept across
+ *        every call and pass, which the timed passes find full, and prints the latency of a call beside the throughput
+ *        of a pass.
+ * @param tokenizer_name The tokenizer's name.
+ * @param encoder The tokenizer's encoder.
+ * @param name The prompt file's name.
+ * @param prompts The prompts.
+ * @param passes The timed passes.
+ * @throws std::invalid_argument If there is no prompt.
+ * @throws std::runtime_error If a timed pass gives other ids than the first, or the kept cache other ids than encode().
+ */
+void run_prompts(
+        const std::string_view tokenizer_name, const Encoder& encoder, const std::string_view name,
+        const std::span<const std::string_view> prompts, const std::size_t passes)
+{
+    if (prompts.empty() || bytes_of(prompts) == 0)
+    {
+        throw std::invalid_argument{std::format("{} holds no prompt", name)};
+    }
+
+    const auto encode_alone{[&](const std::string_view prompt) { return encoder.encode(prompt); }};
+
+    const auto alone{time_prompts(prompts, passes, encode_alone)};
+
+    const auto all{concatenated(alone.first)};
+
+    print_ids(tokenizer_name, name, all);
+
+    print_prompt_rows(tokenizer_name, "prompts", "latency", name, prompts, alone);
+
+    matisse::encode::Piece_cache cache{matisse::encode::piece_cache_capacity};
+
+    const auto encode_kept{[&](const std::string_view prompt) { return encoder.encode(prompt, cache); }};
+
+    const auto kept{time_prompts(prompts, passes, encode_kept)};
+
+    if (kept.first != alone.first)
+    {
+        throw std::runtime_error{"the prompts' ids with a kept cache differ from encode()'s"};
+    }
+
+    print_prompt_rows(tokenizer_name, "prompts kept", "latency kept", name, prompts, kept);
 }
 
 /**
@@ -814,7 +893,8 @@ void run_parallel(
 
 /**
  * @brief Returns the ids of every document, encode() called on each by a pool of threads that take the next document
- *        from a shared counter, the calling thread one of them.
+ *        from a shared counter, the calling thread one of them, each thread keeping one piece cache across the
+ *        documents it takes.
  * @param encoder The encoder.
  * @param documents The documents.
  * @param threads The threads of the pool.
@@ -836,9 +916,11 @@ Batch_ids encode_batch(
     const auto work{[&] {
         try
         {
+            matisse::encode::Piece_cache cache{matisse::encode::piece_cache_capacity};
+
             for (auto index{next.fetch_add(1)}; index < documents.size(); index = next.fetch_add(1))
             {
-                encoded[index] = encoder.encode(documents[index]);
+                encoded[index] = encoder.encode(documents[index], cache);
             }
         }
         catch (...)
@@ -872,7 +954,8 @@ Batch_ids encode_batch(
 }
 
 /**
- * @brief Times encode() over the documents of a batch at each thread count, and prints the batch's ids line.
+ * @brief Times encode() over the documents of a batch at each thread count, every pass held to encode() called on each
+ *        document with a cache of its own, and prints the batch's ids line.
  * @param tokenizer_name The tokenizer's name.
  * @param encoder The tokenizer's encoder.
  * @param name The batch's name.
@@ -885,7 +968,14 @@ void run_batch(
         const std::span<const std::string_view> documents, const std::size_t passes,
         const std::span<const std::size_t> threads)
 {
-    const auto serial{encode_batch(encoder, documents, 1)};
+    Batch_ids serial{};
+
+    serial.reserve(documents.size());
+
+    for (const auto document : documents)
+    {
+        serial.push_back(encoder.encode(document));
+    }
 
     const auto all{concatenated(serial)};
 
