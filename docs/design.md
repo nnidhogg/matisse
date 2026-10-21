@@ -3,14 +3,17 @@
 The decisions behind matisse, in the order a reader meets them: what the library is and is not, the repository and its
 build, the libraries' interfaces, how the vendor verifiers move from their Python reference into C++, how the result is
 tested against the real tokenizers, what matisse needs from munch, the choices still open, and the order of work. Steps
-1 to 12 of the order of work are built, `read_tokenizer_json()` waiting on open choice 5: load reads GPT-2's files and
+1 to 13 of the order of work are built, `read_tokenizer_json()` waiting on open choice 5: load reads GPT-2's files and
 tiktoken rank files, pretok classes and segments a text and builds a pattern's split verifier and factorization lexer,
 validate decides a pattern's window tables under both certificates with their right contexts, measures their anchor
 supply on an input and renders the report as text and as JSON, the gpt2 and cl100k libraries describe their patterns,
 lookup finds them, `matisse-validate` reports a rank file read under a pattern, and encode encodes a text and decodes
 its ids under both merge rules, with the whole-piece lookup, the special-token cuts, the fast merge and the piece cache,
 and encodes it in parallel, cut only at the certified cuts of either inventory, while `validate_merges()` is still to be
-written. The sketches below give names and types, and they change as the code is written.
+written; on the fourteen corpora of [benchmarks.md](benchmarks.md) matisse's ids equal tiktoken's, Hugging Face
+tokenizers' and the bpe crate's by digest wherever each of them ran, and the page holds what the corpus probe, the bench
+and the other encoders' harnesses measured. The sketches below give names and types, and they change as the code is
+written.
 
 ## **What matisse is and is not**
 
@@ -43,7 +46,7 @@ matisse/
   CMakeLists.txt  CITATION.cff  LICENSE  README.md  THIRD_PARTY_NOTICES.md  .clang-format  .gitignore  .gitmodules
   .github/workflows/  ci.yml  codeql.yml
   cmake/matisse-config.cmake
-  docs/  usage.md  how_it_works.md  design.md
+  docs/  usage.md  how_it_works.md  design.md  benchmarks.md
   external/  CMakeLists.txt  googletest/  munch/          (submodule, pinned to the munch release it builds against)
   libs/
     CMakeLists.txt
@@ -58,7 +61,7 @@ matisse/
   tools/
     CMakeLists.txt
     validate/   the matisse-validate command line
-    probes/     the corpus probe
+    probes/     the corpus probe and the bench
     fuzz/       libFuzzer harnesses
     unicode/    generate_classes.py
 ```
@@ -73,9 +76,9 @@ first version, holding its pattern description, its generated class tables, the 
 names none, and its tests, and lookup finds the tokenizer libraries by name. Each is a target `matisse_<name>` with the
 alias `matisse::<name>`, in namespace `matisse::<name>`, and the umbrella `matisse::matisse` links all of them, as
 `hopper::hopper` links hopper's; a consumer of one tokenizer links its library alone, `matisse::cl100k`, which brings
-load and pretok with it. common holds the tests' SHA-256 alone, which the tokenizer tests hold the pinned files and the
-class tables to; its target `matisse_common` lives in the build tree only, with no alias, no install rule and no place
-in the umbrella.
+load and pretok with it. common holds the tests' and the probes' SHA-256 alone, which the tokenizer tests hold the
+pinned files and the class tables to, and the probes the corpora and their ids; its target `matisse_common` lives in the
+build tree only, with no alias, no install rule and no place in the umbrella.
 
 The top-level CMakeLists.txt is hopper's with the prefix changed: `project(matisse VERSION 0.1.0 LANGUAGES CXX)`, C++23
 required, `MATISSE_IS_TOP_LEVEL`, Release by default at the top level only, `MATISSE_SOURCE_DIR` for test data paths,
@@ -688,9 +691,9 @@ right context, given the four hypotheses (N), (S), (P) and (B), which the loader
 chunk count from one to sixteen, at sixty-four and at every cut the rule takes, on a pattern of the tests' own and on
 GPT-2's and cl100k's with their pinned vocabularies, special tokens allowed and not on the tests' pattern and cl100k's;
 they hold `chunk_boundaries()` on the tests' pattern to brute force over every certified cut of the report, and a cut in
-white space, at the right-context counterexamples, to the right context each inventory decided. Nothing is claimed about
-speed until it is measured, and nothing about the vendor's own implementation beyond the known answers and corpus ids of
-the test strategy.
+white space, at the right-context counterexamples, to the right context each inventory decided. Its speed is what
+[benchmarks.md](benchmarks.md) measures, and nothing is claimed about the vendors' own implementations beyond the ids
+and the speeds measured there.
 
 ## **The vendor verifiers, from Python into C++**
 
@@ -773,20 +776,28 @@ Three layers, each against something independent of the code under test:
    `decode(encode(x)) == x`; M accepts the `Segmenter`'s marking of every text; every anchor is a `Segmenter` boundary.
    The texts mix the known counterexample shapes, whitespace runs before letters and punctuation, newlines followed by
    tab runs, long letter runs, contractions in both cases, and allowed and disallowed special tokens.
-3. **The three corpora**, by the probe in tools/probes: `matisse_corpus` takes the definition and corpus files, holds
-   each to its digest, and checks the ids of `encode()` and of `encode_parallel()` at every anchor and at the 4,096- and
-   65,536-codepoint chunkings against a digest of the reference ids (the SHA-256 of the ids as little-endian 32-bit
-   words, with their count) written by the fixture script; given no files it runs the generated texts of layer 2, which
-   is the form registered with CTest, as hopper_edit_relex does. The corpora are twitter.json, and munch's 10 tracked
-   Python files and its 306 tracked C++ sources and headers at 15b2863c, concatenated in path order by the fixture
-   script and pinned by digest. The probe prints the supply table, which this page quotes from its output.
+3. **The corpora**, by the probe in tools/probes: `matisse_corpus` takes the vocabulary directory and corpus files,
+   holds GPT-2's and cl100k's pinned files to their digests, a corpus the fixtures name to the digest of its text, and
+   the ids of `encode()` to the known-answer fixture's digest of the reference ids (the SHA-256 of the ids as
+   little-endian 32-bit words, with their count), written by the fixture script. On every corpus it checks the ids of
+   every piece merged with no cache and `decode()`, and for both inventories `encode_parallel()` at the worker counts
+   past one that the bench times, at the 4,096- and 65,536-codepoint chunkings and at every anchor, skipping a chunk
+   count past 32,768 since every chunk is a thread. At every anchor it also holds the pieces a worker keeps to the
+   serial pieces, with no thread per chunk. Given the vocabulary directory alone it runs the generated texts of layer 2,
+   which is the form registered with CTest, as hopper_edit_relex does, and `-DMATISSE_CORPUS_DIR` registers the three
+   corpora as well. The corpora are twitter.json, and munch's 10 tracked Python files and its 306 tracked C++ sources
+   and headers at 15b2863c, concatenated in path order by the fixture script and pinned by digest;
+   [benchmarks.md](benchmarks.md) adds eleven more, and the probe's ids lines are what the vendors' ids are compared by.
+   The probe prints the supply table, which [benchmarks.md](benchmarks.md) quotes from its output.
 
 The reference ids in the fixtures are the Python references, encoder.py's loop and tiktoken's rank merge restated over
 Python's engine with Unicode 15.0, which are held to the published known answers and not run against the vendors' code
 on the corpora. One step of the order of work closes that: tiktoken and Hugging Face tokenizers are run on the three
 corpora outside the tree, and the fixture script records their id digests beside the restated references', so the probe
 holds matisse to the vendors themselves. A difference there would be the Unicode version or a vendor's engine, and it
-would name the codepoint.
+would name the codepoint. On the three corpora and the eleven of [benchmarks.md](benchmarks.md) there is none:
+tiktoken's, Hugging Face's and the bpe crate's ids are matisse's by digest on every corpus each of them ran on, and
+recording them into the fixture is step 15.
 
 The fuzz harnesses in tools/fuzz follow hopper's contract (a refusal is the answer to bad input, a crash, a sanitizer
 report or a hang is a finding): one feeds arbitrary bytes to the tokenizer.json and tiktoken readers, and one feeds
@@ -854,7 +865,9 @@ matisse's by the division.
 4. **Threading model.** munch's `tokenize_all_parallel()` spawns one `std::jthread` per chunk beyond the last, runs the
    last on the calling thread, joins at scope end, and rethrows the first exception on the calling thread. Settled: the
    same, with no pool and no executor, the caller choosing the chunk count; a pool is a question for later, settled by
-   measurement.
+   measurement. Measured ([benchmarks.md](benchmarks.md)): 24 workers encode enwik9 11.2 times faster than `encode()`,
+   and a chunking at every anchor of munch's C++ sources, 559,642 chunks, fails with `std::system_error` where the
+   system cannot start that many threads, so the corpus probe asks for at most 32,768 chunks.
 5. **The JSON reader.** tokenizer.json and encoder.json are JSON, with `\u` escapes and surrogate pairs in GPT-2's
    vocabulary. hopper has a complete RFC 8259 parser (`hopper::json::Parser`, held to the JSONTestSuite), munch has
    none, and a third-party library would be a new vendored dependency. Taking hopper means a second submodule, and
@@ -884,9 +897,10 @@ matisse's by the division.
 9. **The encoder's default inventory.** The factorization inventory needs one codepoint of right context and rests on
    less, its cut holding for every complete factorization into the gate-erased languages whatever the engine does inside
    its matches; the policy inventory needs two and rests on Q, validated and not machine-checked, but lands on more
-   boundaries (93.91 to 100.00 per cent against 57.30 to 92.88). Both reach a longest uncut stretch within 24 bytes of
-   the longest piece on all six runs, at width four. Recommendation: the factorization inventory by default, the policy
-   inventory by choice.
+   boundaries (93.91 to 100.00 per cent against 57.30 to 92.88 at width four, and 96.09 to 100.00 against 57.30 to 92.88
+   at the default width of five, as [benchmarks.md](benchmarks.md) quotes the probe). Both reach a longest uncut stretch
+   within 24 bytes of the longest piece on all six runs, at width four. Recommendation: the factorization inventory by
+   default, the policy inventory by choice.
 
 ## **Order of work**
 
@@ -912,8 +926,18 @@ Each step lands green on its own, its tests first where a fixture exists.
     bounded piece cache keyed by pre-token bytes, one per call and per worker, which never changes an id.
 12. encode: `chunk_boundaries()` and `encode_parallel()`, with the self-consistency suite of layer 2 and the
     thread-sanitizer job.
-13. The corpus probe on the three corpora, its figures into this page. The timing compares against tiktoken, Hugging
-    Face tokenizers and the bpe crate.
+13. The corpus probe on the three corpora, its figures into [benchmarks.md](benchmarks.md). The timing compares against
+    tiktoken, Hugging Face tokenizers and the bpe crate. Built: `matisse_corpus` and `matisse_bench` in tools/probes,
+    the figures in [benchmarks.md](benchmarks.md). On fourteen corpora, from twitter.json to a mixed file of 1.98 GB,
+    matisse's ids under GPT-2 and cl100k equal tiktoken's, Hugging Face's and the bpe crate's by digest wherever each
+    ran. At the default width of five the supply on the three corpora reaches 57.30 to 92.88 per cent of the pre-token
+    boundaries under the factorization inventory and 96.09 to 100.00 under the policy inventory, the longest gap between
+    anchors within 24 bytes of the longest piece. On one core `encode()` runs at 9.0 to 37.1 MiB/s, 0.42 to 1.74 times
+    tiktoken's rate, and the bpe crate runs 1.8 to 5.1 times faster than matisse. A call on a prompt of about a kilobyte
+    costs matisse a mean of 94 microseconds under GPT-2 and 116 under cl100k, against tiktoken's 58 and 63 and the bpe
+    crate's 26 and 25. `encode_parallel()` encodes enwik9 at 162.7 and 177.9 MiB/s with 24 workers, 11.2 times
+    `encode()`. The profile puts the class of a code point first on prose and code, 35 to 58 per cent of the time, and
+    the merge first on Chinese under cl100k, 76 per cent.
 14. validate: `validate_merges()`, the lazy route for byte-level tables without a pre-tokenizer, held to the lazy
     fixture.
 15. The vendor cross-check (tiktoken, Hugging Face tokenizers), its digests into the fixture, the Unicode version

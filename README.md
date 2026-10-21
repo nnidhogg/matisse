@@ -92,6 +92,9 @@ The default `CMAKE_BUILD_TYPE` is `Release` when unset.
   the libraries, how a tokenizer is added, the loaders' proved results, how the vendor verifiers move from their
   reference into C++, the test strategy against the real tokenizers, what matisse needs from munch 3.0.0, the open
   choices, and the order of work.
+- [docs/benchmarks.md](docs/benchmarks.md): the ids matisse gives on fourteen corpora beside tiktoken, Hugging Face
+  tokenizers and the bpe crate, how fast each encodes on one core, on short prompts and in parallel, the profile of
+  matisse's encoding, and the commands that reproduce them.
 
 The theory matisse builds on is in munch's technical reports, listed in the [munch
 README](https://github.com/nnidhogg/munch) by their arXiv identifiers:
@@ -114,6 +117,11 @@ The vocabulary files the loaders' and the encoder's tests read, GPT-2's gpt2-voc
 cl100k_base.tiktoken, and for the merge's tests also o200k_base.tiktoken and llama3.tiktoken, are not in the tree. A
 directory holding them is named with `-DMATISSE_VOCAB_DIR=DIR`, each file is held to the SHA-256 docs/design.md gives,
 and the tests that need them skip when no directory is named; nothing is fetched at test time.
+
+The corpus probe and the bench in `tools/probes` register with CTest when the vocabulary directory is named, the probe
+on generated texts and the bench for one pass on a sample, and `-DMATISSE_CORPUS_DIR=DIR` adds the probe on the three
+corpora of the test strategy, which are not in the tree either; [docs/benchmarks.md](docs/benchmarks.md) says how they
+are built.
 
 ## **License**
 

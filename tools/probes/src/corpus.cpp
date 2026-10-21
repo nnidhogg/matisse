@@ -542,8 +542,8 @@ std::size_t byte_after(const std::string_view text, const std::size_t from, cons
  * @brief Expects every cut of a text to splice: the pieces of each chunk between consecutive cuts, segmented with the
  *        right context as a complete input and kept while they end in the chunk, are the serial pieces of the chunk.
  *
- * This is what a worker of encode_parallel() keeps, held at every cut without a thread per chunk; the ids follow,
- * since every piece is encoded alone.
+ * This is what a worker of encode_parallel() keeps, held at every cut without a thread per chunk; the ids follow, since
+ * every piece is encoded alone.
  * @param segmenter The pattern's segmenter.
  * @param right_context The inventory's right context in code points.
  * @param text The text, with no special token allowed.
@@ -636,8 +636,13 @@ void check_generated(const Tokenizer& tokenizer, const matisse::validate::Report
 
             const auto what{std::format("{} generated text {}", tokenizer_name, text_index)};
 
-            expect(uncached_ids(merger, segmenter, text) == ids, what + ": encode() gives the ids with no cache");
-            expect(encoder.decode(ids) == text, what + ": decode() spells the text back");
+            const auto uncached{uncached_ids(merger, segmenter, text)};
+
+            expect(uncached == ids, what + ": encode() gives the ids with no cache");
+
+            const auto decoded{encoder.decode(ids)};
+
+            expect(decoded == text, what + ": decode() spells the text back");
 
             auto every{counts};
 
@@ -707,7 +712,9 @@ std::vector<std::size_t> corpus_chunk_counts(const std::string_view text)
 
     for (const auto length : chunk_points)
     {
-        counts.push_back(std::max(1UZ, points / length));
+        const auto chunks{std::max(1UZ, points / length)};
+
+        counts.push_back(chunks);
     }
 
     std::ranges::sort(counts);
@@ -759,10 +766,14 @@ void check_corpus(
 
     const matisse::pretok::Segmenter segmenter{pattern};
 
-    expect(uncached_ids(merger, segmenter, text) == ids,
+    const auto uncached{uncached_ids(merger, segmenter, text)};
+
+    expect(uncached == ids,
            std::format("{} {}: encode() gives the ids of every piece merged with no cache", tokenizer_name, name));
-    expect(factorization.decode(ids) == text,
-           std::format("{} {}: decode() spells the text back", tokenizer_name, name));
+
+    const auto decoded{factorization.decode(ids)};
+
+    expect(decoded == text, std::format("{} {}: decode() spells the text back", tokenizer_name, name));
 
     auto counts{corpus_chunk_counts(text)};
 

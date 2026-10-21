@@ -62,7 +62,7 @@ target_link_libraries(matisse_bench
         matisse_validate
 )
 
-# The bench's test is one pass of every single-thread row on the validator's sample, for its references and its exit.
+# The bench's test is one pass of the single mode's rows on the validator's sample, for its references and its exit.
 if (MATISSE_VOCAB_DIR)
     add_test(NAME matisse_corpus COMMAND matisse_corpus ${MATISSE_VOCAB_DIR})
 

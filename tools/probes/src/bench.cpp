@@ -284,10 +284,12 @@ void print_provenance(const std::span<const std::string_view> arguments)
 
     const auto commit{matisse::tools::probes::commit};
 
-    const auto dirty{matisse::tools::probes::dirty ? " (uncommitted changes present)" : ""};
+    const std::string_view dirty{matisse::tools::probes::dirty ? " (uncommitted changes present)" : ""};
 
     std::printf("matisse_bench\n");
-    std::printf("  commit      %.*s%s\n", static_cast<int>(commit.size()), commit.data(), dirty);
+    std::printf(
+            "  commit      %.*s%.*s\n", static_cast<int>(commit.size()), commit.data(), static_cast<int>(dirty.size()),
+            dirty.data());
     std::printf("  collected   %s\n", stamp.data());
     std::printf("  compiler    %s\n", __VERSION__);
 
@@ -555,23 +557,6 @@ void print_ids(const std::string_view tokenizer, const std::string_view input, c
 }
 
 /**
- * @brief Returns the ids of a batch concatenated in the documents' order.
- * @param encoded The ids of each document.
- * @return The ids.
- */
-Ids concatenated(const std::span<const Ids> encoded)
-{
-    Ids all{};
-
-    for (const auto& document_ids : encoded)
-    {
-        all.insert(all.end(), document_ids.begin(), document_ids.end());
-    }
-
-    return all;
-}
-
-/**
  * @brief Returns the ids of a text with no cache: every piece the segmenter cuts looked up whole where the definition
  *        says so, and otherwise merged alone.
  * @param merger The definition's merger.
@@ -654,6 +639,23 @@ std::size_t bytes_of(const std::span<const std::string_view> parts)
     const auto sizes{parts | std::views::transform(&std::string_view::size)};
 
     return std::ranges::fold_left(sizes, 0UZ, std::plus{});
+}
+
+/**
+ * @brief Returns the ids of a batch concatenated in the documents' order.
+ * @param encoded The ids of each document.
+ * @return The ids.
+ */
+Ids concatenated(const std::span<const Ids> encoded)
+{
+    Ids all{};
+
+    for (const auto& document_ids : encoded)
+    {
+        all.insert(all.end(), document_ids.begin(), document_ids.end());
+    }
+
+    return all;
 }
 
 /**
@@ -789,7 +791,9 @@ void run_parallel(
 
     for (const auto count : workers)
     {
-        const auto chunks{encoder.chunk_boundaries(text, count).size() - 1};
+        const auto boundaries{encoder.chunk_boundaries(text, count)};
+
+        const auto chunks{boundaries.size() - 1};
 
         const auto parallel{timed(passes, [&] { return encoder.encode_parallel(text, count); }, ids, ids.size())};
 
@@ -797,7 +801,9 @@ void run_parallel(
 
         print_row(tokenizer_name, row, name, text.size(), parallel, "tokens");
 
-        const auto speedup{serial_median / median_of(parallel.seconds)};
+        const auto parallel_median{median_of(parallel.seconds)};
+
+        const auto speedup{serial_median / parallel_median};
 
         std::printf(
                 "%-7.*s %-15s %-24.*s %zu chunks, median speedup %.2f over encode()\n",
