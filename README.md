@@ -73,7 +73,8 @@ as [docs/design.md](docs/design.md) describes.
   and 64-bit ARM. Clang 18 and older cannot compile munch's tokenizer, which matisse builds against.
 - CMake 3.20.6 or later.
 - munch as the git submodule under `external/munch`, checked out at the release matisse builds against; googletest
-  beside it for the tests. Everything else is the standard library.
+  beside it for the tests, and Boost's header-only container_hash, which munch fetches and the encoder builds with; an
+  installed matisse does not depend on it. Everything else is the standard library.
 
 ### **Building the Project**
 

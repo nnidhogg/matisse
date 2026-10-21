@@ -2,7 +2,6 @@
 
 #include <compare>
 #include <cstddef>
-#include <cstdint>
 #include <format>
 #include <functional>
 #include <limits>
@@ -23,17 +22,6 @@ namespace
  * @brief The number of byte values, each a token of one byte.
  */
 constexpr std::size_t byte_count{256};
-
-/**
- * @brief Returns the key of a pair of parts in the join table.
- * @param left The left part's id.
- * @param right The right part's id.
- * @return The left id in the upper 32 bits and the right id in the lower.
- */
-[[nodiscard]] constexpr std::uint64_t key_of(const load::Token_id_t left, const load::Token_id_t right) noexcept
-{
-    return (std::uint64_t{left} << 32U) | right;
-}
 
 /**
  * @brief Returns a spelling as a refusal quotes it: a printable ASCII byte as itself, the quote and the backslash
@@ -348,11 +336,11 @@ Merger::Byte_ids_t Merger::byte_ids_of(const Ids_t& ids)
     return byte_ids;
 }
 
-Merger::Joins_t Merger::joins_of(const load::Definition& definition, const Ids_t& ids)
+Join_table::Joins_t Merger::joins_of(const load::Definition& definition, const Ids_t& ids)
 {
     const auto& [merge_rule, whole_piece_lookup, spellings, merges, specials]{definition};
 
-    Joins_t joins{};
+    Join_table::Joins_t joins{};
 
     if (merge_rule == load::Merge_rule::ranks)
     {
@@ -379,9 +367,9 @@ Merger::Joins_t Merger::joins_of(const load::Definition& definition, const Ids_t
                     continue;
                 }
 
-                const auto key{key_of(left_found->second, right_found->second)};
+                const auto key{Join_table::key_of(left_found->second, right_found->second)};
 
-                joins.emplace(key, Join{.rank = product_id, .product = product_id});
+                joins.emplace(key, Join_table::Join{.rank = product_id, .product = product_id});
             }
         }
 
@@ -413,9 +401,9 @@ Merger::Joins_t Merger::joins_of(const load::Definition& definition, const Ids_t
 
         const auto product_id{id_of(product)};
 
-        const auto key{key_of(left_id, right_id)};
+        const auto key{Join_table::key_of(left_id, right_id)};
 
-        joins.insert_or_assign(key, Join{.rank = rank, .product = product_id});
+        joins.insert_or_assign(key, Join_table::Join{.rank = rank, .product = product_id});
     }
 
     return joins;
@@ -444,27 +432,14 @@ std::vector<load::Token_id_t> Merger::merged(const std::string_view piece) const
 
     std::priority_queue<Entry, std::vector<Entry>, std::greater<>> heap{};
 
-    const auto join_at{[&](const std::size_t start) -> std::optional<Join> {
+    const auto push{[&](const std::size_t start) {
         const auto next{parts.next(start)};
 
         const auto left{parts.id(start)};
 
         const auto right{parts.id(next)};
 
-        const auto key{key_of(left, right)};
-
-        const auto found{joins_.find(key)};
-
-        if (found == joins_.end())
-        {
-            return std::nullopt;
-        }
-
-        return found->second;
-    }};
-
-    const auto push{[&](const std::size_t start) {
-        const auto join{join_at(start)};
+        const auto join{joins_.find(left, right)};
 
         if (!join)
         {
@@ -474,8 +449,6 @@ std::vector<load::Token_id_t> Merger::merged(const std::string_view piece) const
         const auto [rank, product]{*join};
 
         const auto end_left{parts.end(start)};
-
-        const auto next{parts.next(start)};
 
         const auto end_right{parts.end(next)};
 

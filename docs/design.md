@@ -86,12 +86,13 @@ required, `MATISSE_IS_TOP_LEVEL`, Release by default at the top level only, `MAT
 the harnesses exist, `MATISSE_BUILD_FUZZER` instrumenting the whole tree with the submodule included. munch is consumed
 exactly as hopper consumes it, as the submodule by default, added by external/CMakeLists.txt, or with
 `MATISSE_SYSTEM_MUNCH` an installed munch found by `find_package(munch REQUIRED)` at the top level so that every library
-sees its imported targets; `MATISSE_INSTALL` requires the system munch, exports `matisse_targets` under
-`lib/cmake/matisse`, and cmake/matisse-config.cmake calls `find_dependency(munch)`. Every library whose headers name
-munch types links munch publicly, as hopper_json does: load (its definition holds `munch::verifier::Merge`), pretok (a
-pattern's sets are `munch::regex::utf8::Code_point_range` tables, its verifier a `munch::verifier::Verifier`) and
-validate (`munch::verifier::Verifier`); a tokenizer library reaches munch through pretok. The version starts at 0.1.0
-with "pre-1.0" in the README, as hopper's did.
+sees its imported targets, the submodule's external/boost then added for the Boost module the encoder builds with;
+`MATISSE_INSTALL` requires the system munch, exports `matisse_targets` under `lib/cmake/matisse`, and
+cmake/matisse-config.cmake calls `find_dependency(munch)`. Every library whose headers name munch types links munch
+publicly, as hopper_json does: load (its definition holds `munch::verifier::Merge`), pretok (a pattern's sets are
+`munch::regex::utf8::Code_point_range` tables, its verifier a `munch::verifier::Verifier`) and validate
+(`munch::verifier::Verifier`); a tokenizer library reaches munch through pretok. The version starts at 0.1.0 with
+"pre-1.0" in the README, as hopper's did.
 
 CI copies hopper's workflow with munch's sanitizer matrix: format-check with clang-format-19, build and test with GCC
 13.3 (with coverage) and with Clang 19, an ARM64 job where plain char is unsigned, the address and undefined-behavior
@@ -590,6 +591,16 @@ the gap figures and the density are munch-audit's, as `supply()` defines them.
 ```cpp
 namespace matisse::encode
 {
+class Join_table
+{
+public:
+    explicit Join_table(const Joins_t& joins);
+
+    [[nodiscard]] static constexpr std::uint64_t key_of(load::Token_id_t left, load::Token_id_t right) noexcept;
+
+    [[nodiscard]] std::optional<Join> find(load::Token_id_t left, load::Token_id_t right) const noexcept;
+};
+
 class Merger
 {
 public:
@@ -684,7 +695,13 @@ doubly linked list over its bytes, as Hugging Face's `Word` keeps its symbols, a
 ordered by rank and then by where the left part starts, each entry recording that start and the ends of both parts; an
 entry popped whose parts no longer stand as recorded is discarded. The merge looks every pair up by its parts' ids, and
 the rule enters only in that table: under `Merge_rule::ranks` a pair is in it exactly when the parts' concatenation is a
-spelling, at that spelling's rank, and under `Merge_rule::pairs` exactly when the merge table lists it. It is exact on
+spelling, at that spelling's rank, and under `Merge_rule::pairs` exactly when the merge table lists it. That table is a
+`Join_table`, a flat table with open addressing built from the map of the joins: the least power of two of slots at
+least twice the joins, 524,288 on cl100k's file, a key's walk starting at its hash by `hash_combine` from Boost's
+container_hash, the header-only module munch fetches, and running to the next slot until it meets the key or a free one.
+Every key is placed at the first free slot of its walk; the slots that placement passed over were full then and no slot
+is ever emptied, so a lookup meets every key the map holds before a free slot and stops at a free slot for any other.
+The tests hold the table to its map on every pair of 300 ids, a third of the pairs drawn into the map. It is exact on
 every table and every piece. A part's end only grows and a part joined into the one before it never stands again, so an
 entry once stale stays stale, and every adjacent pair the rule can join has a live entry, since the initial pairs are
 pushed and each join pushes the two pairs it makes. So each join is of the pair of least rank present, the leftmost on a

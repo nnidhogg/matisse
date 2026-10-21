@@ -5,6 +5,7 @@ project(matisse_encode)
 
 add_library(${PROJECT_NAME}
         src/encoder.cpp
+        src/join_table.cpp
         src/merger.cpp
         src/piece_cache.cpp
         src/window_index.cpp
@@ -22,6 +23,10 @@ target_include_directories(${PROJECT_NAME}
 
 # The encoder is built from a definition, a report and the pattern it segments by, and munch arrives through them.
 target_link_libraries(${PROJECT_NAME}
+        PRIVATE
+        # Build-interface only: the join table hashes with Boost's header-only container_hash, which munch fetches, and
+        # a consumer of the installed package never needs it.
+        $<BUILD_INTERFACE:munch_boost>
         PUBLIC
         matisse_load
         matisse_pretok
@@ -31,6 +36,7 @@ target_link_libraries(${PROJECT_NAME}
 if (MATISSE_BUILD_TESTS)
     add_executable(${PROJECT_NAME}_tests
             tests/encoder_test.cpp
+            tests/join_table_test.cpp
             tests/merger_test.cpp
             tests/piece_cache_test.cpp
             tests/window_index_test.cpp
