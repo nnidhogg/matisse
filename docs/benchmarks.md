@@ -1437,6 +1437,10 @@ threads, 133.8 and 120.0 MiB/s, or from Python a kept pool mapping `encode_to_nu
 `encode_ordinary_batch()`'s 47.9 and 48.2 in the same session. Hugging Face's crate runs at 2.42 to 2.93 times the rate
 of Python's `encode()`, the call the earlier sections time, under GPT-2 and at 1.93 to 2.47 times under cl100k.
 
+What made these numbers possible is what matisse refuses, a cut that is not certified, an id that is merely close and
+every feature exactness does not need. The full inventory of what the library refuses, guarantees, and provides escape
+hatches for is in [limits.md](limits.md).
+
 ## **Reproducing**
 
 The corpora are built by `make_corpora.py fetch` and `derive` in the corpus directory, whose README is the recipe, and

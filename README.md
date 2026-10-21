@@ -93,6 +93,7 @@ The default `CMAKE_BUILD_TYPE` is `Release` when unset.
   the libraries, how a tokenizer is added, the loaders' proved results, how the vendor verifiers move from their
   reference into C++, the test strategy against the real tokenizers, what matisse needs from munch 3.0.0, the open
   choices, and the order of work.
+- [docs/limits.md](docs/limits.md): the library's scope, what every call guarantees, and the escape hatches.
 - [docs/benchmarks.md](docs/benchmarks.md): the ids matisse gives on fourteen corpora beside tiktoken, Hugging Face
   tokenizers and the bpe crate, how fast each encodes on one core, on short prompts and in parallel, the profile of
   matisse's encoding, and the commands that reproduce them.
