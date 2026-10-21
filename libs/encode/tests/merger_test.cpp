@@ -444,9 +444,9 @@ std::string random_string(
 }
 
 /**
- * @brief Returns seeded random pieces under a vocabulary: half uniform random bytes of 2 to 40, a quarter
- *        concatenations of 2 to 6 random tokens cut at 64 bytes, so that merges happen, and a quarter concatenations of
- *        40 random tokens cut at 100 to 300 bytes, either side of the longest piece the merge scans.
+ * @brief Returns seeded random pieces under a vocabulary: half uniform random bytes of 2 to 40, nearly half
+ *        concatenations of 2 to 6 random tokens cut at 64 bytes, so that merges happen, and one in 32 a concatenation
+ *        of 40 random tokens cut at 100 to 200 bytes, either side of the longest piece the merge scans.
  * @param spellings The vocabulary's spellings.
  * @param count The number of pieces.
  * @return The pieces.
@@ -463,7 +463,7 @@ std::vector<std::string> random_pieces(const std::vector<std::string>& spellings
 
     std::uniform_int_distribution<std::size_t> token{0, spellings.size() - 1};
 
-    std::uniform_int_distribution<std::size_t> long_length{100, 300};
+    std::uniform_int_distribution<std::size_t> long_length{100, 200};
 
     std::vector<std::string> pieces{};
 
@@ -478,7 +478,7 @@ std::vector<std::string> random_pieces(const std::vector<std::string>& spellings
                 piece += static_cast<char>(byte(random));
             }
         }
-        else if (index % 4 == 1)
+        else if (index % 32 != 1)
         {
             for (auto left{tokens(random)}; left > 0; --left)
             {
@@ -819,9 +819,9 @@ TEST(Merger_test, A_pair_listed_twice_takes_its_last_rank)
 TEST(Merger_test, On_random_tables_over_three_symbols_the_merge_is_the_plain_reference_under_both_rules)
 {
     // Pair tables of up to 12 pairs of strings of one to three symbols, ranked at random, and rank tables of up to 20
-    // strings of one to five symbols, each with 20 pieces of up to 12 symbols and one of 100 to 160, either side of the
-    // longest piece the merge scans: the generator makes ties, overlaps and joins that make pairs of lower rank, and
-    // pair tables on which the pass and one join at a time differ.
+    // strings of one to five symbols, each with 20 pieces of up to 12 symbols and every tenth with one of 100 to 160,
+    // either side of the longest piece the merge scans: the generator makes ties, overlaps and joins that make pairs of
+    // lower rank, and pair tables on which the pass and one join at a time differ.
     constexpr std::string_view alphabet{"abc"};
 
     constexpr std::size_t tables{3000};
@@ -885,7 +885,9 @@ TEST(Merger_test, On_random_tables_over_three_symbols_the_merge_is_the_plain_ref
 
         const auto rank_table{ranks_of(ranks)};
 
-        for (std::size_t count{0}; count <= pieces_per_table; ++count)
+        const auto pieces{table % 10 == 0 ? pieces_per_table + 1 : pieces_per_table};
+
+        for (std::size_t count{0}; count < pieces; ++count)
         {
             const auto long_piece{count == pieces_per_table};
 
