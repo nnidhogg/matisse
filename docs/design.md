@@ -375,16 +375,21 @@ commits the longest gate-passing accept of the first alternative that has one, a
 after it is in its gate or the input ends there. A gate reads one class symbol, so each alternative is compiled as the
 DFA of its language followed by one symbol of its gate or a sentinel byte, 0xFF, which no class symbol is and which
 `boundaries()` appends to the class string; munch's longest-match `run()` of that DFA at a boundary, less the one
-symbol, is the alternative's longest gate-passing accept, the end of the input passing through the sentinel.
-`boundaries()` returns the piece ends as byte offsets. `split_verifier()` is the verifier M built from the one-step
-relation Q of each pattern, minimized, and handed to munch as a `Verifier` table over the class symbols; the table
-munch's constructor makes of M has 21 states for GPT-2 and 32 for cl100k, 22 and 33 counting the dead state. As it
-builds Q it decides that the pattern is total, every nonempty residual matched by some alternative, which is the
-verifier fixture's `covered` decision, and refuses a pattern that is not, naming a shortest residual no alternative
-matches; the `Segmenter` takes a total pattern and does not check it, so the check runs once, where the validator builds
-the verifier, and never in the segmenter's loop. `factorization_lexer()` compiles the gate-erased union U of the
-alternatives over the class symbols as a munch token set, on which `is_split_window()` decides the factorization
-certificate.
+symbol, is the alternative's longest gate-passing accept, the end of the input passing through the sentinel. The
+alternatives' DFAs are walked at once as one automaton, their product, whose state is each alternative's state and the
+first alternative that has accepted so far, every later alternative stopped, and which accepts where that alternative
+accepts; the first that has accepted when the walk stops is the first alternative with an accept anywhere, and from that
+alternative's first accept on the product accepts exactly where it does, every accept before it being shorter, so the
+product's longest accept is that alternative's longest, and one `run()` at each boundary commits it. The product has 36
+states for GPT-2's twelve alternatives and 33 for cl100k's eight. `boundaries()` returns the piece ends as byte offsets.
+`split_verifier()` is the verifier M built from the one-step relation Q of each pattern, minimized, and handed to munch
+as a `Verifier` table over the class symbols; the table munch's constructor makes of M has 21 states for GPT-2 and 32
+for cl100k, 22 and 33 counting the dead state. As it builds Q it decides that the pattern is total, every nonempty
+residual matched by some alternative, which is the verifier fixture's `covered` decision, and refuses a pattern that is
+not, naming a shortest residual no alternative matches; the `Segmenter` takes a total pattern and does not check it, so
+the check runs once, where the validator builds the verifier, and never in the segmenter's loop. `factorization_lexer()`
+compiles the gate-erased union U of the alternatives over the class symbols as a munch token set, on which
+`is_split_window()` decides the factorization certificate.
 
 The construction behind these, the gate-sufficiency proposition, the transfer of a cut from class strings to text and
 the splice theorem the encoder rests on are the results of a report on pre-tokenizer certification that is not yet

@@ -1,7 +1,11 @@
 #include "matisse/pretok/segmenter.hpp"
 
+#include <algorithm>
 #include <cstddef>
 #include <format>
+#include <limits>
+#include <map>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -9,6 +13,9 @@
 #include <vector>
 
 #include <munch/core/builder.hpp>
+#include <munch/dfa/builder.hpp>
+#include <munch/dfa/label.hpp>
+#include <munch/dfa/token.hpp>
 #include <munch/pattern/parse.hpp>
 
 namespace matisse::pretok
@@ -64,6 +71,101 @@ constexpr char sentinel{'\xFF'};
 }
 
 /**
+ * @brief The state of an alternative that has stopped in a walk of the product: its automaton has no move on the symbol
+ *        read, no accept is reachable from where it stands, or an alternative before it has accepted.
+ */
+constexpr std::size_t stopped{std::numeric_limits<std::size_t>::max()};
+
+/**
+ * @brief Returns the state a state of the product of the alternatives' automata moves to on a symbol, std::nullopt
+ *        where every alternative that can still decide the piece has stopped.
+ *
+ * A state of the product is each alternative's state, then the index of the first alternative that has accepted, the
+ * alternatives' count while none has. Each alternative steps on the symbol; the first that has accepted becomes the
+ * least of the old one and every alternative accepting after the step, and every alternative after it stops, since a
+ * later alternative never decides the piece once an earlier one has an accept.
+ * @param gated The alternatives' automata, each its language followed by its lookahead.
+ * @param state The state of the product.
+ * @param symbol The class symbol or the sentinel read.
+ * @return The state moved to, std::nullopt where every alternative that can still decide the piece has stopped.
+ */
+[[nodiscard]] std::optional<std::vector<std::size_t>> moved_on(
+        const std::span<const munch::dfa::Simulator> gated, const std::span<const std::size_t> state, const char symbol)
+{
+    const auto count{gated.size()};
+
+    std::vector moved(count + 1, stopped);
+
+    auto first{state[count]};
+
+    for (std::size_t alternative{0}; alternative < count; ++alternative)
+    {
+        const auto from{state[alternative]};
+
+        if (from == stopped)
+        {
+            continue;
+        }
+
+        const auto& automaton{gated[alternative]};
+
+        const auto to{automaton.step(from, static_cast<unsigned char>(symbol))};
+
+        if (!to || !automaton.is_live(*to))
+        {
+            continue;
+        }
+
+        moved[alternative] = *to;
+
+        if (automaton.is_accepting(*to) && alternative < first)
+        {
+            first = alternative;
+        }
+    }
+
+    moved[count] = first;
+
+    const auto deciding_count{std::min(first + 1, count)};
+
+    const auto states{std::span{moved}.first(count)};
+
+    const auto later{states.subspan(deciding_count)};
+
+    std::ranges::fill(later, stopped);
+
+    const auto deciding{states.first(deciding_count)};
+
+    const auto all_stopped{std::ranges::all_of(
+            deciding, [](const std::size_t alternative_state) { return alternative_state == stopped; })};
+
+    if (all_stopped)
+    {
+        return std::nullopt;
+    }
+
+    return moved;
+}
+
+/**
+ * @brief Returns whether a state of the product accepts: the first alternative that has accepted accepts in it.
+ * @param gated The alternatives' automata.
+ * @param state The state of the product.
+ * @return True when it accepts.
+ */
+[[nodiscard]] bool accepts(const std::span<const munch::dfa::Simulator> gated, const std::span<const std::size_t> state)
+{
+    const auto first{state[gated.size()]};
+
+    if (first == gated.size() || state[first] == stopped)
+    {
+        return false;
+    }
+
+    return gated[first].is_accepting(state[first]);
+}
+
+/**
  * @brief Returns how many bytes the UTF-8 sequence a lead byte begins holds, as its high bits say.
  * @param lead The lead byte.
  * @return One to four.
@@ -95,26 +197,76 @@ constexpr char sentinel{'\xFF'};
 
 } // namespace
 
-Segmenter::Segmenter(const Pattern& pattern)
-    : classes_{pattern.alphabet}, alternatives_{compiled_of(pattern.alternatives)}
+Segmenter::Segmenter(const Pattern& pattern) : classes_{pattern.alphabet}, automaton_{automaton_of(pattern)}
 {}
 
-std::vector<Segmenter::Compiled> Segmenter::compiled_of(const std::span<const Alternative> alternatives)
+munch::dfa::Simulator Segmenter::automaton_of(const Pattern& pattern)
 {
-    std::vector<Compiled> compiled{};
+    const auto& [alphabet, alternatives]{pattern};
+
+    std::vector<munch::dfa::Simulator> gated{};
 
     for (const auto& [language, gate] : alternatives)
     {
         const auto lookahead{lookahead_of(gate)};
 
-        const auto gated{std::format("({}){}", language, lookahead)};
+        const auto gated_language{std::format("({}){}", language, lookahead)};
 
-        auto simulator{simulator_of(gated)};
-
-        compiled.push_back({.simulator = std::move(simulator)});
+        gated.push_back(simulator_of(gated_language));
     }
 
-    return compiled;
+    std::vector<std::size_t> start{};
+
+    for (const auto& automaton : gated)
+    {
+        start.push_back(automaton.init_state());
+    }
+
+    start.push_back(gated.size());
+
+    munch::dfa::Builder builder{};
+
+    // The states of the product by their number, the start the builder's initial state, zero.
+    std::map<std::vector<std::size_t>, munch::dfa::Dfa::State_t> numbered{{start, builder.init_state()}};
+
+    std::vector<std::vector<std::size_t>> sources{start};
+
+    std::string symbols{alphabet.symbols};
+
+    symbols += sentinel;
+
+    for (munch::dfa::Dfa::State_t from{0}; from < sources.size(); ++from)
+    {
+        const auto state{sources[from]};
+
+        if (accepts(gated, state))
+        {
+            builder.add_accept_state(from, munch::dfa::Token{0});
+        }
+
+        for (const auto symbol : symbols)
+        {
+            const auto moved{moved_on(gated, state, symbol)};
+
+            if (!moved)
+            {
+                continue;
+            }
+
+            const auto [entry, inserted]{numbered.try_emplace(*moved, sources.size())};
+
+            if (inserted)
+            {
+                sources.push_back(*moved);
+            }
+
+            builder.add_transition(from, munch::dfa::Label{symbol}, entry->second);
+        }
+    }
+
+    const auto dfa{std::move(builder).build()};
+
+    return munch::dfa::Simulator{dfa};
 }
 
 std::vector<std::size_t> Segmenter::boundaries(const std::string_view text) const
@@ -147,18 +299,11 @@ std::size_t Segmenter::piece_length(const std::string_view symbols, const std::s
 {
     const auto rest{symbols.substr(at)};
 
-    for (const auto& [simulator] : alternatives_)
-    {
-        // The match is the longest accept followed by the symbol its gate passes on, which the piece does not take.
-        const auto [token, length]{simulator.run(rest)};
+    // The match is the longest accept of the first alternative with one, followed by the symbol its gate passes on,
+    // which the piece does not take.
+    const auto [token, length]{automaton_.run(rest)};
 
-        if (length != 0)
-        {
-            return length - 1;
-        }
-    }
-
-    return 0;
+    return length == 0 ? 0 : length - 1;
 }
 
 } // namespace matisse::pretok

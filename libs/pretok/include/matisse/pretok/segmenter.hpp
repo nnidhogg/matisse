@@ -2,7 +2,6 @@
 #define MATISSE_LIBS_PRETOK_INCLUDE_MATISSE_PRETOK_SEGMENTER_HPP
 
 #include <cstddef>
-#include <span>
 #include <string_view>
 #include <vector>
 
@@ -30,14 +29,16 @@ namespace matisse::pretok
  * one code point suffices for every pattern described, so each alternative is compiled by munch as the DFA of its
  * language followed by one symbol of its gate or a sentinel byte, which the segmenter appends to the text's class
  * string, and munch's longest-match scan of that DFA, less the one symbol, is the alternative's longest gate-passing
- * accept. The pattern must be total, some alternative accepting on every nonempty text, so that the commit always
- * advances; split_verifier() decides totality and refuses a pattern that is not, and the segmenter does not check it.
+ * accept. The alternatives' DFAs are walked at once as their product, one munch DFA, so that one scan at each boundary
+ * commits the longest accept of the first alternative that has one, as automaton_of() argues. The pattern must be
+ * total, some alternative accepting on every nonempty text, so that the commit always advances; split_verifier()
+ * decides totality and refuses a pattern that is not, and the segmenter does not check it.
  */
 class Segmenter
 {
 public:
     /**
-     * @brief Compiles the alternatives of a pattern.
+     * @brief Compiles the alternatives of a pattern into the automaton of its segmentation.
      * @param pattern The pattern, total.
      * @throws munch::pattern::Syntax_error If an alternative's language is not in munch's pattern syntax.
      */
@@ -53,23 +54,23 @@ public:
 
 private:
     /**
-     * @brief One alternative of the pattern as the segmenter runs it: the DFA of its language followed by one symbol
-     *        of its gate or the sentinel.
+     * @brief Returns the automaton of a pattern's whole segmentation: the product of its alternatives' automata, each
+     *        the DFA of the alternative's language followed by one symbol of its gate or the sentinel, walked at once
+     *        and accepting where the first alternative that has accepted accepts.
+     *
+     * Its longest accept on a class string is the longest gate-passing accept, plus the one symbol, of the first
+     * alternative that has one. An alternative stops where it cannot accept again, and one after the first that has
+     * accepted stops too, since it can no longer decide the piece; the walk stops when every alternative up to the
+     * first that has accepted has stopped. The first that has accepted only ever moves to an earlier alternative, and
+     * none stops while an accept lies ahead of it, so when the walk stops it is the first alternative with an accept
+     * anywhere and the walk has passed its last accept. From that alternative's first accept on the product accepts
+     * exactly where it does, and every accept of the product before that is shorter, so the product's longest accept is
+     * that alternative's longest. The product's states are numbered in the order they are found, the start zero.
+     * @param pattern The pattern.
+     * @return The automaton, a munch DFA over the class symbols and the sentinel.
+     * @throws munch::pattern::Syntax_error If an alternative's language is not in munch's pattern syntax.
      */
-    struct Compiled
-    {
-        /**
-         * @brief The DFA of the alternative's language and its lookahead.
-         */
-        munch::dfa::Simulator simulator;
-    };
-
-    /**
-     * @brief Returns the alternatives of a pattern compiled, in the order of the published pattern.
-     * @param alternatives The alternatives.
-     * @return The compiled alternatives.
-     */
-    [[nodiscard]] static std::vector<Compiled> compiled_of(std::span<const Alternative> alternatives);
+    [[nodiscard]] static munch::dfa::Simulator automaton_of(const Pattern& pattern);
 
     /**
      * @brief Returns the length of the piece the pattern commits at a boundary of a class string.
@@ -85,9 +86,9 @@ private:
     Class_table classes_;
 
     /**
-     * @brief The pattern's alternatives compiled, in order.
+     * @brief The automaton of the whole segmentation.
      */
-    std::vector<Compiled> alternatives_;
+    munch::dfa::Simulator automaton_;
 };
 
 } // namespace matisse::pretok
