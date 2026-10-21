@@ -67,9 +67,9 @@ constexpr std::size_t byte_count{256};
 /**
  * @brief The longest piece merged by a scan of its parts, a longer piece by the heap.
  *
- * Measured with no cache, the encoding of Chinese gains as the threshold rises to 128 bytes, 6 to 9 per cent on wiki-zh
- * under both tokenizers over a threshold of 64, and no further, 256, 512 and 1,024 measuring level with 128; every
- * other corpus measures level from 16 bytes on.
+ * Measured with no cache, Russian gains 12 and 20 per cent under GPT-2 and cl100k from a threshold of 16 bytes to 32,
+ * Chinese 6 to 9 per cent from 64 to 128, and neither gains beyond, 256, 512 and 1,024 measuring level with 128; the
+ * other corpora measure level from 16 bytes on.
  */
 constexpr std::size_t longest_scanned_piece{128};
 
