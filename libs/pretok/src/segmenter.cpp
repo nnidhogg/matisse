@@ -1,6 +1,7 @@
 #include "matisse/pretok/segmenter.hpp"
 
 #include <cstddef>
+#include <format>
 #include <span>
 #include <string>
 #include <string_view>
@@ -15,15 +16,47 @@ namespace matisse::pretok
 namespace
 {
 /**
- * @brief Returns the DFA of one alternative's language, compiled by munch as a single token.
- * @param language The language, over the class symbols in munch's pattern syntax.
+ * @brief The byte after the last symbol of a class string as the alternatives read it: no class symbol, since the
+ *        symbols are ASCII, and a symbol every lookahead holds, so that an accept at the end of the input passes.
+ */
+constexpr char sentinel{'\xFF'};
+
+/**
+ * @brief Returns the bracket of a gate's symbols and the sentinel in munch's pattern syntax, each written as a byte
+ *        escape, `[\xHH...\xFF]`.
+ * @param gate The class symbols that may follow an accept.
+ * @return The bracket.
+ */
+[[nodiscard]] std::string lookahead_of(const std::string_view gate)
+{
+    std::string members{gate};
+
+    members += sentinel;
+
+    std::string bracket{"["};
+
+    for (const auto symbol : members)
+    {
+        const auto value{static_cast<unsigned char>(symbol)};
+
+        bracket += std::format(R"(\x{:02X})", value);
+    }
+
+    bracket += ']';
+
+    return bracket;
+}
+
+/**
+ * @brief Returns the DFA of an alternative's language followed by its lookahead, compiled by munch as a single token.
+ * @param gated The language and its lookahead, in munch's pattern syntax.
  * @return The DFA.
  */
-[[nodiscard]] munch::dfa::Simulator simulator_of(const std::string_view language)
+[[nodiscard]] munch::dfa::Simulator simulator_of(const std::string_view gated)
 {
     munch::core::Builder builder{};
 
-    builder.add_token(munch::pattern::parse(language), std::size_t{0}, 0);
+    builder.add_token(munch::pattern::parse(gated), std::size_t{0}, 0);
 
     const auto lexer{builder.build()};
 
@@ -72,9 +105,13 @@ std::vector<Segmenter::Compiled> Segmenter::compiled_of(const std::span<const Al
 
     for (const auto& [language, gate] : alternatives)
     {
-        auto simulator{simulator_of(language)};
+        const auto lookahead{lookahead_of(gate)};
 
-        compiled.push_back({.simulator = std::move(simulator), .gate = gate});
+        const auto gated{std::format("({}){}", language, lookahead)};
+
+        auto simulator{simulator_of(gated)};
+
+        compiled.push_back({.simulator = std::move(simulator)});
     }
 
     return compiled;
@@ -82,13 +119,17 @@ std::vector<Segmenter::Compiled> Segmenter::compiled_of(const std::span<const Al
 
 std::vector<std::size_t> Segmenter::boundaries(const std::string_view text) const
 {
-    const auto symbols{classes_.symbols(text)};
+    auto symbols{classes_.symbols(text)};
+
+    const auto points{symbols.size()};
+
+    symbols += sentinel;
 
     std::vector<std::size_t> ends{};
 
     std::size_t byte{0};
 
-    for (std::size_t at{0}; at < symbols.size();)
+    for (std::size_t at{0}; at < points;)
     {
         const auto length{piece_length(symbols, at)};
 
@@ -104,58 +145,20 @@ std::vector<std::size_t> Segmenter::boundaries(const std::string_view text) cons
 
 std::size_t Segmenter::piece_length(const std::string_view symbols, const std::size_t at) const
 {
-    for (const auto& alternative : alternatives_)
-    {
-        const auto longest{longest_accept(alternative, symbols, at)};
+    const auto rest{symbols.substr(at)};
 
-        if (longest != 0)
+    for (const auto& [simulator] : alternatives_)
+    {
+        // The match is the longest accept followed by the symbol its gate passes on, which the piece does not take.
+        const auto [token, length]{simulator.run(rest)};
+
+        if (length != 0)
         {
-            return longest;
+            return length - 1;
         }
     }
 
     return 0;
-}
-
-std::size_t Segmenter::longest_accept(
-        const Compiled& alternative, const std::string_view symbols, const std::size_t at) noexcept
-{
-    const auto& [simulator, gate]{alternative};
-
-    std::size_t longest{0};
-
-    auto state{simulator.init_state()};
-
-    for (auto end{at}; end < symbols.size();)
-    {
-        const auto next{simulator.step(state, static_cast<unsigned char>(symbols[end]))};
-
-        ++end;
-
-        if (!next || !simulator.is_live(*next))
-        {
-            break;
-        }
-
-        state = *next;
-
-        if (simulator.is_accepting(state) && passes(gate, symbols, end))
-        {
-            longest = end - at;
-        }
-    }
-
-    return longest;
-}
-
-bool Segmenter::passes(const std::string_view gate, const std::string_view symbols, const std::size_t end) noexcept
-{
-    if (end == symbols.size())
-    {
-        return true;
-    }
-
-    return gate.contains(symbols[end]);
 }
 
 } // namespace matisse::pretok

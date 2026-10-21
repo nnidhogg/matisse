@@ -25,20 +25,21 @@ namespace matisse::pretok
  * @brief The runtime pre-tokenizer of a pattern: where the engine running the pattern's regex ends each piece of a
  *        text.
  *
- * At each boundary it commits the longest gate-passing accept of the first alternative that has one, each alternative's
- * language compiled by munch as a DFA over the class symbols and run on the text's class string, and an accept passing
+ * At each boundary it commits the longest gate-passing accept of the first alternative that has one, an accept passing
  * its alternative's gate when the class symbol after it is one the gate holds or the input ends there. A gate reading
- * one code point suffices for every pattern described. The pattern must be total, some alternative accepting on every
- * nonempty text, so that the commit always advances; split_verifier() decides totality and refuses a pattern that is
- * not, and the segmenter does not check it.
+ * one code point suffices for every pattern described, so each alternative is compiled by munch as the DFA of its
+ * language followed by one symbol of its gate or a sentinel byte, which the segmenter appends to the text's class
+ * string, and munch's longest-match scan of that DFA, less the one symbol, is the alternative's longest gate-passing
+ * accept. The pattern must be total, some alternative accepting on every nonempty text, so that the commit always
+ * advances; split_verifier() decides totality and refuses a pattern that is not, and the segmenter does not check it.
  */
 class Segmenter
 {
 public:
     /**
      * @brief Compiles the alternatives of a pattern.
-     * @param pattern The pattern, total, whose views and spans outlive the segmenter, as a tokenizer library's static
-     *        description does.
+     * @param pattern The pattern, total.
+     * @throws munch::pattern::Syntax_error If an alternative's language is not in munch's pattern syntax.
      */
     explicit Segmenter(const Pattern& pattern);
 
@@ -52,20 +53,15 @@ public:
 
 private:
     /**
-     * @brief One alternative of the pattern as the segmenter runs it: the DFA of its language over the class symbols,
-     *        and its gate.
+     * @brief One alternative of the pattern as the segmenter runs it: the DFA of its language followed by one symbol
+     *        of its gate or the sentinel.
      */
     struct Compiled
     {
         /**
-         * @brief The DFA of the alternative's language.
+         * @brief The DFA of the alternative's language and its lookahead.
          */
         munch::dfa::Simulator simulator;
-
-        /**
-         * @brief The class symbols that may follow an accept.
-         */
-        std::string_view gate{};
     };
 
     /**
@@ -77,30 +73,11 @@ private:
 
     /**
      * @brief Returns the length of the piece the pattern commits at a boundary of a class string.
-     * @param symbols The class string, in class symbols.
-     * @param at The boundary, before the end of the string.
+     * @param symbols The class string, in class symbols, followed by the sentinel.
+     * @param at The boundary, before the sentinel.
      * @return The length, in code points, at least one.
      */
     [[nodiscard]] std::size_t piece_length(std::string_view symbols, std::size_t at) const;
-
-    /**
-     * @brief Returns the length of an alternative's longest gate-passing accept at a boundary of a class string.
-     * @param alternative The alternative.
-     * @param symbols The class string, in class symbols.
-     * @param at The boundary, before the end of the string.
-     * @return The length, in code points, zero when the alternative has no such accept there.
-     */
-    [[nodiscard]] static std::size_t longest_accept(
-            const Compiled& alternative, std::string_view symbols, std::size_t at) noexcept;
-
-    /**
-     * @brief Returns whether an accept ending at an offset of a class string passes a gate.
-     * @param gate The class symbols that may follow the accept.
-     * @param symbols The class string, in class symbols.
-     * @param end The offset after the accept.
-     * @return True when the accept passes.
-     */
-    [[nodiscard]] static bool passes(std::string_view gate, std::string_view symbols, std::size_t end) noexcept;
 
     /**
      * @brief The class table of the pattern's alphabet.

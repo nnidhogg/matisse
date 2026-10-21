@@ -46,8 +46,7 @@ public:
      * @param definition The definition.
      * @param report The report validate() decided of the pattern.
      * @param inventory The inventory whose window table and right context the encoder keeps.
-     * @param pattern The pattern, whose views and spans outlive the encoder, as a tokenizer library's static
-     *        description does.
+     * @param pattern The pattern.
      * @param allowed The spellings of the special tokens cut out of a text; every other special token is ordinary text.
      * @throws std::invalid_argument If an allowed spelling is not one of the definition's special tokens, or the
      *         definition cannot be merged, as Merger refuses it; the message names the spelling, the byte or the merge.
