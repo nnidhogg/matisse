@@ -1,5 +1,6 @@
 #include "matisse/pretok/classes.hpp"
 
+#include <algorithm>
 #include <charconv>
 #include <cstddef>
 #include <cstdint>
@@ -7,12 +8,17 @@
 #include <format>
 #include <fstream>
 #include <gtest/gtest.h>
+#include <iterator>
+#include <ranges>
+#include <span>
 #include <sstream>
 #include <string>
 #include <string_view>
 #include <tuple>
 #include <utility>
 #include <vector>
+
+#include <munch/regex/utf8.hpp>
 
 #include "matisse/common/sha256.hpp"
 #include "matisse/gpt2/tokenizer.hpp"
@@ -312,6 +318,44 @@ void expect_fixture_line(Fixture_check& check, const std::string& line)
     }
 }
 
+/**
+ * @brief Returns whether a table of ranges, ascending and apart, holds a code point.
+ * @param ranges The table.
+ * @param point The code point.
+ * @return True when a range holds it.
+ */
+bool holds(const std::span<const munch::regex::utf8::Code_point_range> ranges, const char32_t point)
+{
+    const auto above{std::ranges::upper_bound(ranges, point, {}, &munch::regex::utf8::Code_point_range::first)};
+
+    if (above == ranges.begin())
+    {
+        return false;
+    }
+
+    return point <= std::prev(above)->last;
+}
+
+/**
+ * @brief Returns the symbol of a code point's class as the alphabet defines it, searching every set in turn: the symbol
+ *        of the first set holding it, or the symbol of everything else.
+ * @param alphabet The alphabet.
+ * @param point The code point.
+ * @return The symbol.
+ */
+char symbol_of(const Alphabet& alphabet, const char32_t point)
+{
+    for (const auto& [symbol, ranges] : alphabet.sets)
+    {
+        if (holds(ranges, point))
+        {
+            return symbol;
+        }
+    }
+
+    return alphabet.other;
+}
+
 } // namespace
 
 TEST(Classes_test, Gpt2_has_its_class_count_and_symbols_and_a_symbol_is_a_member_of_its_class)
@@ -362,4 +406,40 @@ TEST(Classes_test, The_tables_and_the_classes_give_the_reference_answers_at_ever
     EXPECT_EQ(check.counts.classes, 14U);
     EXPECT_EQ(check.counts.ranges, 3U);
     EXPECT_EQ(check.counts.points, 2751U);
+}
+
+TEST(Classes_test, The_class_table_gives_every_scalar_value_the_symbol_of_the_first_set_holding_it)
+{
+    const auto alphabet{matisse::gpt2::pattern().alphabet};
+
+    // Every scalar value once, in order, so that the table's ASCII path and its blocks are read at every code point.
+    std::string text{};
+
+    std::vector<char32_t> points{};
+
+    for (char32_t point{0}; point < 0x110000; ++point)
+    {
+        if (point >= 0xD800 && point <= 0xDFFF)
+        {
+            continue;
+        }
+
+        text += encoded(point);
+
+        points.push_back(point);
+    }
+
+    const Class_table table{alphabet};
+
+    const auto symbols{table.symbols(text)};
+
+    ASSERT_EQ(points.size(), 1112064U);
+    ASSERT_EQ(symbols.size(), points.size());
+
+    for (const auto [index, point] : std::views::enumerate(points))
+    {
+        const auto expected{symbol_of(alphabet, point)};
+
+        ASSERT_EQ(symbols[index], expected) << std::format("U+{:04X}", static_cast<std::uint32_t>(point));
+    }
 }

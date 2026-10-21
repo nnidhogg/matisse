@@ -2,10 +2,13 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdint>
 #include <format>
-#include <iterator>
+#include <map>
+#include <ranges>
 #include <span>
 #include <stdexcept>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -15,7 +18,15 @@ namespace matisse::pretok
 {
 namespace
 {
-using munch::regex::utf8::Code_point_range;
+/**
+ * @brief The code points U+0000 to U+10FFFF, the surrogates among them, so that a code point indexes the table.
+ */
+constexpr std::size_t code_point_count{0x110000};
+
+/**
+ * @brief The distinct blocks a byte indexes.
+ */
+constexpr std::size_t most_blocks{256};
 
 /**
  * @brief Returns whether a byte continues a UTF-8 sequence rather than beginning one.
@@ -96,54 +107,85 @@ using munch::regex::utf8::Code_point_range;
     return point;
 }
 
-/**
- * @brief Returns whether a table of ranges, ascending and apart, holds a code point.
- * @param ranges The table.
- * @param point The code point.
- * @return True when a range holds it.
- */
-[[nodiscard]] bool holds(const std::span<const Code_point_range> ranges, const char32_t point) noexcept
-{
-    const auto above{std::ranges::upper_bound(ranges, point, {}, &Code_point_range::first)};
+} // namespace
 
-    if (above == ranges.begin())
-    {
-        return false;
-    }
-
-    return point <= std::prev(above)->last;
-}
-
-/**
- * @brief Returns the symbol of a code point's class: the symbol of the first set holding it, the literals' sets coming
- *        first, or the symbol of everything else.
- * @param alphabet The alphabet.
- * @param point The code point.
- * @return The symbol.
- */
-[[nodiscard]] char symbol_of(const Alphabet& alphabet, const char32_t point) noexcept
+Class_table::Class_table(const Alphabet& alphabet)
 {
     const auto& [symbols, sets, other, unicode_version]{alphabet};
 
-    for (const auto& [symbol, ranges] : sets)
+    // The sets are painted last to first, so that the last paint of a code point is by the first set holding it.
+    std::string painted(code_point_count, other);
+
+    for (const auto& [symbol, ranges] : sets | std::views::reverse)
     {
-        if (holds(ranges, point))
+        for (const auto& [first, last] : ranges)
         {
-            return symbol;
+            const auto count{last + 1 - first};
+
+            const auto range_cells{std::span{painted}.subspan(first, count)};
+
+            std::ranges::fill(range_cells, symbol);
         }
     }
 
-    return other;
+    const std::string_view cells{painted};
+
+    // The index of every distinct block, the count of the blocks before it.
+    std::map<std::string_view, std::size_t> seen{};
+
+    for (std::size_t start{0}; start < code_point_count; start += block_points)
+    {
+        const auto block{cells.substr(start, block_points)};
+
+        const auto [found, inserted]{seen.try_emplace(block, seen.size())};
+
+        if (inserted)
+        {
+            blocks_.insert(blocks_.end(), block.begin(), block.end());
+        }
+
+        const auto& [kept, index]{*found};
+
+        block_of_.push_back(static_cast<std::uint8_t>(index));
+    }
+
+    if (seen.size() > most_blocks)
+    {
+        throw std::invalid_argument{std::format(
+                "Class_table: the alphabet has {} distinct blocks of code points, more than the {} a byte indexes",
+                seen.size(), most_blocks)};
+    }
+
+    const auto ascii_cells{cells.substr(0, ascii_.size())};
+
+    std::ranges::copy(ascii_cells, ascii_.begin());
+
+    for (const auto [index, symbol] : std::views::enumerate(symbols))
+    {
+        class_of_symbol_[static_cast<unsigned char>(symbol)] = static_cast<Class_t>(index);
+    }
 }
 
-} // namespace
-
-std::vector<Class_t> classes_of(const Alphabet& alphabet, const std::string_view text)
+std::string Class_table::symbols(const std::string_view text) const
 {
-    std::vector<Class_t> classes{};
+    std::string class_string{};
+
+    // A code point takes at least one byte, so the class string is no longer than the text.
+    class_string.reserve(text.size());
 
     for (std::size_t at{0}; at < text.size();)
     {
+        const auto lead{static_cast<unsigned char>(text[at])};
+
+        if (lead < ascii_.size())
+        {
+            class_string += ascii_[lead];
+
+            ++at;
+
+            continue;
+        }
+
         const auto length{well_formed_length(text, at)};
 
         if (length == 0)
@@ -153,14 +195,46 @@ std::vector<Class_t> classes_of(const Alphabet& alphabet, const std::string_view
 
         const auto point{decoded(text.substr(at, length))};
 
-        const auto symbol{symbol_of(alphabet, point)};
-
-        classes.push_back(static_cast<Class_t>(alphabet.symbols.find(symbol)));
+        class_string += symbol(point);
 
         at += length;
     }
 
+    return class_string;
+}
+
+char Class_table::symbol(const char32_t point) const noexcept
+{
+    const auto block{block_of_[point / block_points]};
+
+    const auto cell{point % block_points};
+
+    const auto at{block * block_points + cell};
+
+    return blocks_[at];
+}
+
+std::vector<Class_t> Class_table::classes(const std::string_view text) const
+{
+    const auto class_string{symbols(text)};
+
+    std::vector<Class_t> classes{};
+
+    classes.reserve(class_string.size());
+
+    for (const auto class_symbol : class_string)
+    {
+        classes.push_back(class_of_symbol_[static_cast<unsigned char>(class_symbol)]);
+    }
+
     return classes;
+}
+
+std::vector<Class_t> classes_of(const Alphabet& alphabet, const std::string_view text)
+{
+    const Class_table table{alphabet};
+
+    return table.classes(text);
 }
 
 } // namespace matisse::pretok

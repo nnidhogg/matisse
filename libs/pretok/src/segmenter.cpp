@@ -10,8 +10,6 @@
 #include <munch/core/builder.hpp>
 #include <munch/pattern/parse.hpp>
 
-#include "matisse/pretok/classes.hpp"
-
 namespace matisse::pretok
 {
 namespace
@@ -30,29 +28,6 @@ namespace
     const auto lexer{builder.build()};
 
     return lexer.simulator();
-}
-
-/**
- * @brief Returns the class string of a text: the symbol of every code point's class, in order.
- * @param alphabet The class alphabet.
- * @param text The text, well-formed UTF-8.
- * @return The class string, one symbol per code point.
- * @throws std::invalid_argument If the text is not well-formed UTF-8, as classes_of() refuses it.
- */
-[[nodiscard]] std::string class_string(const Alphabet& alphabet, const std::string_view text)
-{
-    const auto classes{classes_of(alphabet, text)};
-
-    const auto symbol_of_class{alphabet.symbols};
-
-    std::string symbols{};
-
-    for (const auto symbol : classes)
-    {
-        symbols += symbol_of_class[symbol];
-    }
-
-    return symbols;
 }
 
 /**
@@ -88,7 +63,7 @@ namespace
 } // namespace
 
 Segmenter::Segmenter(const Pattern& pattern)
-    : alphabet_{pattern.alphabet}, alternatives_{compiled_of(pattern.alternatives)}
+    : classes_{pattern.alphabet}, alternatives_{compiled_of(pattern.alternatives)}
 {}
 
 std::vector<Segmenter::Compiled> Segmenter::compiled_of(const std::span<const Alternative> alternatives)
@@ -107,7 +82,7 @@ std::vector<Segmenter::Compiled> Segmenter::compiled_of(const std::span<const Al
 
 std::vector<std::size_t> Segmenter::boundaries(const std::string_view text) const
 {
-    const auto symbols{class_string(alphabet_, text)};
+    const auto symbols{classes_.symbols(text)};
 
     std::vector<std::size_t> ends{};
 

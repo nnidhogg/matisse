@@ -8,6 +8,7 @@
 
 #include <munch/dfa/simulator.hpp>
 
+#include "matisse/pretok/classes.hpp"
 #include "matisse/pretok/pattern.hpp"
 
 /**
@@ -102,9 +103,9 @@ private:
     [[nodiscard]] static bool passes(std::string_view gate, std::string_view symbols, std::size_t end) noexcept;
 
     /**
-     * @brief The pattern's class alphabet.
+     * @brief The class table of the pattern's alphabet.
      */
-    Alphabet alphabet_;
+    Class_table classes_;
 
     /**
      * @brief The pattern's alternatives compiled, in order.

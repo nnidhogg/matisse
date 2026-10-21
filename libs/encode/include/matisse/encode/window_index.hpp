@@ -9,6 +9,7 @@
 #include <string_view>
 #include <vector>
 
+#include "matisse/pretok/classes.hpp"
 #include "matisse/pretok/pattern.hpp"
 #include "matisse/validate/report.hpp"
 
@@ -33,8 +34,7 @@ public:
     /**
      * @brief Indexes the windows of a table by their class strings.
      * @param table The window table.
-     * @param alphabet The class alphabet of the pattern the table was decided of, whose views and spans outlive the
-     *        index, as a tokenizer library's static description does.
+     * @param alphabet The class alphabet of the pattern the table was decided of.
      */
     Window_index(const validate::Window_table& table, const pretok::Alphabet& alphabet);
 
@@ -88,9 +88,9 @@ private:
     std::size_t width_;
 
     /**
-     * @brief The class alphabet.
+     * @brief The class table of the alphabet.
      */
-    pretok::Alphabet alphabet_;
+    pretok::Class_table classes_;
 
     /**
      * @brief The widths of the certified windows, ascending, each once.

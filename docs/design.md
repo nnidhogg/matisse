@@ -315,6 +315,16 @@ struct Pattern
 
 using Class_t = unsigned char;
 
+class Class_table
+{
+public:
+    explicit Class_table(const Alphabet& alphabet);
+
+    [[nodiscard]] std::string symbols(std::string_view text) const;
+
+    [[nodiscard]] std::vector<Class_t> classes(std::string_view text) const;
+};
+
 [[nodiscard]] std::vector<Class_t> classes_of(const Alphabet& alphabet, std::string_view text);
 
 class Segmenter
@@ -352,18 +362,24 @@ and the gates, is in the description, so split_verifier() and factorization_lexe
 
 `classes_of()` decodes UTF-8 and maps every codepoint to its class under an alphabet, numbered from zero, read from the
 Unicode tables the tokenizer library pins (open choice 6). Malformed UTF-8 is refused with its byte offset, since the
-model is defined on codepoints and invalid text is outside it. `Segmenter` is the runtime pre-tokenizer, the gated
-commitment order of the gate-sufficiency proposition read over codepoints. At each boundary it commits the longest
-gate-passing accept of the first alternative that has one, each alternative a small DFA over the classes, an accept
-passing when the class symbol after it is in its gate or the input ends there. `boundaries()` returns the piece ends as
-byte offsets. `split_verifier()` is the verifier M built from the one-step relation Q of each pattern, minimized, and
-handed to munch as a `Verifier` table over the class symbols; the table munch's constructor makes of M has 21 states for
-GPT-2 and 32 for cl100k, 22 and 33 counting the dead state. As it builds Q it decides that the pattern is total, every
-nonempty residual matched by some alternative, which is the verifier fixture's `covered` decision, and refuses a pattern
-that is not, naming a shortest residual no alternative matches; the `Segmenter` takes a total pattern and does not check
-it, so the check runs once, where the validator builds the verifier, and never in the segmenter's loop.
-`factorization_lexer()` compiles the gate-erased union U of the alternatives over the class symbols as a munch token
-set, on which `is_split_window()` decides the factorization certificate.
+model is defined on codepoints and invalid text is outside it. `Class_table` holds the class symbol of every codepoint
+under an alphabet, built once from its sets: a table of the ASCII bytes and a table of blocks of 256 codepoints, each
+distinct block kept once and every block's index among them, so that a codepoint's symbol is two loads and an ASCII
+byte's one; GPT-2's and cl100k's alphabets have 127 and 128 distinct blocks, 37 KB a table. Its `symbols()` is a text's
+class string and its `classes()` the classes, and `classes_of()` is `classes()` on a table built for the one text; the
+`Segmenter`, the encoder's `Window_index` and `supply()` each build a table of their own. The tokenizer libraries' tests
+hold the table to the first set holding every one of the 1,112,064 scalar values. `Segmenter` is the runtime
+pre-tokenizer, the gated commitment order of the gate-sufficiency proposition read over codepoints. At each boundary it
+commits the longest gate-passing accept of the first alternative that has one, each alternative a small DFA over the
+classes, an accept passing when the class symbol after it is in its gate or the input ends there. `boundaries()` returns
+the piece ends as byte offsets. `split_verifier()` is the verifier M built from the one-step relation Q of each pattern,
+minimized, and handed to munch as a `Verifier` table over the class symbols; the table munch's constructor makes of M
+has 21 states for GPT-2 and 32 for cl100k, 22 and 33 counting the dead state. As it builds Q it decides that the pattern
+is total, every nonempty residual matched by some alternative, which is the verifier fixture's `covered` decision, and
+refuses a pattern that is not, naming a shortest residual no alternative matches; the `Segmenter` takes a total pattern
+and does not check it, so the check runs once, where the validator builds the verifier, and never in the segmenter's
+loop. `factorization_lexer()` compiles the gate-erased union U of the alternatives over the class symbols as a munch
+token set, on which `is_split_window()` decides the factorization certificate.
 
 The construction behind these, the gate-sufficiency proposition, the transfer of a cut from class strings to text and
 the splice theorem the encoder rests on are the results of a report on pre-tokenizer certification that is not yet

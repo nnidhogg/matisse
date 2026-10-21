@@ -22,29 +22,6 @@ namespace matisse::validate
 namespace
 {
 /**
- * @brief Returns the class string of a text, every code point replaced by its class's symbol.
- * @param alphabet The class alphabet.
- * @param text The text.
- * @return The class string, one symbol per code point.
- * @throws std::invalid_argument If the text is not well-formed UTF-8, as classes_of() refuses it.
- */
-[[nodiscard]] std::string class_string(const pretok::Alphabet& alphabet, const std::string_view text)
-{
-    const auto classes{pretok::classes_of(alphabet, text)};
-
-    std::string symbols{};
-
-    symbols.reserve(classes.size());
-
-    for (const auto symbol : classes)
-    {
-        symbols += alphabet.symbols[symbol];
-    }
-
-    return symbols;
-}
-
-/**
  * @brief Returns whether a byte continues a UTF-8 sequence rather than beginning one.
  * @param byte The byte.
  * @return True for a continuation byte, `10xxxxxx`.
@@ -244,7 +221,9 @@ namespace
 Supply supply(
         const Report& report, const Inventory inventory, const pretok::Pattern& pattern, const std::string_view input)
 {
-    const auto symbols{class_string(pattern.alphabet, input)};
+    const pretok::Class_table classes{pattern.alphabet};
+
+    const auto symbols{classes.symbols(input)};
 
     const auto& table{inventory == Inventory::factorization ? report.factorization : report.policy};
 

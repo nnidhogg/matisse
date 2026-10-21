@@ -9,8 +9,6 @@
 #include <string_view>
 #include <vector>
 
-#include "matisse/pretok/classes.hpp"
-
 namespace matisse::encode
 {
 namespace
@@ -71,29 +69,6 @@ namespace
 }
 
 /**
- * @brief Returns the class string of a text, every code point replaced by its class's symbol.
- * @param alphabet The class alphabet.
- * @param text The text.
- * @return The class string, one symbol per code point.
- * @throws std::invalid_argument If the text is not well-formed UTF-8, as classes_of() refuses it.
- */
-[[nodiscard]] std::string class_string(const pretok::Alphabet& alphabet, const std::string_view text)
-{
-    const auto classes{pretok::classes_of(alphabet, text)};
-
-    std::string symbols{};
-
-    symbols.reserve(classes.size());
-
-    for (const auto symbol : classes)
-    {
-        symbols += alphabet.symbols[symbol];
-    }
-
-    return symbols;
-}
-
-/**
  * @brief Returns the byte offset of every code point of a well-formed UTF-8 text, and the text's size after the last.
  * @param text The text, well-formed UTF-8.
  * @return The offsets, one more than the code points.
@@ -119,7 +94,7 @@ namespace
 } // namespace
 
 Window_index::Window_index(const validate::Window_table& table, const pretok::Alphabet& alphabet)
-    : width_{table.width}, alphabet_{alphabet}
+    : width_{table.width}, classes_{alphabet}
 {
     std::set<std::size_t> widths{};
 
@@ -173,7 +148,7 @@ std::optional<std::size_t> Window_index::block_anchor(
 {
     const auto block{stretch.substr(begin, end - begin)};
 
-    const auto symbols{class_string(alphabet_, block)};
+    const auto symbols{classes_.symbols(block)};
 
     const std::string_view classes{symbols};
 
