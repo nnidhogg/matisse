@@ -8,6 +8,7 @@
 #include <limits>
 #include <optional>
 #include <queue>
+#include <ranges>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -302,11 +303,10 @@ std::vector<load::Token_id_t> Parts::ids() const
 } // namespace
 
 Merger::Merger(const load::Definition& definition)
-    : merge_rule_{definition.merge_rule}
-    , whole_piece_lookup_{definition.whole_piece_lookup}
+    : whole_piece_lookup_{definition.whole_piece_lookup}
     , ids_{ids_of(definition.spellings)}
     , byte_ids_{byte_ids_of(ids_)}
-    , joins_{joins_of(definition.merges, ids_)}
+    , joins_{joins_of(definition, ids_)}
 {}
 
 Merger::Ids_t Merger::ids_of(const std::span<const std::string> spellings)
@@ -348,9 +348,45 @@ Merger::Byte_ids_t Merger::byte_ids_of(const Ids_t& ids)
     return byte_ids;
 }
 
-Merger::Joins_t Merger::joins_of(const std::span<const munch::verifier::Merge> merges, const Ids_t& ids)
+Merger::Joins_t Merger::joins_of(const load::Definition& definition, const Ids_t& ids)
 {
+    const auto& [merge_rule, whole_piece_lookup, spellings, merges, specials]{definition};
+
     Joins_t joins{};
+
+    if (merge_rule == load::Merge_rule::ranks)
+    {
+        // Every split of a spelling into two spellings joins them into it, at its rank, its id; a pair of parts is met
+        // only at the spellings equal to its concatenation, and emplace keeps the first, the id ids holds.
+        for (const auto [id, spelling] : std::views::enumerate(spellings))
+        {
+            const std::string_view whole{spelling};
+
+            const auto product_id{static_cast<load::Token_id_t>(id)};
+
+            for (std::size_t split{1}; split < whole.size(); ++split)
+            {
+                const auto left{whole.substr(0, split)};
+
+                const auto right{whole.substr(split)};
+
+                const auto left_found{ids.find(left)};
+
+                const auto right_found{ids.find(right)};
+
+                if (left_found == ids.end() || right_found == ids.end())
+                {
+                    continue;
+                }
+
+                const auto key{key_of(left_found->second, right_found->second)};
+
+                joins.emplace(key, Join{.rank = product_id, .product = product_id});
+            }
+        }
+
+        return joins;
+    }
 
     for (std::size_t rank{0}; rank < merges.size(); ++rank)
     {
@@ -408,25 +444,8 @@ std::vector<load::Token_id_t> Merger::merged(const std::string_view piece) const
 
     std::priority_queue<Entry, std::vector<Entry>, std::greater<>> heap{};
 
-    // The rule enters here alone: the rank of the parts' concatenation, or the rank of the pair of parts.
     const auto join_at{[&](const std::size_t start) -> std::optional<Join> {
         const auto next{parts.next(start)};
-
-        if (merge_rule_ == load::Merge_rule::ranks)
-        {
-            const auto end{parts.end(next)};
-
-            const auto concatenation{piece.substr(start, end - start)};
-
-            const auto found{ids_.find(concatenation)};
-
-            if (found == ids_.end())
-            {
-                return std::nullopt;
-            }
-
-            return Join{.rank = found->second, .product = found->second};
-        }
 
         const auto left{parts.id(start)};
 

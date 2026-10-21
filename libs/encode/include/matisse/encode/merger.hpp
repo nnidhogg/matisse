@@ -22,13 +22,15 @@
  * The merge keeps the parts of the piece as a doubly linked list over its bytes, as Hugging Face's Word keeps its
  * symbols, and the candidate joins in a heap ordered by rank and then by where the left part starts, each entry naming
  * the start of its left part and the ends of both parts. An entry popped whose parts are no longer adjacent parts of
- * the piece is discarded, and a join pushes the two pairs it makes. The rule enters only in the lookup of a pair: under
- * Merge_rule::ranks the rank of the two parts' concatenation, under Merge_rule::pairs the rank of the pair of parts in
- * the merge table. So under the rank rule the merge is tiktoken's _byte_pair_merge, which joins the pair of least rank,
- * leftmost first, a join that makes a pair of lower rank than its own included, and under the pair rule it is Hugging
- * Face's merge_all, one join at a time, the pair of least rank at its leftmost occurrence; each on every table and
- * every piece, since a discarded entry names parts that never stand together again and every adjacent pair the rule can
- * join has an entry. A piece of n bytes takes at most n - 1 joins and fewer than 3n entries.
+ * the piece is discarded, and a join pushes the two pairs it makes. A pair is looked up by the ids of its parts, and
+ * the rule enters only in the table that lookup reads: under Merge_rule::ranks every split of a token into two tokens,
+ * the pair joining at the rank of the token they spell, which is the rank of the two parts' concatenation, and under
+ * Merge_rule::pairs every pair of the merge table at its rank. So under the rank rule the merge is tiktoken's
+ * _byte_pair_merge, which joins the pair of least rank, leftmost first, a join that makes a pair of lower rank than its
+ * own included, and under the pair rule it is Hugging Face's merge_all, one join at a time, the pair of least rank at
+ * its leftmost occurrence; each on every table and every piece, since a discarded entry names parts that never stand
+ * together again and every adjacent pair the rule can join has an entry. A piece of n bytes takes at most n - 1 joins
+ * and fewer than 3n entries.
  */
 namespace matisse::encode
 {
@@ -39,8 +41,8 @@ class Merger
 {
 public:
     /**
-     * @brief Builds the tables of a definition's merge: the id of every spelling and of every byte, and under the pair
-     *        rule the rank and product of every pair of the merge table, keyed by the ids of its parts.
+     * @brief Builds the tables of a definition's merge: the id of every spelling and of every byte, and the rank and
+     *        product of every pair of parts the merge may join, keyed by the ids of the parts.
      *
      * A pair listed twice takes its last rank, as encoder.py and Hugging Face's BPE model read it.
      * @param definition The definition.
@@ -107,7 +109,7 @@ private:
     using Ids_t = std::unordered_map<std::string, load::Token_id_t, Spelling_hash, std::equal_to<>>;
 
     /**
-     * @brief The join of every pair of the merge table, keyed by its left part's id above its right part's.
+     * @brief The join of every pair of parts the merge may join, keyed by its left part's id above its right part's.
      */
     using Joins_t = std::unordered_map<std::uint64_t, Join>;
 
@@ -132,19 +134,17 @@ private:
     [[nodiscard]] static Byte_ids_t byte_ids_of(const Ids_t& ids);
 
     /**
-     * @brief Returns the join of every pair of a merge table, a pair listed twice taking its last rank.
-     * @param merges The merges in rank order.
+     * @brief Returns the join of every pair of parts a definition's merge may join: under the rank rule every split of
+     *        a
+     *        spelling into two spellings, joining at the rank of the spelling, its id; under the pair rule every pair
+     *        of the merge table, a pair listed twice taking its last rank.
+     * @param definition The definition.
      * @param ids The id of every spelling.
      * @return The joins, by the ids of the parts.
-     * @throws std::invalid_argument If a merge names a part or a product that is not a token; the message names the
-     *         merge, its rank and the spelling.
+     * @throws std::invalid_argument If under the pair rule a merge names a part or a product that is not a token; the
+     *         message names the merge, its rank and the spelling.
      */
-    [[nodiscard]] static Joins_t joins_of(std::span<const munch::verifier::Merge> merges, const Ids_t& ids);
-
-    /**
-     * @brief How the bytes of a piece are merged.
-     */
-    load::Merge_rule merge_rule_;
+    [[nodiscard]] static Joins_t joins_of(const load::Definition& definition, const Ids_t& ids);
 
     /**
      * @brief Whether a piece that is a token is looked up whole before any merge.
@@ -162,7 +162,7 @@ private:
     Byte_ids_t byte_ids_;
 
     /**
-     * @brief The join of every pair of the merge table under the pair rule, empty under the rank rule.
+     * @brief The join of every pair of parts the merge may join.
      */
     Joins_t joins_;
 };
