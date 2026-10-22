@@ -813,16 +813,19 @@ undone join's on the left, which precedes it on a tie, or at most the undone joi
 the test answers whether the merge of the two spellings ends with the two tokens, their compatibility. The first join of
 the replayed run that crosses is a join the real run makes, which is the split of the token it makes, so the test looks
 up only the splits' pairs, and only where each part's 32 bits of hashed partners hold the other. The local
-characterization of byte-pair encoding, a result not yet published: tokens t_1 to t_k that encode to themselves, every
-adjacent pair compatible, are the merge of their concatenation x, under the rank rule and under the pair rule, with no
-condition on the table. Take the first join of the run on x that crosses a boundary between two of them, t_i and
-t_(i+1); before it every part lies inside one token, so the join lies inside t_i t_(i+1) and neither end of that
-interval has been crossed, and by interval projection the run on t_i t_(i+1) alone crosses its middle, against their
-compatibility. So no boundary is crossed, and the run ends with each token's own merge, the token itself. The search
-ends with such a sequence: the tokens it has laid before a position are compatible and encode to themselves, so they are
-the merge of the bytes before it, one sequence however the search reaches the position, and a position from which no
-token fits once fits from none; every token that encodes to itself and begins at a position is tried there, longest
-first; and the merge of the piece is such a sequence, so the search reaches the piece's end, with the merge.
+characterization of byte-pair encoding is not new: Vieira et al. prove it for merge lists in Language Models over
+Canonical Byte-Pair Encodings (ICML 2025), and it follows from the gluing corollary of Berglund and van der Merwe's
+Formalizing BPE Tokenization; the proof below, which also covers the rank rule, is a short one: tokens t_1 to t_k that
+encode to themselves, every adjacent pair compatible, are the merge of their concatenation x, under the rank rule and
+under the pair rule, with no condition on the table. Take the first join of the run on x that crosses a boundary between
+two of them, t_i and t_(i+1); before it every part lies inside one token, so the join lies inside t_i t_(i+1) and
+neither end of that interval has been crossed, and by interval projection the run on t_i t_(i+1) alone crosses its
+middle, against their compatibility. So no boundary is crossed, and the run ends with each token's own merge, the token
+itself. The search ends with such a sequence: the tokens it has laid before a position are compatible and encode to
+themselves, so they are the merge of the bytes before it, one sequence however the search reaches the position, and a
+position from which no token fits once fits from none; every token that encodes to itself and begins at a position is
+tried there, longest first; and the merge of the piece is such a sequence, so the search reaches the piece's end, with
+the merge.
 
 The method is GitHub's bpe crate's, bpe 0.2.3 at github/rust-gems 31331e8: the Corollaries III and IIIa of its README,
 its backtracking encoder with the table of each token's next shorter prefix and the marks of the positions given up, and
