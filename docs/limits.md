@@ -160,7 +160,9 @@ exists, since a newline followed by tabs is one piece when the text ends there a
 letter follows, so the run is held whole until something other than white space or the end arrives and no streamer can
 return it earlier, as Dalirrooyfard and Ye show for o200k's as well. And inside each run's open piece what the merge
 cannot yet decide, at most the right span radius of the dictionary by the report *The Left Ripple of Byte-Pair
-Encoding*, finite for every dictionary and 129 bytes for GPT-2's table, not computed for the others.
+Encoding*, finite for every dictionary and 129 bytes for GPT-2's table, not computed for the others. On the corpora of
+[benchmarks.md](benchmarks.md), which gives the figures for every tokenizer and corpus, a stream in pushes of 64 bytes
+or 4 KiB holds 1.01 to 6.71 bytes on average after a push and at most 132.
 
 A stream keeps the stretch's bytes since its last closed piece, so a white space run of the family above is held in
 memory whole, and the pieces it closes are merged as `encode()` merges them, with a piece cache of its own. Each code
@@ -249,7 +251,7 @@ encode to themselves and the split of each by its parts, which take the construc
 [benchmarks.md](benchmarks.md); beside them the `Segmenter`'s product automaton, 36 states for GPT-2's twelve
 alternatives and 33 for cl100k's eight, and the window index. What the streaming encoder reads is built with them, the
 class table, the split verifier's table, the ordinary tokens in the order of their spellings and, where pieces are
-looked up whole, the tokens the merge does not form, which adds 9, 35, 67 and 49 milliseconds on GPT-2's, cl100k's,
+looked up whole, the tokens the merge does not form, which adds 9, 36, 69 and 49 milliseconds on GPT-2's, cl100k's,
 o200k's and Llama 3's files, so that a stream is made in about ten nanoseconds. Build the encoder once and reuse it
 across texts and threads; building one per request is a design mistake the library does not try to make cheap.
 

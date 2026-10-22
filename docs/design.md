@@ -955,7 +955,7 @@ The encoder builds what a stream reads once, beside the `Segmenter`: the class t
 split verifier M of `split_verifier()` as a `Verifier_table`, a flat array of its steps by state, class and mark with
 the states that accept and the dead ends, the accepting states with no move, the ids of the ordinary tokens in the order
 of their spellings, and, where the definition looks pieces up whole, the tokens of two or more bytes that the merge does
-not form from their own bytes, Llama 3's 588. That adds 9, 35, 67 and 49 milliseconds to building GPT-2's, cl100k's,
+not form from their own bytes, Llama 3's 588. That adds 9, 36, 69 and 49 milliseconds to building GPT-2's, cl100k's,
 o200k's and Llama 3's encoders, and a stream is then made in about ten nanoseconds. A step of the table returns a state,
 `no_state` where M has no move, rather than an empty `std::optional`, which GCC 13 returns through a byte and a word
 stored apart and read back as one word, which stalls every step.
