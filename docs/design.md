@@ -6,24 +6,24 @@ tested against the real tokenizers, what matisse needs from munch, the choices s
 1 to 13 of the order of work are built, `read_tokenizer_json()` waiting on open choice 5: load reads GPT-2's files and
 tiktoken rank files, pretok classes and segments a text and builds a pattern's split verifier and factorization lexer,
 validate decides a pattern's window tables under both certificates with their right contexts, measures their anchor
-supply on an input and renders the report as text and as JSON, the gpt2, cl100k and o200k libraries describe their
-patterns, lookup finds them, `matisse-validate` reports a rank file read under a pattern, and encode encodes a text and
-decodes its ids under both merge rules, with the whole-piece lookup, the special-token cuts, the fast merge, its
-backtracking and the piece cache, and encodes it in parallel, cut only at the certified cuts of either inventory, while
-`validate_merges()` is still to be written; on the fourteen corpora of [benchmarks.md](benchmarks.md) matisse's ids
-equal tiktoken's, Hugging Face tokenizers' and the bpe crate's by digest wherever each of them ran, and the page holds
-what the corpus probe, the bench and the other encoders' harnesses measured. The sketches below give names and types,
-and they change as the code is written.
+supply on an input and renders the report as text and as JSON, the gpt2, cl100k, o200k and llama3 libraries describe
+their patterns, lookup finds them, `matisse-validate` reports a rank file read under a pattern, and encode encodes a
+text and decodes its ids under both merge rules, with the whole-piece lookup, the special-token cuts, the fast merge,
+its backtracking and the piece cache, and encodes it in parallel, cut only at the certified cuts of either inventory,
+while `validate_merges()` is still to be written; on the fourteen corpora of [benchmarks.md](benchmarks.md) matisse's
+ids equal tiktoken's, Hugging Face tokenizers' and the bpe crate's by digest wherever each of them ran, and the page
+holds what the corpus probe, the bench and the other encoders' harnesses measured. The sketches below give names and
+types, and they change as the code is written.
 
 ## **What matisse is and is not**
 
 matisse reads the definition of a real tokenizer, decides where its output can be cut with certainty, and encodes text
 in parallel by cutting only there, with token ids byte-identical to the sequential encoding. The first version does this
-for GPT-2, cl100k_base and o200k_base, whose deployed pre-tokenizer patterns have exact verifiers, and for a byte-level
-tokenizer without a pre-tokenizer it reports the certified windows of the merge table through the lazy certification. It
-is not a general tokenizer library. It trains nothing, applies no normalizer but the identity, and does not try to match
-Hugging Face's feature surface; its product is exactness against the reference tokenizer, shown on pinned vocabularies
-and corpora.
+for GPT-2, cl100k_base, o200k_base and Llama 3, whose deployed pre-tokenizer patterns have exact verifiers, and for a
+byte-level tokenizer without a pre-tokenizer it reports the certified windows of the merge table through the lazy
+certification. It is not a general tokenizer library. It trains nothing, applies no normalizer but the identity, and
+does not try to match Hugging Face's feature surface; its product is exactness against the reference tokenizer, shown on
+pinned vocabularies and corpora.
 
 munch stays the decision library, with the verifier framework and the general constructions on abstract inputs, merge
 tables and vocabularies among them. matisse takes everything about specific real tokenizers, which is reading their
@@ -58,6 +58,7 @@ matisse/
     gpt2/       include/matisse/gpt2/      src/  tests/
     cl100k/     include/matisse/cl100k/    src/  tests/
     o200k/      include/matisse/o200k/     src/  tests/
+    llama3/     include/matisse/llama3/    src/  tests/
     lookup/     include/matisse/lookup/    src/  tests/
   tools/
     CMakeLists.txt
@@ -72,14 +73,14 @@ stage libraries are the four subjects of the first version, and none of them hol
 tokens; load's `read_gpt2()` reads the file format GPT-2 published. load reads tokenizer files into one definition type.
 pretok holds the pre-tokenizer machinery over a pattern description: the classes of a text, the runtime segmenter, and
 the construction of a pattern's verifier. validate decides the certified windows and their right context and measures
-anchor supply. encode is the runtime. Beside them every tokenizer is a small library of its own, gpt2, cl100k and o200k
-in the first version, holding its pattern description, its generated class tables, the vendor's special tokens for a
-file that names none, and its tests, and lookup finds the tokenizer libraries by name. Each is a target `matisse_<name>`
-with the alias `matisse::<name>`, in namespace `matisse::<name>`, and the umbrella `matisse::matisse` links all of them,
-as `hopper::hopper` links hopper's; a consumer of one tokenizer links its library alone, `matisse::cl100k`, which brings
-load and pretok with it. common holds the tests' and the probes' SHA-256 alone, which the tokenizer tests hold the
-pinned files and the class tables to, and the probes the corpora and their ids; its target `matisse_common` lives in the
-build tree only, with no alias, no install rule and no place in the umbrella.
+anchor supply. encode is the runtime. Beside them every tokenizer is a small library of its own, gpt2, cl100k, o200k and
+llama3 in the first version, holding its pattern description, its generated class tables, the vendor's special tokens
+for a file that names none, and its tests, and lookup finds the tokenizer libraries by name. Each is a target
+`matisse_<name>` with the alias `matisse::<name>`, in namespace `matisse::<name>`, and the umbrella `matisse::matisse`
+links all of them, as `hopper::hopper` links hopper's; a consumer of one tokenizer links its library alone,
+`matisse::cl100k`, which brings load and pretok with it. common holds the tests' and the probes' SHA-256 alone, which
+the tokenizer tests hold the pinned files and the class tables to, and the probes the corpora and their ids; its target
+`matisse_common` lives in the build tree only, with no alias, no install rule and no place in the umbrella.
 
 The top-level CMakeLists.txt is hopper's with the prefix changed: `project(matisse VERSION 0.1.0 LANGUAGES CXX)`, C++23
 required, `MATISSE_IS_TOP_LEVEL`, Release by default at the top level only, `MATISSE_SOURCE_DIR` for test data paths,
@@ -359,15 +360,15 @@ holding the code points the literal matches, so a case-sensitive letter holds it
 `s` and U+017F, and o200k's classes, which read Lu and Ll apart and put the long s with the lower s alone, are stated
 the same way. Settled: each class symbol is one ASCII byte, so a class string is a text over bytes and munch's verifier
 alphabet holds it. A class with an ASCII member is written by one of its members, a literal's class by the literal, the
-class of everything else by `!` and any other by its least member, so that in GPT-2's and cl100k's alphabets a class
-string is a text of the pattern again; a class with none is written by the next of `#`, `$`, `%` and `&`, bytes of the
-class of everything else, in the order of the classes' least code points, which makes o200k's other letters, title case
-letters, modifier letters and marks `#`, `$`, `%` and `&`. Such a symbol is no member of its class, so an o200k class
-string is no text of its pattern, and the fixtures and the tests read one with each of those symbols replaced by its
-class's least code point, U+00AA, U+01C5, U+02B0 and U+0300. An alternative is its language written over the class
-symbols in munch's pattern syntax and its gate as a string of class symbols: every symbol for an ungated alternative,
-the white space for `(?!\S)`, and none for an alternative anchored at the end of the input. Everything the verifier
-construction reads, the alphabet, the languages and the gates, is in the description, so split_verifier() and
+class of everything else by `!` and any other by its least member, so that in GPT-2's, cl100k's and Llama 3's alphabets
+a class string is a text of the pattern again; a class with none is written by the next of `#`, `$`, `%` and `&`, bytes
+of the class of everything else, in the order of the classes' least code points, which makes o200k's other letters,
+title case letters, modifier letters and marks `#`, `$`, `%` and `&`. Such a symbol is no member of its class, so an
+o200k class string is no text of its pattern, and the fixtures and the tests read one with each of those symbols
+replaced by its class's least code point, U+00AA, U+01C5, U+02B0 and U+0300. An alternative is its language written over
+the class symbols in munch's pattern syntax and its gate as a string of class symbols: every symbol for an ungated
+alternative, the white space for `(?!\S)`, and none for an alternative anchored at the end of the input. Everything the
+verifier construction reads, the alphabet, the languages and the gates, is in the description, so split_verifier() and
 factorization_lexer() take the pattern and nothing else.
 
 `classes_of()` decodes UTF-8 and maps every codepoint to its class under an alphabet, numbered from zero, read from the
@@ -375,36 +376,37 @@ Unicode tables the tokenizer library pins (open choice 6). Malformed UTF-8 is re
 model is defined on codepoints and invalid text is outside it. `Class_table` holds the class symbol of every codepoint
 under an alphabet, built once from its sets: a table of the ASCII bytes and a table of blocks of 256 codepoints, each
 distinct block kept once and every block's index among them, so that a codepoint's symbol is two loads and an ASCII
-byte's one; GPT-2's and cl100k's alphabets have 127 and 128 distinct blocks, 37 KB a table, and o200k's 135, 39 KB. Its
-`symbols()` is a text's class string and its `classes()` the classes, and `classes_of()` is `classes()` on a table built
-for the one text; the `Segmenter`, the encoder's `Window_index` and `supply()` each build a table of their own. The
-tokenizer libraries' tests hold the table to the first set holding every one of the 1,112,064 scalar values. `Segmenter`
-is the runtime pre-tokenizer, the gated commitment order of the gate-sufficiency proposition read over codepoints. At
-each boundary it commits the longest gate-passing accept of the first alternative that has one, an accept passing when
-the class symbol after it is in its gate or the input ends there. A gate reads one class symbol, so each alternative is
-compiled as the DFA of its language followed by one symbol of its gate or a sentinel byte, 0xFF, which no class symbol
-is and which `boundaries()` appends to the class string; munch's longest-match `run()` of that DFA at a boundary, less
-the one symbol, is the alternative's longest gate-passing accept, the end of the input passing through the sentinel. The
-alternatives' DFAs are walked at once as one automaton, their product, whose state is each alternative's state and the
-first alternative that has accepted so far, every later alternative stopped, and which accepts where that alternative
-accepts; the first that has accepted when the walk stops is the first alternative with an accept anywhere, and from that
-alternative's first accept on the product accepts exactly where it does, every accept before it being shorter, so the
-product's longest accept is that alternative's longest, and one `run()` at each boundary commits it. The product has 36
-states for GPT-2's twelve alternatives and 33 for cl100k's eight. `boundaries()` returns the piece ends as byte offsets.
-`split_verifier()` is the verifier M built from the one-step relation Q of each pattern, minimized, and handed to munch
-as a `Verifier` table over the class symbols; the table munch's constructor makes of M has 21 states for GPT-2, 32 for
-cl100k and 46 for o200k, 22, 33 and 47 counting the dead state. As it builds Q it decides that the pattern is total,
-every nonempty residual matched by some alternative, which is the verifier fixture's `covered` decision, and refuses a
-pattern that is not, naming a shortest residual no alternative matches; the `Segmenter` takes a total pattern and does
-not check it, so the check runs once, where the validator builds the verifier, and never in the segmenter's loop.
-`factorization_lexer()` compiles the gate-erased union U of the alternatives over the class symbols as a munch token
-set, on which `is_split_window()` decides the factorization certificate.
+byte's one; GPT-2's, cl100k's and Llama 3's alphabets have 127, 128 and 128 distinct blocks, 37 KB a table, and o200k's
+135, 39 KB. Its `symbols()` is a text's class string and its `classes()` the classes, and `classes_of()` is `classes()`
+on a table built for the one text; the `Segmenter`, the encoder's `Window_index` and `supply()` each build a table of
+their own. The tokenizer libraries' tests hold the table to the first set holding every one of the 1,112,064 scalar
+values. `Segmenter` is the runtime pre-tokenizer, the gated commitment order of the gate-sufficiency proposition read
+over codepoints. At each boundary it commits the longest gate-passing accept of the first alternative that has one, an
+accept passing when the class symbol after it is in its gate or the input ends there. A gate reads one class symbol, so
+each alternative is compiled as the DFA of its language followed by one symbol of its gate or a sentinel byte, 0xFF,
+which no class symbol is and which `boundaries()` appends to the class string; munch's longest-match `run()` of that DFA
+at a boundary, less the one symbol, is the alternative's longest gate-passing accept, the end of the input passing
+through the sentinel. The alternatives' DFAs are walked at once as one automaton, their product, whose state is each
+alternative's state and the first alternative that has accepted so far, every later alternative stopped, and which
+accepts where that alternative accepts; the first that has accepted when the walk stops is the first alternative with an
+accept anywhere, and from that alternative's first accept on the product accepts exactly where it does, every accept
+before it being shorter, so the product's longest accept is that alternative's longest, and one `run()` at each boundary
+commits it. The product has 36 states for GPT-2's twelve alternatives and 33 for cl100k's eight. `boundaries()` returns
+the piece ends as byte offsets. `split_verifier()` is the verifier M built from the one-step relation Q of each pattern,
+minimized, and handed to munch as a `Verifier` table over the class symbols; the table munch's constructor makes of M
+has 21 states for GPT-2, 32 for cl100k, 46 for o200k and 33 for Llama 3, 22, 33, 47 and 34 counting the dead state. As
+it builds Q it decides that the pattern is total, every nonempty residual matched by some alternative, which is the
+verifier fixture's `covered` decision, and refuses a pattern that is not, naming a shortest residual no alternative
+matches; the `Segmenter` takes a total pattern and does not check it, so the check runs once, where the validator builds
+the verifier, and never in the segmenter's loop. `factorization_lexer()` compiles the gate-erased union U of the
+alternatives over the class symbols as a munch token set, on which `is_split_window()` decides the factorization
+certificate.
 
 The construction behind these, the gate-sufficiency proposition, the transfer of a cut from class strings to text and
 the splice theorem the encoder rests on are the results of a report on pre-tokenizer certification that is not yet
 published.
 
-### **Tokenizers, matisse::gpt2, matisse::cl100k and matisse::o200k, and matisse::lookup**
+### **Tokenizers, matisse::gpt2, matisse::cl100k, matisse::o200k and matisse::llama3, and matisse::lookup**
 
 ```cpp
 namespace matisse::cl100k
@@ -435,24 +437,24 @@ struct Tokenizer
 
 Each tokenizer library declares the same two functions in `matisse/<name>/tokenizer.hpp`, matisse::gpt2 as
 matisse::cl100k does. `pattern()` is the description of the published pattern over its classes, 14 for GPT-2, 16 for
-cl100k and 30 for o200k, its views and spans pointing into constants of the library's source, among them the Unicode
-tables generated into the library's src/class_ranges.inc. `specials()` is the vendor's special tokens of a rank file
-read under the pattern, which `read_tiktoken()` takes. A file format of its own would be a reader binding in the library
-beside them; GPT-2's encoder.json and vocab.bpe are read by `read_gpt2()`, which needs nothing from the description. The
-library's tests hold the description to the classes, segmentation and known-answer fixtures, the pinned vocabulary to
-its digest, and the vendor's special tokens to their quoted values.
+cl100k and Llama 3 and 30 for o200k, its views and spans pointing into constants of the library's source, among them the
+Unicode tables generated into the library's src/class_ranges.inc. `specials()` is the vendor's special tokens of a rank
+file read under the pattern, which `read_tiktoken()` takes. A file format of its own would be a reader binding in the
+library beside them; GPT-2's encoder.json and vocab.bpe are read by `read_gpt2()`, which needs nothing from the
+description. The library's tests hold the description to the classes, segmentation and known-answer fixtures, the pinned
+vocabulary to its digest, and the vendor's special tokens to their quoted values.
 
-`tokenizers()` lists every tokenizer library by name, gpt2, cl100k and o200k, and `tokenizer()` finds one by its name,
-for the command line and any caller choosing a tokenizer at run time. The list is one function naming the libraries
-explicitly, the simplest form that needs no registry: a library registering itself when it is loaded would rest on the
-order in which static objects are initialized and on the linker keeping an object nothing names, and munch's style has
-neither. The lookup links every tokenizer library, so a consumer of one tokenizer links that library alone and calls it
-directly.
+`tokenizers()` lists every tokenizer library by name, gpt2, cl100k, o200k and llama3, and `tokenizer()` finds one by its
+name, for the command line and any caller choosing a tokenizer at run time. The list is one function naming the
+libraries explicitly, the simplest form that needs no registry: a library registering itself when it is loaded would
+rest on the order in which static objects are initialized and on the linker keeping an object nothing names, and munch's
+style has neither. The lookup links every tokenizer library, so a consumer of one tokenizer links that library alone and
+calls it directly.
 
 #### **Adding a tokenizer**
 
-A tokenizer is added as a new directory under libs/, as o200k is and Llama 3 will be, and the stage libraries do not
-change. libs/o200k/ holds its CMakeLists.txt, `matisse/o200k/tokenizer.hpp` declaring `pattern()` and `specials()`,
+A tokenizer is added as a new directory under libs/, as o200k and Llama 3 are, and the stage libraries do not change.
+libs/o200k/ holds its CMakeLists.txt, `matisse/o200k/tokenizer.hpp` declaring `pattern()` and `specials()`,
 src/tokenizer.cpp with the description, src/class_ranges.inc generated by tools/unicode/generate_classes.py with the
 sets its pattern names, and its tests, which check the lines of its universe in the shared fixtures the fixture script
 writes. Outside the directory it is named in five places: its `add_subdirectory()` in libs/CMakeLists.txt, its entry in
@@ -859,11 +861,11 @@ returns, at every chunk count. That is the splice theorem with the proposition t
 right context, given the four hypotheses (N), (S), (P) and (B), which the loader's refusals enforce, and given that the
 `Segmenter` is the engine's segmentation. The tests hold the claim on seeded texts under both inventories, at every
 chunk count from one to sixteen, at sixty-four and at every cut the rule takes, on a pattern of the tests' own and on
-GPT-2's, cl100k's and o200k's with their pinned vocabularies, special tokens allowed and not on the tests' pattern and
-on cl100k's and o200k's; they hold `chunk_boundaries()` on the tests' pattern to brute force over every certified cut of
-the report, and a cut in white space, at the right-context counterexamples, to the right context each inventory decided.
-Its speed is what [benchmarks.md](benchmarks.md) measures, and nothing is claimed about the vendors' own implementations
-beyond the ids and the speeds measured there.
+GPT-2's, cl100k's, o200k's and Llama 3's with their pinned vocabularies, special tokens allowed and not on the tests'
+pattern and on cl100k's, o200k's and Llama 3's; they hold `chunk_boundaries()` on the tests' pattern to brute force over
+every certified cut of the report, and a cut in white space, at the right-context counterexamples, to the right context
+each inventory decided. Its speed is what [benchmarks.md](benchmarks.md) measures, and nothing is claimed about the
+vendors' own implementations beyond the ids and the speeds measured there.
 
 ## **The vendor verifiers, from Python into C++**
 
@@ -878,14 +880,14 @@ small alphabet) moves as one file of pretok; where it lives is open choice 7.
 The Unicode tables are generated, not ported by hand. tools/unicode/generate_classes.py is munch's generator of the same
 name duplicated and changed to emit the sets named on its command line, each a general category or a property of
 PropList.txt under the name of its table, with the source digests and the `--version` guard munch's has, into each
-tokenizer library's src/class_ranges.inc, checked in, so the build never touches the network; GPT-2's and cl100k's
-tables are the same file generated twice from L, N and White_Space, duplicated rather than shared, so that a tokenizer
-whose pattern names other sets brings its own, o200k's Lu, Ll, Lt, Lm, Lo, M, N and White_Space. This is munch-audit's
-precedent for logos, whose reader keeps tables of the Unicode version logos is locked to rather than the library's. The
-tables are pinned to Unicode 15.0.0, the version of the Python reference, so that the fixtures replay (open choice 6).
-The classes and therefore the verifiers, the certified windows and the right context do not depend on the version; only
-the map from codepoints to classes does, and with it the ids of text holding a codepoint whose class moved between
-versions.
+tokenizer library's src/class_ranges.inc, checked in, so the build never touches the network; GPT-2's, cl100k's and
+Llama 3's tables are the same file generated three times from L, N and White_Space, duplicated rather than shared, so
+that a tokenizer whose pattern names other sets brings its own, o200k's Lu, Ll, Lt, Lm, Lo, M, N and White_Space. This
+is munch-audit's precedent for logos, whose reader keeps tables of the Unicode version logos is locked to rather than
+the library's. The tables are pinned to Unicode 15.0.0, the version of the Python reference, so that the fixtures replay
+(open choice 6). The classes and therefore the verifiers, the certified windows and the right context do not depend on
+the version; only the map from codepoints to classes does, and with it the ids of text holding a codepoint whose class
+moved between versions.
 
 The ported units stay exact through fixtures written by the reference and held byte for byte, as munch's verifier tests
 hold `token_automaton_reference.txt`. A fixture script beside the reference code writes each fixture with a header line
@@ -899,22 +901,25 @@ checked by its tokenizer's tests. The fixtures, one per subject:
   hold, L, N and White_Space, for o200k Lu, Ll, Lt, Lm, Lo and M in place of L, and the class of every code point on
   either side of a change of class.
 - **Segmentation**: the engine's segmentation of every class string of lengths zero to four (41,371 strings for GPT-2
-  and 69,905 for cl100k, the script's default length; to five, the gate check's own population, they would be 579,195
-  and 1,118,481), and of lengths zero to three for o200k, 27,931 strings, 2.9 MB in all, against which the `Segmenter`
-  is held, and the boundaries of the three corpora's class projections as digests.
+  and 69,905 for cl100k and for Llama 3, the script's default length; to five, the gate check's own population, they
+  would be 579,195 and 1,118,481), and of lengths zero to three for o200k, 27,931 strings, 4.4 MB in all, against which
+  the `Segmenter` is held, and the boundaries of the three corpora's class projections as digests.
 - **Verifier**: the table munch's constructor makes of the minimized M (trimmed, start first, breadth-first over the
   marked symbols ascending), the script applying the same renumbering, so the C++ construction must produce the
   identical table state for state; and the reference's decisions that M is functional and total and that the pattern
   covers every nonempty residual.
 - **Windows**: every certified window to width four under both certificates with its origin (18,357 and 32,218 for
-  GPT-2, 30,576 and 58,580 for cl100k), and to width three for o200k (10,365 and 17,888), and every refused one by
-  count; the tokenizers' report tests decide theirs at the fixture's width to hold them to it, the default being five.
+  GPT-2, 30,576 and 58,580 for cl100k and for Llama 3), and to width three for o200k (10,365 and 17,888), and every
+  refused one by count; the tokenizers' report tests decide theirs at the fixture's width to hold them to it, the
+  default being five.
 - **Right context**: the decided R of each inventory, and the counterexample of each failing R with its replay
   (`"\t\t!"` at cut two for R = 0, `"\t !"`, `"\t\tA"` and, for o200k, the tabs before the other letter `#` at cut one
   for the policy inventory at R = 1).
 - **Known answers**: the ids of short strings under each reference, among them the published `"Hello world"`, 15496 995
   for GPT-2, `"tiktoken is great!"`, 83 1609 5963 374 2294 0 for cl100k and 83 8251 2488 382 2212 0 for o200k with three
-  more of OpenAI's examples, from its openai-cookbook's How_to_count_tokens_with_tiktoken.ipynb at db31449.
+  more of OpenAI's examples, from its openai-cookbook's How_to_count_tokens_with_tiktoken.ipynb at db31449, and Meta's
+  `"This is a test sentence."`, 2028 374 264 1296 11914 13 for Llama 3, from meta-llama/llama3's llama/test_tokenizer.py
+  at a0940f9, less the beginning and end of text ids it adds.
 - **Lazy certification**: the verdicts and refutations of the lazy certification's validation set at the depths it
   records.
 
@@ -950,16 +955,16 @@ Three layers, each against something independent of the code under test:
    The texts mix the known counterexample shapes, whitespace runs before letters and punctuation, newlines followed by
    tab runs, long letter runs, contractions in both cases, and allowed and disallowed special tokens.
 3. **The corpora**, by the probe in tools/probes: `matisse_corpus` takes the vocabulary directory and corpus files,
-   holds GPT-2's, cl100k's and o200k's pinned files to their digests, a corpus the fixtures name to the digest of its
-   text, and the ids of `encode()` to the known-answer fixture's digest of the reference ids (the SHA-256 of the ids as
-   little-endian 32-bit words, with their count), written by the fixture script. On every corpus it checks the ids of
-   every piece merged with no cache and `decode()`, and for both inventories `encode_parallel()` at the worker counts
-   past one that the bench times, at the 4,096- and 65,536-codepoint chunkings and at every anchor, skipping a chunk
-   count past 32,768 since every chunk is a thread. At every anchor it also holds the pieces a worker keeps to the
-   serial pieces, with no thread per chunk. Given the vocabulary directory alone it runs the generated texts of layer 2,
-   which is the form registered with CTest, as hopper_edit_relex does, and `-DMATISSE_CORPUS_DIR` registers the three
-   corpora as well. The corpora are twitter.json, and munch's 10 tracked Python files and its 306 tracked C++ sources
-   and headers at 15b2863c, concatenated in path order by the fixture script and pinned by digest;
+   holds GPT-2's, cl100k's, o200k's and Llama 3's pinned files to their digests, a corpus the fixtures name to the
+   digest of its text, and the ids of `encode()` to the known-answer fixture's digest of the reference ids (the SHA-256
+   of the ids as little-endian 32-bit words, with their count), written by the fixture script. On every corpus it checks
+   the ids of every piece merged with no cache and `decode()`, and for both inventories `encode_parallel()` at the
+   worker counts past one that the bench times, at the 4,096- and 65,536-codepoint chunkings and at every anchor,
+   skipping a chunk count past 32,768 since every chunk is a thread. At every anchor it also holds the pieces a worker
+   keeps to the serial pieces, with no thread per chunk. Given the vocabulary directory alone it runs the generated
+   texts of layer 2, which is the form registered with CTest, as hopper_edit_relex does, and `-DMATISSE_CORPUS_DIR`
+   registers the three corpora as well. The corpora are twitter.json, and munch's 10 tracked Python files and its 306
+   tracked C++ sources and headers at 15b2863c, concatenated in path order by the fixture script and pinned by digest;
    [benchmarks.md](benchmarks.md) adds eleven more, and the probe's ids lines are what the vendors' ids are compared by.
    The probe prints the supply table, which [benchmarks.md](benchmarks.md) quotes from its output.
 
@@ -1028,13 +1033,12 @@ matisse's by the division.
 2. **Python bindings.** Neither munch nor hopper has any, and the PyPI name matisse is taken, so a binding could be
    called matisse-tok. Recommendation: later, once the validator has been used and the C++ surface has settled, so that
    a binding does not fix names before the stability boundary is stated.
-3. **Tokenizers after GPT-2 and cl100k.** Settled for o200k, a library of its own held to the fixtures and to the
-   vendors' ids: its classes are more (Lu, Ll, Lt, Lm, Lo, M) but its pattern is still a regex without lookbehind, its
-   30 classes the partition by every set and literal the pattern names. Recommendation for the rest, in this order.
-   First the cl100k pattern as tiktoken shipped it before the possessive rewrite. The construction already runs it, it
-   differs from the current one only on text ending in whitespace that holds a newline, and as far as is known Llama 3's
-   published pattern and the tokenizer.json conversions of cl100k carry it, which the pinned files will show. Then
-   WordPiece through munch's `trie_chain()` with bert-vocab.txt, which brings BERT's normalizer and so the first
+3. **Tokenizers after GPT-2 and cl100k.** Settled for the first two, each a library of its own held to the fixtures and
+   to the vendors' ids: o200k, whose classes are more (Lu, Ll, Lt, Lm, Lo, M) but whose pattern is still a regex without
+   lookbehind, its 30 classes the partition by every set and literal the pattern names, and Llama 3, whose published
+   pattern is the cl100k pattern as tiktoken shipped it before the possessive rewrite, read over cl100k's classes; that
+   pattern differs from the current one only on text ending in white space that holds a newline. Recommendation for the
+   rest: WordPiece through munch's `trie_chain()` with bert-vocab.txt, which brings BERT's normalizer and so the first
    normalizer. Character-level SentencePiece waits on munch's alphabet.
 4. **Threading model.** munch's `tokenize_all_parallel()` spawns one `std::jthread` per chunk beyond the last, runs the
    last on the calling thread, joins at scope end, and rethrows the first exception on the calling thread. Settled: the

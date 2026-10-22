@@ -1,7 +1,7 @@
-// Times matisse's encoder on GPT-2's, cl100k's and o200k's pinned vocabularies, every figure taken after the result it
-// times is held to a reference, so that a row measures a proved-identical encoding: the encoding with no cache,
-// encode_parallel(), the batch and the prompts with a kept cache to encode()'s ids, and encode() itself to the digest
-// it prints, which the fixtures' and the vendors' digests are compared by.
+// Times matisse's encoder on GPT-2's, cl100k's, o200k's and Llama 3's pinned vocabularies, every figure taken after the
+// result it times is held to a reference, so that a row measures a proved-identical encoding: the encoding with no
+// cache, encode_parallel(), the batch and the prompts with a kept cache to encode()'s ids, and encode() itself to the
+// digest it prints, which the fixtures' and the vendors' digests are compared by.
 //
 // The modes. single times, on one corpus, encode(), the same encoding with no cache, each piece looked up whole where
 // the definition says so and otherwise merged alone, and the segmentation alone, the pattern's Segmenter over the whole
@@ -22,9 +22,9 @@
 // processors the process may run on, since a figure is quotable only beside the tree and the machine that produced it.
 //
 // Usage: matisse_bench MODE VOCAB_DIR TOKENIZERS PASSES FILE [COUNT...]
-// MODE is single, prompts, parallel or batch, TOKENIZERS is one or more of gpt2, cl100k and o200k separated by commas,
-// and the counts are the worker counts of parallel (1, 2, 4, 8, 12, 16 and 24 unless given) or the thread counts of
-// batch (1 and 24). Each report is decided to validate()'s default width, o200k's to three.
+// MODE is single, prompts, parallel or batch, TOKENIZERS is one or more of gpt2, cl100k, o200k and llama3 separated by
+// commas, and the counts are the worker counts of parallel (1, 2, 4, 8, 12, 16 and 24 unless given) or the thread
+// counts of batch (1 and 24). Each report is decided to validate()'s default width, o200k's to three.
 
 #include <algorithm>
 #include <array>
@@ -60,6 +60,7 @@
 #include "matisse/encode/merger.hpp"
 #include "matisse/encode/piece_cache.hpp"
 #include "matisse/gpt2/tokenizer.hpp"
+#include "matisse/llama3/tokenizer.hpp"
 #include "matisse/load/definition.hpp"
 #include "matisse/o200k/tokenizer.hpp"
 #include "matisse/pretok/segmenter.hpp"
@@ -104,6 +105,11 @@ constexpr std::string_view cl100k_digest{"223921b76ee99bde995b7ff738513eef100fb5
 constexpr std::string_view o200k_digest{"446a9538cb6c348e3516120d7c08b09f57c36495e2acfffe59a5bf8b0cfb1a2d"};
 
 /**
+ * @brief The SHA-256 of Llama 3's llama3.tiktoken as pinned.
+ */
+constexpr std::string_view llama3_digest{"82e9d31979e92ab929cd544440f129d9ecd797b69e327f80f17e1c50d5551b55"};
+
+/**
  * @brief The widest window of o200k's report: its 30 classes take validate()'s default of five to 245 seconds and 2.9
  *        GB, and four, at 16 seconds, adds to three's factorization inventory, the one timed, 23 anchors on munch's C++
  *        sources and none on twitter.json or wiki-zh.
@@ -137,7 +143,7 @@ constexpr std::array<std::string_view, 4> modes{"single", "prompts", "parallel",
 struct Tokenizer
 {
     /**
-     * @brief The name, gpt2, cl100k or o200k.
+     * @brief The name, gpt2, cl100k, o200k or llama3.
      */
     std::string_view name{};
 
@@ -430,10 +436,10 @@ std::filesystem::path pinned(
 /**
  * @brief Returns a tokenizer read from the pinned files of a vocabulary directory, each held to its digest.
  * @param directory The vocabulary directory.
- * @param name The tokenizer, gpt2, cl100k or o200k.
+ * @param name The tokenizer, gpt2, cl100k, o200k or llama3.
  * @return The tokenizer.
  * @throws std::runtime_error If a file cannot be read or is not the pinned one.
- * @throws std::invalid_argument If the name is none of the three.
+ * @throws std::invalid_argument If the name is none of the four.
  */
 Tokenizer tokenizer_of(const std::filesystem::path& directory, const std::string_view name)
 {
@@ -469,7 +475,17 @@ Tokenizer tokenizer_of(const std::filesystem::path& directory, const std::string
                 .definition = matisse::load::read_tiktoken(ranks, matisse::o200k::specials())};
     }
 
-    throw std::invalid_argument{std::format("the tokenizers are gpt2, cl100k and o200k, not '{}'", name)};
+    if (name == "llama3")
+    {
+        const auto ranks{pinned(directory, "llama3.tiktoken", llama3_digest)};
+
+        return {.name = "llama3",
+                .pattern = matisse::llama3::pattern(),
+                .width = matisse::validate::default_width,
+                .definition = matisse::load::read_tiktoken(ranks, matisse::llama3::specials())};
+    }
+
+    throw std::invalid_argument{std::format("the tokenizers are gpt2, cl100k, o200k and llama3, not '{}'", name)};
 }
 
 /**

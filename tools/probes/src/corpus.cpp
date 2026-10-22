@@ -1,5 +1,5 @@
-// Holds the ids of encode() and of encode_parallel() on GPT-2's, cl100k's and o200k's pinned vocabularies to their
-// references on real text. This is the third layer of design.md's test strategy run as a program.
+// Holds the ids of encode() and of encode_parallel() on GPT-2's, cl100k's, o200k's and Llama 3's pinned vocabularies to
+// their references on real text. This is the third layer of design.md's test strategy run as a program.
 //
 // What it checks on every text, for every tokenizer: that encode() gives the ids of every piece looked up whole where
 // the definition says so and otherwise merged with no cache, and that decode() spells the text back; and for both
@@ -52,6 +52,7 @@
 #include "matisse/encode/encoder.hpp"
 #include "matisse/encode/merger.hpp"
 #include "matisse/gpt2/tokenizer.hpp"
+#include "matisse/llama3/tokenizer.hpp"
 #include "matisse/load/definition.hpp"
 #include "matisse/o200k/tokenizer.hpp"
 #include "matisse/pretok/segmenter.hpp"
@@ -84,6 +85,11 @@ constexpr std::string_view cl100k_digest{"223921b76ee99bde995b7ff738513eef100fb5
  * @brief The SHA-256 of o200k_base.tiktoken as pinned.
  */
 constexpr std::string_view o200k_digest{"446a9538cb6c348e3516120d7c08b09f57c36495e2acfffe59a5bf8b0cfb1a2d"};
+
+/**
+ * @brief The SHA-256 of Llama 3's llama3.tiktoken as pinned.
+ */
+constexpr std::string_view llama3_digest{"82e9d31979e92ab929cd544440f129d9ecd797b69e327f80f17e1c50d5551b55"};
 
 /**
  * @brief The widest window of o200k's report: its 30 classes take validate()'s default of five to 245 seconds and 2.9
@@ -156,7 +162,7 @@ void expect(const bool condition, const std::string_view what)
 struct Tokenizer
 {
     /**
-     * @brief The universe name of the fixtures, gpt2, cl100k or o200k.
+     * @brief The universe name of the fixtures, gpt2, cl100k, o200k or llama3.
      */
     std::string_view name{};
 
@@ -237,10 +243,11 @@ std::filesystem::path pinned(
 }
 
 /**
- * @brief Returns GPT-2, cl100k and o200k read from the pinned files of a vocabulary directory, each held to its digest.
- * @param directory The vocabulary directory, holding gpt2-vocab.json, gpt2-merges.txt, cl100k_base.tiktoken and
- *        o200k_base.tiktoken.
- * @return The three tokenizers.
+ * @brief Returns GPT-2, cl100k, o200k and Llama 3 read from the pinned files of a vocabulary directory, each held to
+ *        its digest.
+ * @param directory The vocabulary directory, holding gpt2-vocab.json, gpt2-merges.txt, cl100k_base.tiktoken,
+ *        o200k_base.tiktoken and llama3.tiktoken.
+ * @return The four tokenizers.
  * @throws std::runtime_error If a file cannot be read or is not the pinned one.
  */
 std::vector<Tokenizer> tokenizers(const std::filesystem::path& directory)
@@ -252,6 +259,8 @@ std::vector<Tokenizer> tokenizers(const std::filesystem::path& directory)
     const auto cl100k_ranks{pinned(directory, "cl100k_base.tiktoken", cl100k_digest)};
 
     const auto o200k_ranks{pinned(directory, "o200k_base.tiktoken", o200k_digest)};
+
+    const auto llama3_ranks{pinned(directory, "llama3.tiktoken", llama3_digest)};
 
     std::vector<Tokenizer> read{};
 
@@ -272,6 +281,12 @@ std::vector<Tokenizer> tokenizers(const std::filesystem::path& directory)
             .pattern = matisse::o200k::pattern(),
             .width = o200k_width,
             .definition = matisse::load::read_tiktoken(o200k_ranks, matisse::o200k::specials())});
+
+    read.push_back(Tokenizer{
+            .name = "llama3",
+            .pattern = matisse::llama3::pattern(),
+            .width = matisse::validate::default_width,
+            .definition = matisse::load::read_tiktoken(llama3_ranks, matisse::llama3::specials())});
 
     return read;
 }

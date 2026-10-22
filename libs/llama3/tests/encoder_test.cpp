@@ -1,0 +1,861 @@
+#include "matisse/encode/encoder.hpp"
+
+#include <algorithm>
+#include <array>
+#include <charconv>
+#include <cstddef>
+#include <cstdint>
+#include <filesystem>
+#include <fstream>
+#include <gtest/gtest.h>
+#include <iterator>
+#include <limits>
+#include <optional>
+#include <random>
+#include <ranges>
+#include <set>
+#include <sstream>
+#include <string>
+#include <string_view>
+#include <tuple>
+#include <utility>
+#include <vector>
+
+#include "matisse/common/sha256.hpp"
+#include "matisse/encode/backtracker.hpp"
+#include "matisse/encode/join_table.hpp"
+#include "matisse/encode/merger.hpp"
+#include "matisse/encode/piece_cache.hpp"
+#include "matisse/encode/spelling_table.hpp"
+#include "matisse/encode/window_index.hpp"
+#include "matisse/llama3/tokenizer.hpp"
+#include "matisse/pretok/segmenter.hpp"
+#include "matisse/validate/report.hpp"
+
+using namespace matisse::encode;
+using matisse::load::Definition;
+using matisse::load::Token_id_t;
+using matisse::validate::Inventory;
+
+namespace
+{
+/**
+ * @brief The SHA-256 of llama3.tiktoken as pinned.
+ */
+constexpr std::string_view llama3_digest{"82e9d31979e92ab929cd544440f129d9ecd797b69e327f80f17e1c50d5551b55"};
+
+/**
+ * @brief What the known-answer fixture holds, counted as it is checked.
+ */
+struct Fixture_counts
+{
+    /**
+     * @brief The universe lines.
+     */
+    std::size_t universes{0};
+
+    /**
+     * @brief The encode lines.
+     */
+    std::size_t encodings{0};
+
+    /**
+     * @brief The corpus lines, which the corpus probe checks.
+     */
+    std::size_t corpora{0};
+};
+
+/**
+ * @brief The known-answer fixture under check: whether the current universe is Llama 3's, and the counts of its lines
+ *        so far.
+ */
+struct Fixture_check
+{
+    /**
+     * @brief Whether the current universe is Llama 3's, false before the first universe line.
+     */
+    bool inside{};
+
+    /**
+     * @brief The lines checked so far, by kind.
+     */
+    Fixture_counts counts{};
+};
+
+/**
+ * @brief Returns the whole of a file.
+ * @param path The file's path.
+ * @return Its bytes.
+ */
+std::string contents(const std::filesystem::path& path)
+{
+    std::ifstream stream{path, std::ios::binary};
+
+    return {std::istreambuf_iterator<char>{stream}, std::istreambuf_iterator<char>{}};
+}
+
+/**
+ * @brief Returns the path of a pinned vocabulary file in the directory MATISSE_VOCAB_DIR names.
+ * @param name The file's name.
+ * @return The path, std::nullopt when no directory is named or it does not hold the file.
+ */
+std::optional<std::filesystem::path> pinned(const std::string_view name)
+{
+    const std::filesystem::path directory{VOCAB_DIR};
+
+    if (directory.empty() || !std::filesystem::exists(directory / name))
+    {
+        return std::nullopt;
+    }
+
+    return directory / name;
+}
+
+/**
+ * @brief Returns Llama 3's pinned rank file read with the vendor's special tokens, after checking it against its
+ *        digest.
+ * @return The definition, std::nullopt when the vocabulary directory does not hold the file.
+ */
+std::optional<Definition> pinned_llama3()
+{
+    const auto path{pinned("llama3.tiktoken")};
+
+    if (!path)
+    {
+        return std::nullopt;
+    }
+
+    EXPECT_EQ(matisse::common::sha256(contents(*path)), llama3_digest);
+
+    const auto specials{matisse::llama3::specials()};
+
+    return matisse::load::read_tiktoken(*path, specials);
+}
+
+/**
+ * @brief Returns Llama 3's report at the default width, decided once for every test of this file.
+ * @return The report.
+ */
+const matisse::validate::Report& decided_report()
+{
+    static const auto report{matisse::validate::validate(matisse::llama3::pattern())};
+
+    return report;
+}
+
+/**
+ * @brief Returns Llama 3's encoder, the report decided once and its factorization inventory kept.
+ * @param definition Llama 3's definition.
+ * @param allowed The special tokens allowed.
+ * @return The encoder.
+ */
+Encoder llama3_encoder(Definition definition, const std::vector<std::string>& allowed = {})
+{
+    const auto pattern{matisse::llama3::pattern()};
+
+    return {std::move(definition), decided_report(), matisse::validate::Inventory::factorization, pattern, allowed};
+}
+
+/**
+ * @brief Returns the ids of a text with no allowed special token, each piece Llama 3's pattern segments looked up whole
+ *        or merged, with no cache.
+ * @param merger Llama 3's merger.
+ * @param text The text.
+ * @return The ids.
+ */
+std::vector<Token_id_t> uncached_ids(const Merger& merger, const std::string_view text)
+{
+    const matisse::pretok::Segmenter segmenter{matisse::llama3::pattern()};
+
+    std::vector<Token_id_t> ids{};
+
+    std::size_t start{0};
+
+    for (const auto end : segmenter.boundaries(text))
+    {
+        const auto piece{text.substr(start, end - start)};
+
+        start = end;
+
+        if (const auto whole{merger.whole_piece(piece)})
+        {
+            ids.push_back(*whole);
+
+            continue;
+        }
+
+        const auto merged{merger.merged(piece)};
+
+        ids.insert(ids.end(), merged.begin(), merged.end());
+    }
+
+    return ids;
+}
+
+/**
+ * @brief Returns the spellings of the vendor's special tokens of Llama 3.
+ * @return The spellings.
+ */
+std::vector<std::string> special_spellings()
+{
+    std::vector<std::string> spellings{};
+
+    for (const auto& [spelling, id] : matisse::llama3::specials())
+    {
+        spellings.push_back(spelling);
+    }
+
+    return spellings;
+}
+
+/**
+ * @brief Returns the bytes a lowercase hex field spells, two digits per byte, "-" spelling the empty text.
+ * @param field The hex digits.
+ * @return The bytes.
+ */
+std::string bytes_of(const std::string_view field)
+{
+    std::string bytes{};
+
+    if (field == "-")
+    {
+        return bytes;
+    }
+
+    for (std::size_t at{0}; at + 1 < field.size(); at += 2)
+    {
+        unsigned value{};
+
+        std::ignore = std::from_chars(field.data() + at, field.data() + at + 2, value, 16);
+
+        bytes += static_cast<char>(value);
+    }
+
+    return bytes;
+}
+
+/**
+ * @brief Starts a universe line's universe, Llama 3's when it names llama3.
+ * @param check The fixture under check.
+ * @param fields The line after its first word.
+ */
+void start_universe(Fixture_check& check, std::istringstream& fields)
+{
+    std::string name{};
+
+    fields >> name;
+
+    check.inside = name == "llama3";
+
+    if (check.inside)
+    {
+        ++check.counts.universes;
+    }
+}
+
+/**
+ * @brief Checks an encode line: Llama 3's encoder gives its text, written in hex, its ids, and decodes them back.
+ * @param check The fixture under check.
+ * @param encoder Llama 3's encoder.
+ * @param fields The line after its first word.
+ * @param context The line.
+ */
+void expect_encoding(
+        Fixture_check& check, const Encoder& encoder, std::istringstream& fields, const std::string& context)
+{
+    std::string text{};
+
+    fields >> text;
+
+    std::vector<Token_id_t> ids{};
+
+    for (Token_id_t id{}; fields >> id;)
+    {
+        ids.push_back(id);
+    }
+
+    const auto bytes{bytes_of(text)};
+
+    EXPECT_EQ(encoder.encode(bytes), ids) << context;
+    EXPECT_EQ(encoder.decode(ids), bytes) << context;
+
+    ++check.counts.encodings;
+}
+
+/**
+ * @brief Checks one fixture line with Llama 3's encoder, a comment or blank line checking nothing, a line of another
+ *        universe skipped and a corpus line only counted.
+ * @param check The fixture under check.
+ * @param encoder Llama 3's encoder.
+ * @param line The line.
+ */
+void expect_fixture_line(Fixture_check& check, const Encoder& encoder, const std::string& line)
+{
+    std::istringstream fields{line};
+
+    std::string kind{};
+
+    if (!(fields >> kind) || kind.starts_with('#'))
+    {
+        return;
+    }
+
+    if (kind == "universe")
+    {
+        start_universe(check, fields);
+    }
+    else if (!check.inside)
+    {
+        return;
+    }
+    else if (kind == "corpus")
+    {
+        ++check.counts.corpora;
+    }
+    else if (kind == "encode")
+    {
+        expect_encoding(check, encoder, fields, line);
+    }
+    else
+    {
+        ADD_FAILURE() << "unknown fixture line: " << line;
+    }
+}
+
+/**
+ * @brief Returns the UTF-8 encoding of a code point.
+ * @param point The code point, a Unicode scalar value.
+ * @return Its one to four bytes.
+ */
+std::string utf8_of(const char32_t point)
+{
+    std::string bytes{};
+
+    if (point < 0x80)
+    {
+        bytes += static_cast<char>(point);
+    }
+    else if (point < 0x800)
+    {
+        bytes += static_cast<char>(0xC0U | (point >> 6U));
+        bytes += static_cast<char>(0x80U | (point & 0x3FU));
+    }
+    else if (point < 0x10000)
+    {
+        bytes += static_cast<char>(0xE0U | (point >> 12U));
+        bytes += static_cast<char>(0x80U | ((point >> 6U) & 0x3FU));
+        bytes += static_cast<char>(0x80U | (point & 0x3FU));
+    }
+    else
+    {
+        bytes += static_cast<char>(0xF0U | (point >> 18U));
+        bytes += static_cast<char>(0x80U | ((point >> 12U) & 0x3FU));
+        bytes += static_cast<char>(0x80U | ((point >> 6U) & 0x3FU));
+        bytes += static_cast<char>(0x80U | (point & 0x3FU));
+    }
+
+    return bytes;
+}
+
+/**
+ * @brief Returns a seeded random text of the shapes the pattern meets: white space runs before letters and punctuation,
+ *        newlines followed by tab runs, long letter runs, contractions in both cases, digits, the special tokens'
+ *        spellings whole and broken, and code points drawn from several scripts and the emoji.
+ * @param random The random sequence.
+ * @param fragments The number of fragments joined.
+ * @return The text, well-formed UTF-8.
+ */
+std::string random_text(std::mt19937& random, const std::size_t fragments)
+{
+    constexpr std::array<std::string_view, 22> shapes{
+            " ",
+            "  ",
+            "   a",
+            "\t\t!",
+            "\t !",
+            "\n\n\t\t",
+            "\r\n",
+            "Hello",
+            " world",
+            "don't",
+            "DON'T",
+            "'s",
+            "'LL",
+            " 1234567",
+            "!!",
+            "<|begin_of_text|>",
+            "<|eot_",
+            "id|>",
+            "<|start_header_id|>",
+            "<|reserved_special_token_250|>",
+            "abcdefghijklmnopqrstuvwxyz",
+            " ?!"};
+
+    // Latin-1, Latin Extended-A, Greek, Cyrillic, Arabic, Devanagari, Hangul, kana, CJK and the emoji.
+    constexpr std::array<std::pair<char32_t, char32_t>, 10> scripts{{
+            {0xC0, 0xFF},
+            {0x100, 0x17F},
+            {0x391, 0x3C9},
+            {0x410, 0x44F},
+            {0x621, 0x64A},
+            {0x905, 0x939},
+            {0xAC00, 0xD7A3},
+            {0x3041, 0x30FF},
+            {0x4E00, 0x9FFF},
+            {0x1F600, 0x1F64F},
+    }};
+
+    std::uniform_int_distribution<std::size_t> shape{0, shapes.size() + scripts.size() - 1};
+
+    std::string text{};
+
+    for (std::size_t count{0}; count < fragments; ++count)
+    {
+        const auto drawn{shape(random)};
+
+        if (drawn < shapes.size())
+        {
+            text += shapes[drawn];
+
+            continue;
+        }
+
+        const auto [first, last]{scripts[drawn - shapes.size()]};
+
+        std::uniform_int_distribution<char32_t> point{first, last};
+
+        text += utf8_of(point(random));
+    }
+
+    return text;
+}
+
+/**
+ * @brief Returns the chunk counts the self-consistency checks ask for: one to sixteen, sixty-four, and one more than
+ *        the text's bytes, which takes every cut the rule offers.
+ * @param text The text.
+ * @return The counts.
+ */
+std::vector<std::size_t> chunk_counts(const std::string_view text)
+{
+    std::vector<std::size_t> counts{};
+
+    for (std::size_t chunks{1}; chunks <= 16; ++chunks)
+    {
+        counts.push_back(chunks);
+    }
+
+    counts.push_back(64);
+
+    counts.push_back(text.size() + 1);
+
+    return counts;
+}
+
+/**
+ * @brief Expects every anchor of a text, read as one stretch, to be a boundary of the pattern's segmentation of it.
+ * @param index The window index of an inventory.
+ * @param segmenter The pattern's segmenter.
+ * @param text The text, well-formed UTF-8.
+ */
+void expect_anchors_are_boundaries(
+        const Window_index& index, const matisse::pretok::Segmenter& segmenter, const std::string_view text)
+{
+    const auto pieces{segmenter.boundaries(text)};
+
+    for (std::size_t at{0}; at < text.size(); ++at)
+    {
+        const auto begins_code_point{(static_cast<unsigned char>(text[at]) & 0xC0U) != 0x80U};
+
+        if (begins_code_point && index.first_anchor(text, at) == at)
+        {
+            EXPECT_TRUE(std::ranges::contains(pieces, at)) << text << " anchor " << at;
+        }
+    }
+}
+
+/**
+ * @brief The rank of no join, above every rank.
+ */
+constexpr std::uint32_t no_rank{std::numeric_limits<std::uint32_t>::max()};
+
+/**
+ * @brief The tables the backtracking takes beside a definition's spellings: the id of every byte and the joins of the
+ *        rank rule, every split of a spelling into two spellings joining at the spelling's rank, which is its id.
+ */
+struct Rank_tables
+{
+    /**
+     * @brief The id of every byte, by its value.
+     */
+    std::array<Token_id_t, 256> byte_ids{};
+
+    /**
+     * @brief The joins, keyed by the ids of their parts.
+     */
+    Join_table joins;
+};
+
+/**
+ * @brief Returns the tables of a definition under the rank rule, built as the merger builds them.
+ * @param definition The definition, read from a rank file.
+ * @return The tables.
+ */
+Rank_tables rank_tables_of(const Definition& definition)
+{
+    const auto& spellings{definition.spellings};
+
+    const Spelling_table ids{spellings};
+
+    std::array<Token_id_t, 256> byte_ids{};
+
+    for (std::size_t value{0}; value < byte_ids.size(); ++value)
+    {
+        const std::string byte{static_cast<char>(value)};
+
+        byte_ids[value] = *ids.find(byte);
+    }
+
+    Join_table::Joins_t joins{};
+
+    for (std::size_t id{0}; id < spellings.size(); ++id)
+    {
+        const std::string_view whole{spellings[id]};
+
+        const auto product{static_cast<Token_id_t>(id)};
+
+        for (std::size_t split{1}; split < whole.size(); ++split)
+        {
+            const auto left{ids.find(whole.substr(0, split))};
+
+            const auto right{ids.find(whole.substr(split))};
+
+            if (!left || !right)
+            {
+                continue;
+            }
+
+            joins.emplace(Join_table::key_of(*left, *right), Join_table::Join{.rank = product, .product = product});
+        }
+    }
+
+    return {.byte_ids = byte_ids, .joins = Join_table{joins}};
+}
+
+/**
+ * @brief Returns the ids of a piece under the plain loop over the rank rule's joins: join the adjacent pair of least
+ *        rank, the leftmost on a tie, until no pair has a join.
+ * @param piece The piece, at least one byte.
+ * @param tables The definition's tables.
+ * @return The ids.
+ */
+std::vector<Token_id_t> plain_merge(const std::string_view piece, const Rank_tables& tables)
+{
+    std::vector<Token_id_t> parts{};
+
+    for (const auto byte : piece)
+    {
+        parts.push_back(tables.byte_ids[static_cast<unsigned char>(byte)]);
+    }
+
+    while (true)
+    {
+        std::pair best{no_rank, std::size_t{0}};
+
+        for (std::size_t at{0}; at + 1 < parts.size(); ++at)
+        {
+            const auto join{tables.joins.find(parts[at], parts[at + 1])};
+
+            if (join && join->rank < best.first)
+            {
+                best = {join->rank, at};
+            }
+        }
+
+        const auto [rank, at]{best};
+
+        if (rank == no_rank)
+        {
+            return parts;
+        }
+
+        parts[at] = rank;
+
+        parts.erase(parts.begin() + static_cast<std::ptrdiff_t>(at) + 1);
+    }
+}
+
+} // namespace
+
+TEST(Encoder_test, The_published_known_answer_this_is_a_test_sentence_is_2028_374_264_1296_11914_13)
+{
+    auto definition{pinned_llama3()};
+
+    if (!definition)
+    {
+        GTEST_SKIP() << "MATISSE_VOCAB_DIR names no directory holding llama3.tiktoken";
+    }
+
+    const auto encoder{llama3_encoder(std::move(*definition))};
+
+    EXPECT_EQ(encoder.encode("This is a test sentence."), (std::vector<Token_id_t>{2028, 374, 264, 1296, 11914, 13}));
+}
+
+TEST(Encoder_test, Every_known_answer_of_the_fixture_is_the_encoding_of_its_text_and_decodes_back_to_it)
+{
+    auto definition{pinned_llama3()};
+
+    if (!definition)
+    {
+        GTEST_SKIP() << "MATISSE_VOCAB_DIR names no directory holding llama3.tiktoken";
+    }
+
+    const auto encoder{llama3_encoder(std::move(*definition))};
+
+    std::ifstream file{std::string{SOURCE_DIR} + "/libs/load/tests/data/known_answers_reference.txt"};
+
+    ASSERT_TRUE(file.is_open());
+
+    Fixture_check check{};
+
+    for (std::string line{}; std::getline(file, line);)
+    {
+        expect_fixture_line(check, encoder, line);
+    }
+
+    EXPECT_EQ(check.counts.universes, 1U);
+    EXPECT_EQ(check.counts.encodings, 16U);
+    EXPECT_EQ(check.counts.corpora, 3U);
+}
+
+TEST(Encoder_test, An_allowed_special_token_is_its_id_and_one_not_allowed_is_ordinary_text)
+{
+    auto definition{pinned_llama3()};
+
+    if (!definition)
+    {
+        GTEST_SKIP() << "MATISSE_VOCAB_DIR names no directory holding llama3.tiktoken";
+    }
+
+    const auto allowing{llama3_encoder(*definition, {"<|eot_id|>"})};
+
+    const auto refusing{llama3_encoder(std::move(*definition))};
+
+    // The Python reference's ids of "<|eot_id|>" as text, tiktoken's, which an encoder allowing no special token gives.
+    const std::vector<Token_id_t> as_text{27, 91, 68, 354, 851, 91, 29};
+
+    EXPECT_EQ(allowing.encode("a<|eot_id|>b"), (std::vector<Token_id_t>{64, 128009, 65}));
+    EXPECT_EQ(allowing.encode("<|eot_id|>"), std::vector<Token_id_t>{128009});
+    EXPECT_EQ(refusing.encode("<|eot_id|>"), as_text);
+    EXPECT_EQ(
+            allowing.decode(std::vector<Token_id_t>{128000, 128255}),
+            "<|begin_of_text|><|reserved_special_token_250|>");
+}
+
+TEST(Encoder_test, The_ids_are_those_of_no_cache_and_decode_spells_the_text_back_on_seeded_random_texts)
+{
+    auto definition{pinned_llama3()};
+
+    if (!definition)
+    {
+        GTEST_SKIP() << "MATISSE_VOCAB_DIR names no directory holding llama3.tiktoken";
+    }
+
+    const auto allowing{llama3_encoder(*definition, special_spellings())};
+
+    const auto refusing{llama3_encoder(*definition)};
+
+    const Merger merger{*definition};
+
+    std::mt19937 random{7};
+
+    for (std::size_t count{0}; count < 300; ++count)
+    {
+        const auto text{random_text(random, 60)};
+
+        const auto ids{refusing.encode(text)};
+
+        EXPECT_EQ(ids, uncached_ids(merger, text)) << text;
+        EXPECT_EQ(refusing.decode(ids), text);
+        EXPECT_EQ(allowing.decode(allowing.encode(text)), text);
+    }
+}
+
+TEST(Encoder_test, The_ids_are_those_of_no_cache_on_a_text_whose_distinct_pieces_fill_the_cache_past_its_bound)
+{
+    auto definition{pinned_llama3()};
+
+    if (!definition)
+    {
+        GTEST_SKIP() << "MATISSE_VOCAB_DIR names no directory holding llama3.tiktoken";
+    }
+
+    // Twenty thousand words of eight to fourteen letters, almost all distinct and few of them tokens, so that most are
+    // merged and the cache stops filling at its bound.
+    constexpr std::string_view letters{"abcdefghijklmnopqrstuvwxyz"};
+
+    std::mt19937 random{9};
+
+    std::uniform_int_distribution<std::size_t> length{8, 14};
+
+    std::uniform_int_distribution<std::size_t> letter{0, letters.size() - 1};
+
+    std::string text{};
+
+    std::set<std::string> merged_words{};
+
+    const Merger merger{*definition};
+
+    for (std::size_t count{0}; count < 20000; ++count)
+    {
+        std::string word{" "};
+
+        for (auto left{length(random)}; left > 0; --left)
+        {
+            word += letters[letter(random)];
+        }
+
+        text += word;
+
+        if (!merger.whole_piece(word))
+        {
+            merged_words.insert(std::move(word));
+        }
+    }
+
+    ASSERT_GT(merged_words.size(), piece_cache_capacity);
+
+    const auto encoder{llama3_encoder(*definition)};
+
+    EXPECT_EQ(encoder.encode(text), uncached_ids(merger, text));
+}
+
+TEST(Encoder_test, Encode_parallel_gives_encode_s_ids_under_both_inventories_and_every_anchor_ends_a_piece)
+{
+    auto definition{pinned_llama3()};
+
+    if (!definition)
+    {
+        GTEST_SKIP() << "MATISSE_VOCAB_DIR names no directory holding llama3.tiktoken";
+    }
+
+    const auto pattern{matisse::llama3::pattern()};
+
+    const auto& report{decided_report()};
+
+    const matisse::pretok::Segmenter segmenter{pattern};
+
+    for (const auto inventory : {Inventory::factorization, Inventory::policy})
+    {
+        for (const auto& allowed : {std::vector<std::string>{}, special_spellings()})
+        {
+            const Encoder encoder{*definition, report, inventory, pattern, allowed};
+
+            const Window_index index{
+                    inventory == Inventory::factorization ? report.factorization : report.policy, pattern.alphabet};
+
+            std::mt19937 random{23};
+
+            for (std::size_t count{0}; count < 60; ++count)
+            {
+                const auto text{random_text(random, 60)};
+
+                const auto ids{encoder.encode(text)};
+
+                for (const auto chunks : chunk_counts(text))
+                {
+                    EXPECT_EQ(encoder.encode_parallel(text, chunks), ids) << text << " in " << chunks;
+                }
+
+                expect_anchors_are_boundaries(index, segmenter, text);
+            }
+        }
+    }
+}
+
+TEST(Encoder_test, A_cut_in_white_space_holds_with_the_right_context_each_inventory_decided)
+{
+    auto definition{pinned_llama3()};
+
+    if (!definition)
+    {
+        GTEST_SKIP() << "MATISSE_VOCAB_DIR names no directory holding llama3.tiktoken";
+    }
+
+    const auto pattern{matisse::llama3::pattern()};
+
+    const auto& report{decided_report()};
+
+    const Encoder factorization{*definition, report, Inventory::factorization, pattern, {}};
+
+    const Encoder policy{*definition, report, Inventory::policy, pattern, {}};
+
+    // The right-context fixture's counterexamples: a worker reading one code point less past the cut before the
+    // punctuation, or the one between the tabs, reads the tabs as one piece.
+    const std::string before_punctuation{"aaaa\t\t!aaaaa"};
+
+    const std::string between_tabs{"aaaa\t\tAaaaa"};
+
+    EXPECT_EQ(report.factorization.right_context, 1U);
+    EXPECT_EQ(report.policy.right_context, 2U);
+    EXPECT_EQ(factorization.chunk_boundaries(before_punctuation, 2), (std::vector<std::size_t>{0, 6, 12}));
+    EXPECT_EQ(factorization.encode_parallel(before_punctuation, 2), factorization.encode(before_punctuation));
+    EXPECT_EQ(policy.chunk_boundaries(between_tabs, 2), (std::vector<std::size_t>{0, 5, 11}));
+    EXPECT_EQ(policy.encode_parallel(between_tabs, 2), policy.encode(between_tabs));
+}
+
+TEST(Encoder_test, Llama3_s_rank_file_is_refused_the_backtracking_and_the_pieces_it_would_take_merge_as_the_plain_loop)
+{
+    // .:.: at 100421 is joined last from .:., at 105051, and :, so a split has a part of higher rank than its token.
+    auto definition{pinned_llama3()};
+
+    if (!definition)
+    {
+        GTEST_SKIP() << "MATISSE_VOCAB_DIR names no directory holding llama3.tiktoken";
+    }
+
+    const auto tables{rank_tables_of(*definition)};
+
+    EXPECT_FALSE(Backtracker::of(definition->spellings, tables.byte_ids, tables.joins).has_value());
+
+    const Merger merger{*definition};
+
+    EXPECT_EQ(merger.merged(".:.:"), std::vector<Token_id_t>{100421});
+    EXPECT_EQ(plain_merge(".:.:", tables), std::vector<Token_id_t>{100421});
+
+    // Pieces of 100 to 200 bytes of the seeded random texts, either side of the scan's threshold, and pieces of one to
+    // forty code points of Cyrillic and CJK, wholly outside ASCII, which a definition meeting the condition would
+    // backtrack.
+    std::mt19937 random{31};
+
+    for (std::size_t count{0}; count < 200; ++count)
+    {
+        const auto text{random_text(random, 120)};
+
+        const auto bytes{100 + count % 101};
+
+        const auto piece{std::string_view{text}.substr(0, bytes)};
+
+        EXPECT_EQ(merger.merged(piece), plain_merge(piece, tables)) << piece;
+    }
+
+    std::uniform_int_distribution<std::size_t> length{1, 40};
+
+    std::uniform_int_distribution<char32_t> cyrillic{0x410, 0x44F};
+
+    std::uniform_int_distribution<char32_t> cjk{0x4E00, 0x9FFF};
+
+    for (std::size_t count{0}; count < 200; ++count)
+    {
+        std::string piece{};
+
+        for (auto left{length(random)}; left > 0; --left)
+        {
+            const auto point{count % 2 == 0 ? cyrillic(random) : cjk(random)};
+
+            piece += utf8_of(point);
+        }
+
+        EXPECT_EQ(merger.merged(piece), plain_merge(piece, tables)) << piece;
+    }
+}

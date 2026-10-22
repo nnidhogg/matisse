@@ -41,7 +41,7 @@ struct Tokenizer
 };
 
 /**
- * @brief Returns every tokenizer matisse describes, gpt2, cl100k and o200k.
+ * @brief Returns every tokenizer matisse describes, gpt2, cl100k, o200k and llama3.
  * @return The tokenizers, in that order.
  */
 [[nodiscard]] std::vector<Tokenizer> tokenizers();

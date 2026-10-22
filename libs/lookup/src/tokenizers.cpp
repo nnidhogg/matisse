@@ -8,6 +8,7 @@
 
 #include "matisse/cl100k/tokenizer.hpp"
 #include "matisse/gpt2/tokenizer.hpp"
+#include "matisse/llama3/tokenizer.hpp"
 #include "matisse/o200k/tokenizer.hpp"
 
 namespace matisse::lookup
@@ -16,7 +17,8 @@ std::vector<Tokenizer> tokenizers()
 {
     return {{.name = "gpt2", .pattern = gpt2::pattern(), .specials = gpt2::specials()},
             {.name = "cl100k", .pattern = cl100k::pattern(), .specials = cl100k::specials()},
-            {.name = "o200k", .pattern = o200k::pattern(), .specials = o200k::specials()}};
+            {.name = "o200k", .pattern = o200k::pattern(), .specials = o200k::specials()},
+            {.name = "llama3", .pattern = llama3::pattern(), .specials = llama3::specials()}};
 }
 
 std::optional<Tokenizer> tokenizer(const std::string_view name)

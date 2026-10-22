@@ -328,7 +328,8 @@ TEST(Command_line_test, A_command_line_error_exits_two_with_the_usage)
     expect_command_error(run({"--tiktoken", "gpt2", file, "--trace"}), "unknown option --trace");
     expect_command_error(run({file, "--tiktoken"}), "--tiktoken needs a value");
     expect_command_error(
-            run({"--tiktoken", "o200k_base", file}), "--tiktoken takes one of gpt2, cl100k, o200k, not 'o200k_base'");
+            run({"--tiktoken", "o200k_base", file}),
+            "--tiktoken takes one of gpt2, cl100k, o200k, llama3, not 'o200k_base'");
     expect_command_error(
             run({file}),
             std::format("{} is read as a rank file with --tiktoken PATTERN; a tokenizer.json has no reader yet", file));

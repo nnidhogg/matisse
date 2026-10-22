@@ -278,6 +278,7 @@ jobs:
           #include <matisse/cl100k/tokenizer.hpp>
           #include <matisse/encode/encoder.hpp>
           #include <matisse/gpt2/tokenizer.hpp>
+          #include <matisse/llama3/tokenizer.hpp>
           #include <matisse/load/definition.hpp>
           #include <matisse/lookup/tokenizers.hpp>
           #include <matisse/o200k/tokenizer.hpp>
