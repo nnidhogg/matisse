@@ -67,11 +67,33 @@ constexpr std::size_t byte_count{256};
 /**
  * @brief The longest piece merged by a scan of its parts, a longer piece by the heap.
  *
- * Measured with no cache, Russian gains 12 and 20 per cent under GPT-2 and cl100k from a threshold of 16 bytes to 32,
- * Chinese 6 to 9 per cent from 64 to 128, and neither gains beyond, 256, 512 and 1,024 measuring level with 128; the
- * other corpora measure level from 16 bytes on.
+ * Measured with no cache and the scan and the heap alone, Russian gains 12 and 20 per cent under GPT-2 and cl100k from
+ * a threshold of 16 bytes to 32, Chinese 6 to 9 per cent from 64 to 128, and neither gains beyond, 256, 512 and 1,024
+ * measuring level with 128; the other corpora measure level from 16 bytes on.
  */
 constexpr std::size_t longest_scanned_piece{128};
+
+/**
+ * @brief Returns whether at least half of a piece's bytes lie outside ASCII, which makes it a piece the backtracking
+ *        merges faster than the scan.
+ *
+ * Timed piece by piece on nine corpora under GPT-2 and cl100k, the backtracking takes 0.28 to 0.90 times the scan's
+ * time on such pieces of up to 128 bytes; on the others it takes 1.16 to 2.36 times under cl100k, whose whole-piece
+ * lookup leaves the merge only the pieces that are no token, and 0.60 to 1.38 times under GPT-2.
+ * @param piece The piece's bytes.
+ * @return True when the bytes of 0x80 or above are half of the piece or more.
+ */
+[[nodiscard]] bool mostly_outside_ascii(const std::string_view piece) noexcept
+{
+    constexpr unsigned char first_outside{0x80};
+
+    const auto outside{std::ranges::count_if(
+            piece, [](const char byte) { return static_cast<unsigned char>(byte) >= first_outside; })};
+
+    const auto twice_outside{2 * static_cast<std::size_t>(outside)};
+
+    return twice_outside >= piece.size();
+}
 
 /**
  * @brief The rank of no join, above every rank a join table holds, a definition holding fewer than 2^32 tokens and
@@ -469,18 +491,11 @@ std::vector<load::Token_id_t> Parts::ids() const
  *        right byte's.
  * @param joins The join of every pair of parts the merge may join.
  * @return The ids of the parts the merge ends with, in order.
- * @throws std::length_error If the piece is 2^32 bytes or longer; the message names its length.
  */
 [[nodiscard]] std::vector<load::Token_id_t> merged_by_heap(
         const std::string_view piece, const std::span<const load::Token_id_t, byte_count> byte_ids,
         const std::span<const Join_table::Join> byte_pairs, const Join_table& joins)
 {
-    if (piece.size() > std::numeric_limits<Offset_t>::max())
-    {
-        throw std::length_error{
-                std::format("Merger: a piece of {} bytes is longer than the merge's 32-bit offsets", piece.size())};
-    }
-
     Parts parts{piece, byte_ids};
 
     std::priority_queue<Entry, std::vector<Entry>, std::greater<>> heap{};
@@ -564,6 +579,7 @@ Merger::Merger(const load::Definition& definition)
     , byte_ids_{byte_ids_of(ids_)}
     , joins_{joins_of(definition, ids_)}
     , byte_pairs_{byte_pairs_of(byte_ids_, joins_)}
+    , backtracker_{Backtracker::of(definition.spellings, byte_ids_, joins_)}
 {}
 
 Merger::Byte_ids_t Merger::byte_ids_of(const Spelling_table& ids)
@@ -703,7 +719,20 @@ std::optional<load::Token_id_t> Merger::whole_piece(const std::string_view piece
 
 std::vector<load::Token_id_t> Merger::merged(const std::string_view piece) const
 {
-    if (piece.size() <= longest_scanned_piece)
+    if (piece.size() > std::numeric_limits<Offset_t>::max())
+    {
+        throw std::length_error{
+                std::format("Merger: a piece of {} bytes is longer than the merge's 32-bit offsets", piece.size())};
+    }
+
+    const auto scanned{piece.size() <= longest_scanned_piece};
+
+    if (backtracker_ && (!scanned || mostly_outside_ascii(piece)))
+    {
+        return backtracker_->merged(piece);
+    }
+
+    if (scanned)
     {
         return merged_by_scan(piece, byte_ids_, byte_pairs_, joins_);
     }

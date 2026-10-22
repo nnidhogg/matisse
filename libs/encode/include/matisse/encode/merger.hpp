@@ -6,6 +6,7 @@
 #include <string_view>
 #include <vector>
 
+#include "matisse/encode/backtracker.hpp"
 #include "matisse/encode/join_table.hpp"
 #include "matisse/encode/spelling_table.hpp"
 #include "matisse/load/definition.hpp"
@@ -30,7 +31,10 @@
  * parts held in an array on the stack, each with the join it makes with the next, which makes the same joins in the
  * same order: the least rank present, the leftmost on a tie, and after each join the two pairs it makes looked up.
  * Every part is a byte to begin with, so both read the first pairs from a table of the joins of all 65,536 pairs of
- * bytes, filled from the join table at construction, and look later pairs up in the join table.
+ * bytes, filled from the join table at construction, and look later pairs up in the join table. On a definition whose
+ * every token that encodes to itself is joined last from two tokens of lower order, decided at construction, a piece
+ * longer than 128 bytes, or one of whose bytes at least half lie outside ASCII, is merged by backtracking instead, a
+ * Backtracker in backtracker.hpp, which gives the same ids.
  */
 namespace matisse::encode
 {
@@ -41,8 +45,9 @@ class Merger
 {
 public:
     /**
-     * @brief Builds the tables of a definition's merge: the id of every spelling and of every byte, and the rank and
-     *        product of every pair of parts the merge may join, keyed by the ids of the parts.
+     * @brief Builds the tables of a definition's merge: the id of every spelling and of every byte, the rank and
+     *        product of every pair of parts the merge may join, keyed by the ids of the parts, and the backtracking
+     *        merge where the definition meets its condition.
      *
      * A pair listed twice takes its last rank, as encoder.py and Hugging Face's BPE model read it.
      * @param definition The definition.
@@ -135,6 +140,11 @@ private:
      * @brief The join of every pair of bytes as tokens of one byte.
      */
     Byte_pairs_t byte_pairs_;
+
+    /**
+     * @brief The merge by backtracking, std::nullopt when the definition does not meet its condition.
+     */
+    std::optional<Backtracker> backtracker_;
 };
 
 } // namespace matisse::encode

@@ -8,12 +8,12 @@ tiktoken rank files, pretok classes and segments a text and builds a pattern's s
 validate decides a pattern's window tables under both certificates with their right contexts, measures their anchor
 supply on an input and renders the report as text and as JSON, the gpt2 and cl100k libraries describe their patterns,
 lookup finds them, `matisse-validate` reports a rank file read under a pattern, and encode encodes a text and decodes
-its ids under both merge rules, with the whole-piece lookup, the special-token cuts, the fast merge and the piece cache,
-and encodes it in parallel, cut only at the certified cuts of either inventory, while `validate_merges()` is still to be
-written; on the fourteen corpora of [benchmarks.md](benchmarks.md) matisse's ids equal tiktoken's, Hugging Face
-tokenizers' and the bpe crate's by digest wherever each of them ran, and the page holds what the corpus probe, the bench
-and the other encoders' harnesses measured. The sketches below give names and types, and they change as the code is
-written.
+its ids under both merge rules, with the whole-piece lookup, the special-token cuts, the fast merge, its backtracking
+and the piece cache, and encodes it in parallel, cut only at the certified cuts of either inventory, while
+`validate_merges()` is still to be written; on the fourteen corpora of [benchmarks.md](benchmarks.md) matisse's ids
+equal tiktoken's, Hugging Face tokenizers' and the bpe crate's by digest wherever each of them ran, and the page holds
+what the corpus probe, the bench and the other encoders' harnesses measured. The sketches below give names and types,
+and they change as the code is written.
 
 ## **What matisse is and is not**
 
@@ -614,6 +614,26 @@ public:
     [[nodiscard]] std::optional<load::Token_id_t> find(std::string_view spelling) const noexcept;
 };
 
+class Token_trie
+{
+public:
+    Token_trie(std::span<const std::string> spellings, std::span<const load::Token_id_t> ids);
+
+    [[nodiscard]] Match longest(std::string_view text) const noexcept;
+
+    [[nodiscard]] std::optional<Match> shorter(load::Token_id_t id) const noexcept;
+};
+
+class Backtracker
+{
+public:
+    [[nodiscard]] static std::optional<Backtracker> of(
+            std::span<const std::string> spellings, std::span<const load::Token_id_t, 256> byte_ids,
+            const Join_table& joins);
+
+    [[nodiscard]] std::vector<load::Token_id_t> merged(std::string_view piece) const;
+};
+
 class Merger
 {
 public:
@@ -726,21 +746,80 @@ entry, since the initial pairs are pushed and each join pushes the two pairs it 
 least rank present, the leftmost on a tie: under the rank rule that is tiktoken's `_byte_pair_merge`, a join that makes
 a pair of lower rank than its own, such as `.:.:` on Llama 3's rank file, needing no case of its own, and under the pair
 rule it is Hugging Face's `merge_all`. A piece of n bytes takes at most n - 1 joins and fewer than 3n entries, each
-entry's and each node's offsets held in 32 bits, so the heap merges a piece shorter than 2^32 bytes and refuses a longer
-one. A piece of at most 128 bytes is merged instead by a scan of its parts, held in an array on the stack, each part
-with the join it makes with the next: the scan finds the least rank from the left, so the leftmost on a tie, makes that
-join and looks up the joined part's pairs with its two neighbours, which is the join the heap makes and the two pairs it
-pushes, so both make the same joins in the same order. On Chinese the encoding with no cache gains as the threshold
-rises to 128 and no further. The heap and the scan read the first pairs, every part a byte to begin with, from a table
-of the joins of all 65,536 pairs of bytes, filled from the join table at construction, which makes `encode()` on Chinese
-1.20 and 1.16 times faster under GPT-2 and cl100k. The tests hold the merge to the plain pair loop and to tiktoken's
-scan, written out in the tests, on every multi-byte token of GPT-2's, cl100k's, o200k's and Llama 3's files (50,001,
-100,000, 199,742 and 127,744 tokens) and on 20,000 seeded random pieces of each, one in 32 of them cut at 100 to 200
-bytes, either side of the scan's threshold, GPT-2's to encoder.py's pass as well, and on 3,000 random tables over three
-symbols, every tenth with one piece of 100 to 160 symbols beside its short ones, which make ties, overlaps, joins that
-make a pair of lower rank, and tables on which the pass and one join at a time differ. The merge forms every multi-byte
-token from its own bytes on cl100k and o200k, all but `<|endoftext|>` on GPT-2, and all but 588 on Llama 3, which Llama
-3's whole-piece lookup gives whole.
+entry's and each node's offsets held in 32 bits, so the heap merges a piece shorter than 2^32 bytes and
+`Merger::merged()` refuses a longer one. A piece of at most 128 bytes is merged instead by a scan of its parts, held in
+an array on the stack, each part with the join it makes with the next: the scan finds the least rank from the left, so
+the leftmost on a tie, makes that join and looks up the joined part's pairs with its two neighbours, which is the join
+the heap makes and the two pairs it pushes, so both make the same joins in the same order. With the scan and the heap
+alone, the encoding of Chinese with no cache gains as the threshold rises to 128 and no further. The heap and the scan
+read the first pairs, every part a byte to begin with, from a table of the joins of all 65,536 pairs of bytes, filled
+from the join table at construction, which makes `encode()` on Chinese 1.20 and 1.16 times faster under GPT-2 and cl100k
+with the scan and the heap alone. The tests hold the merge to the plain pair loop and to tiktoken's scan, written out in
+the tests, on every multi-byte token of GPT-2's, cl100k's, o200k's and Llama 3's files (50,001, 100,000, 199,742 and
+127,744 tokens) and on 20,000 seeded random pieces of each, one in 32 of them cut at 100 to 200 bytes, either side of
+the scan's threshold, GPT-2's to encoder.py's pass as well, and on 3,000 random tables over three symbols, every tenth
+with one piece of 100 to 160 symbols beside its short ones, which make ties, overlaps, joins that make a pair of lower
+rank, and tables on which the pass and one join at a time differ. The merge forms every multi-byte token from its own
+bytes on cl100k and o200k, all but `<|endoftext|>` on GPT-2, and all but 588 on Llama 3, which Llama 3's whole-piece
+lookup gives whole.
+
+On a definition that meets one condition the `Merger` also builds a `Backtracker`, and a piece longer than 128 bytes, or
+one at least half of whose bytes lie outside ASCII, is merged by backtracking instead. A token encodes to itself when
+the merge of its spelling ends with it alone; its split is the pair of parts that merge joins last, and its order is the
+rank of that join plus one, zero for a byte. The condition is that the parts of every split have lower orders than the
+token they make, and the constructor decides it once, reading each token's split from the merge of its own spelling run
+until two parts are left: GPT-2's, cl100k's and o200k's files meet it, and Llama 3's does not, 81 of its tokens having a
+split with a part of higher rank, `.:.:` at 100,421 the first, joined from `.:.` at 105,051 and `:`. A definition that
+does not meet it is merged by the scan and the heap alone. The backtracking lays along the piece, from the left, the
+longest token that encodes to itself and begins the rest of the piece, read from a `Token_trie`, the trie of those
+tokens in a double array; it holds each token to the one before it by a pair test, tries the longest token that is a
+proper prefix of it when the test fails, and when no prefix is left takes the last token back and marks the position it
+went back from, to which no token is laid again. The pieces it takes are where it pays: timed piece by piece on nine
+corpora, it takes 0.28 to 0.90 times the scan's time on a piece of up to 128 bytes at least half outside ASCII, 0.10 to
+0.34 times the heap's on the 520 pieces longer than 128 bytes of those corpora and enwik8, and on the others 1.16 to
+2.36 times under cl100k, whose whole-piece lookup leaves the merge only the pieces that are no token, and 0.60 to 1.38
+times under GPT-2.
+
+Its ids are the heap merge's on every piece, in four steps. Interval projection: while no join of a run crosses either
+end of an interval, the joins inside it are a prefix of the run on the interval alone, the least pair inside being the
+least among the interval's own; so a run that forms a token forms it by its split, and no run forms a token that does
+not encode to itself. Order: on a definition that meets the condition every run joins in order of rank, the leftmost
+first among equal ranks, since a join of rank r makes a part p, a pair p then makes with a neighbour at a rank below r
+would be the least pair present and be joined next, forming a token whose split has the part p of higher order than the
+token, which the condition excludes, and a pair at rank r would be the join that made p, which no pair holding p is,
+being longer than p. The pair test: until a join crosses between two tokens, the run on their spellings is the joins of
+their own merges in order of rank and then of place, the left token's first on a tie, so the parts beside the boundary
+are one on the left token's right spine and one on the right token's left spine, and going back from the two tokens,
+each step undoing the later of the joins that made the two parts, lists every pair of them that stands beside the
+boundary, each until the join undone; the pair's join, if it has one, comes first exactly when its rank is below the
+undone join's on the left, which precedes it on a tie, or at most the undone join's on the right, which it precedes. So
+the test answers whether the merge of the two spellings ends with the two tokens, their compatibility. The first join of
+the replayed run that crosses is a join the real run makes, which is the split of the token it makes, so the test looks
+up only the splits' pairs, and only where each part's 32 bits of hashed partners hold the other. The local
+characterization of byte-pair encoding, a result not yet published: tokens t_1 to t_k that encode to themselves, every
+adjacent pair compatible, are the merge of their concatenation x, under the rank rule and under the pair rule, with no
+condition on the table. Take the first join of the run on x that crosses a boundary between two of them, t_i and
+t_(i+1); before it every part lies inside one token, so the join lies inside t_i t_(i+1) and neither end of that
+interval has been crossed, and by interval projection the run on t_i t_(i+1) alone crosses its middle, against their
+compatibility. So no boundary is crossed, and the run ends with each token's own merge, the token itself. The search
+ends with such a sequence: the tokens it has laid before a position are compatible and encode to themselves, so they are
+the merge of the bytes before it, one sequence however the search reaches the position, and a position from which no
+token fits once fits from none; every token that encodes to itself and begins at a position is tried there, longest
+first; and the merge of the piece is such a sequence, so the search reaches the piece's end, with the merge.
+
+The method is GitHub's bpe crate's, bpe 0.2.3 at github/rust-gems 31331e8: the Corollaries III and IIIa of its README,
+its backtracking encoder with the table of each token's next shorter prefix and the marks of the positions given up, and
+its pair test that undoes joins. Its README assumes every multi-byte token is made from two tokens before it, its
+constructor checks only that every token encodes to itself, and its pair test reads a token's split as the longest
+prefix of lower rank whose rest is a token of lower rank and whose pair its own test accepts; on a table whose tokens
+all encode to themselves but where a split has a part of higher rank it returns other ids than the rule's, [aaa, b] on
+aaab for the ranks a, b, ab, aaa, aa, where the rule gives [aa, ab], and [aba, a] on abaa for aa, aba and ab after the
+bytes, where it gives [ab, aa]. matisse's additions are the condition decided at construction, which sends both tables
+to the scan and the heap, and the splits read from each token's own merge. The tests hold the backtracking to the plain
+loop over the joins on every multi-byte token of GPT-2's, cl100k's and o200k's files and on 20,000 seeded random pieces
+of each, on the 4,429 of 6,000 random tables over three symbols that meet the condition, and on those two tables and a
+third, aab and then aa after the bytes, on which the pair test would refuse the rule's own aa aab on aaaab; they hold
+all three and Llama 3's file not to meet the condition, and the merge's references hold the routed merge.
 
 `encode()` looks each piece up whole first where the definition says so, then in a `Piece_cache`, and only then merges
 it, storing its ids. The ids of a piece are a function of its bytes and the definition alone, the merge building its

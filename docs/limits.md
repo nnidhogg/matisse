@@ -74,7 +74,14 @@ piece starts as its bytes, and under the pair rule a merge whose part or product
 byte, or the merge, its rank and the spelling. Both merges are exact on every table and every piece. The tests hold them
 to the plain pair loop and to tiktoken's scan, written out in the tests, on every multi-byte token of GPT-2's, cl100k's,
 o200k's and Llama 3's files and on 3,000 random tables over three symbols, among them tables on which the pass and one
-join at a time differ.
+join at a time differ. On a definition in which the last join of every token that encodes to itself, in the merge of its
+own spelling, ranks above the last joins of its two parts, which `Merger` decides when the encoder is built, a piece
+longer than 128 bytes or at least half outside ASCII is merged by backtracking, a `Backtracker`, whose ids are the same
+by the proof in [design.md](design.md). GPT-2's, cl100k's and o200k's files meet that condition and Llama 3's does not;
+a definition that does not is merged by the scan and the heap. The tests hold the backtracking to the plain loop on
+every multi-byte token of the three files that meet it, on 20,000 seeded random pieces of each and on the random tables
+that meet it, and hold three small tables on which a pair test that assumed the condition goes wrong to be refused the
+backtracking and merged to the rule's ids.
 
 The whole-piece lookup is the definition's `whole_piece_lookup` flag: whether a piece that is itself an ordinary token
 is that one token, looked up before any merge. `read_tiktoken()` sets it, since tiktoken looks every piece up, and
@@ -155,8 +162,10 @@ id. Moving the pin is open choice 6 of [design.md](design.md).
 - The merge holds every offset in 32 bits, so it merges a piece shorter than 2^32 bytes, and `Merger::merged()` refuses
   a longer one with `std::length_error` naming its length, which `encode()` and `encode_parallel()` pass on.
 - A piece of at most 128 bytes is merged by a scan of its parts held in an array on the stack, a longer one by a binary
-  heap. Both make the same joins in the same order, so the threshold changes the speed and never an id; on Chinese the
-  encoding with no cache gains as the threshold rises to 128 and no further.
+  heap, and on a definition that meets the backtracking's condition every piece longer than 128 bytes and every one at
+  least half outside ASCII by backtracking. All three give the same ids, so the routing changes the speed and never an
+  id; with the scan and the heap alone, the encoding of Chinese with no cache gains as the scan's threshold rises to 128
+  and no further.
 - The encoder's own piece caches hold `piece_cache_capacity` pieces, 16,384, each of at most `longest_cached_piece`
   bytes, 255, and then stops filling, with no eviction, as Hugging Face's BPE model's cache stops. A longer piece, and
   every piece past the bound, is merged each time it occurs. A cached piece's ids are a function of its bytes and the
@@ -196,10 +205,13 @@ seconds for GPT-2 and 0.45 for cl100k, and to width five in 1.1 and 2.4, where a
 take 3.8 and 9.3 seconds, and 92 and 213. The `Encoder` takes the report rather than deciding it, so a pattern is
 validated once however many encoders are built. Building an encoder builds the merge's tables once: the id of every
 spelling in a `Spelling_table`, the rank and product of every pair the merge may join in a `Join_table`, 233,378 pairs
-on cl100k's file in 524,288 slots, and the joins of all 65,536 pairs of bytes; beside them the `Segmenter`'s product
-automaton, 36 states for GPT-2's twelve alternatives and 33 for cl100k's eight, and the window index. Build the encoder
-once and reuse it across texts and threads; building one per request is a design mistake the library does not try to
-make cheap.
+on cl100k's file in 524,288 slots, and the joins of all 65,536 pairs of bytes, and where the definition meets the
+backtracking's condition the split of every token, read from the merge of its own spelling, the trie of the tokens that
+encode to themselves and the split of each by its parts, which take the construction of the merge's tables from 0.01,
+0.05 and 0.15 seconds to 0.04, 0.14 and 0.33 on GPT-2's, cl100k's and o200k's files on the machine of
+[benchmarks.md](benchmarks.md); beside them the `Segmenter`'s product automaton, 36 states for GPT-2's twelve
+alternatives and 33 for cl100k's eight, and the window index. Build the encoder once and reuse it across texts and
+threads; building one per request is a design mistake the library does not try to make cheap.
 
 A call has a cost of its own. `encode(text)` builds its classes, its segmentation and its piece cache afresh, so on a
 short text a cache kept across the calls is what pays. In the fairness section of [benchmarks.md](benchmarks.md) a call

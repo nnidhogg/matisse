@@ -4,11 +4,13 @@ project(matisse_encode)
 
 
 add_library(${PROJECT_NAME}
+        src/backtracker.cpp
         src/encoder.cpp
         src/join_table.cpp
         src/merger.cpp
         src/piece_cache.cpp
         src/spelling_table.cpp
+        src/token_trie.cpp
         src/window_index.cpp
 )
 
@@ -36,11 +38,13 @@ target_link_libraries(${PROJECT_NAME}
 
 if (MATISSE_BUILD_TESTS)
     add_executable(${PROJECT_NAME}_tests
+            tests/backtracker_test.cpp
             tests/encoder_test.cpp
             tests/join_table_test.cpp
             tests/merger_test.cpp
             tests/piece_cache_test.cpp
             tests/spelling_table_test.cpp
+            tests/token_trie_test.cpp
             tests/window_index_test.cpp
     )
 
