@@ -10,9 +10,12 @@
 // throughput of a pass. parallel times encode_parallel() on one long text under the factorization inventory, the
 // default, at each worker count given, beside encode() in the same run. batch times encode() over the documents of a
 // file separated by NUL bytes, spread over a pool of threads that each take the next document from a shared counter and
-// keep one piece cache across the documents they take, at each thread count given. Every mode prints the ids line, `ids
-// TOKENIZER NAME COUNT DIGEST`, the SHA-256 of the ids as little-endian 32-bit words, the prompts' and the documents'
-// ids concatenated in order.
+// keep one piece cache across the documents they take, at each thread count given. stream times a Stream_encoder over
+// one text pushed in parts of each size given, finish() after the last, and pushed whole in one part, beside encode()
+// in the same run, and before the timed passes of each size prints the bytes the stream holds after a push, read but
+// not spelled by the ids it has returned, at the most and on average over the pushes. Every mode prints the ids line,
+// `ids TOKENIZER NAME COUNT DIGEST`, the SHA-256 of the ids as little-endian 32-bit words, the prompts' and the
+// documents' ids concatenated in order.
 //
 // Every row runs one pass first, which warms the caches and gives the result every timed pass must reproduce, then
 // PASSES timed passes over input already in memory, and reports the best, median and worst pass in MiB/s and the best
@@ -22,9 +25,10 @@
 // processors the process may run on, since a figure is quotable only beside the tree and the machine that produced it.
 //
 // Usage: matisse_bench MODE VOCAB_DIR TOKENIZERS PASSES FILE [COUNT...]
-// MODE is single, prompts, parallel or batch, TOKENIZERS is one or more of gpt2, cl100k, o200k and llama3 separated by
-// commas, and the counts are the worker counts of parallel (1, 2, 4, 8, 12, 16 and 24 unless given) or the thread
-// counts of batch (1 and 24). Each report is decided to validate()'s default width, o200k's to three.
+// MODE is single, prompts, parallel, batch or stream, TOKENIZERS is one or more of gpt2, cl100k, o200k and llama3
+// separated by commas, and the counts are the worker counts of parallel (1, 2, 4, 8, 12, 16 and 24 unless given), the
+// thread counts of batch (1 and 24) or the push sizes of stream in bytes (64 and 4,096). Each report is decided to
+// validate()'s default width, o200k's to three.
 
 #include <algorithm>
 #include <array>
@@ -51,6 +55,7 @@
 #include <sys/utsname.h>
 #include <system_error>
 #include <thread>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -59,6 +64,7 @@
 #include "matisse/encode/encoder.hpp"
 #include "matisse/encode/merger.hpp"
 #include "matisse/encode/piece_cache.hpp"
+#include "matisse/encode/stream_encoder.hpp"
 #include "matisse/gpt2/tokenizer.hpp"
 #include "matisse/llama3/tokenizer.hpp"
 #include "matisse/load/definition.hpp"
@@ -132,9 +138,14 @@ constexpr std::array<std::size_t, 7> default_workers{1, 2, 4, 8, 12, 16, 24};
 constexpr std::array<std::size_t, 2> default_threads{1, 24};
 
 /**
+ * @brief The push sizes stream times unless given, in bytes.
+ */
+constexpr std::array<std::size_t, 2> default_pushes{64, 4096};
+
+/**
  * @brief The modes the bench runs.
  */
-constexpr std::array<std::string_view, 4> modes{"single", "prompts", "parallel", "batch"};
+constexpr std::array<std::string_view, 5> modes{"single", "prompts", "parallel", "batch", "stream"};
 
 /**
  * @brief A tokenizer under measure: its name, its pattern, the widest window its report is decided to and its
@@ -277,7 +288,8 @@ Options parse_options(const std::span<const std::string_view> arguments)
 
     if (!std::ranges::contains(modes, mode))
     {
-        throw std::invalid_argument{std::format("the modes are single, prompts, parallel and batch, not '{}'", mode)};
+        throw std::invalid_argument{
+                std::format("the modes are single, prompts, parallel, batch and stream, not '{}'", mode)};
     }
 
     Options options{
@@ -311,6 +323,11 @@ Options parse_options(const std::span<const std::string_view> arguments)
     if (mode == "batch")
     {
         options.counts.assign(default_threads.begin(), default_threads.end());
+    }
+
+    if (mode == "stream")
+    {
+        options.counts.assign(default_pushes.begin(), default_pushes.end());
     }
 
     return options;
@@ -1046,6 +1063,130 @@ void run_batch(
 }
 
 /**
+ * @brief Returns the ids of a text pushed to a stream in parts of one size, the ids of finish() after the last.
+ * @param encoder The encoder.
+ * @param text The text.
+ * @param size The bytes of a push, the last push taking what is left.
+ * @return The ids.
+ */
+Ids streamed(const Encoder& encoder, const std::string_view text, const std::size_t size)
+{
+    matisse::encode::Stream_encoder stream{encoder};
+
+    Ids ids{};
+
+    for (std::size_t at{0}; at < text.size(); at += size)
+    {
+        const auto returned{stream.push(text.substr(at, size))};
+
+        ids.insert(ids.end(), returned.begin(), returned.end());
+    }
+
+    const auto rest{stream.finish()};
+
+    ids.insert(ids.end(), rest.begin(), rest.end());
+
+    return ids;
+}
+
+/**
+ * @brief Prints the bytes a stream holds after each push of a text in parts of one size, read and not spelled by the
+ *        ids returned, at the most and on average over the pushes.
+ * @param tokenizer_name The tokenizer's name.
+ * @param encoder The encoder.
+ * @param name The text's name.
+ * @param text The text.
+ * @param size The bytes of a push.
+ */
+void print_held(
+        const std::string_view tokenizer_name, const Encoder& encoder, const std::string_view name,
+        const std::string_view text, const std::size_t size)
+{
+    const auto& spellings{encoder.definition().spellings};
+
+    matisse::encode::Stream_encoder stream{encoder};
+
+    std::size_t spelled{0};
+
+    std::size_t most{0};
+
+    std::size_t total{0};
+
+    std::size_t pushes{0};
+
+    for (std::size_t at{0}; at < text.size(); at += size)
+    {
+        const auto part{text.substr(at, size)};
+
+        const auto returned{stream.push(part)};
+
+        const auto sizes{
+                returned | std::views::transform([&spellings](const Token_id_t id) { return spellings[id].size(); })};
+
+        spelled += std::ranges::fold_left(sizes, 0UZ, std::plus{});
+
+        const auto held{at + part.size() - spelled};
+
+        most = std::max(most, held);
+
+        total += held;
+
+        ++pushes;
+    }
+
+    std::ignore = stream.finish();
+
+    const auto mean{pushes == 0 ? 0.0 : static_cast<double>(total) / static_cast<double>(pushes)};
+
+    const auto row{std::format("held x{}", size)};
+
+    std::printf(
+            "%-7.*s %-15s %-24.*s %zu pushes: held bytes after a push max %zu, mean %.2f\n",
+            static_cast<int>(tokenizer_name.size()), tokenizer_name.data(), row.c_str(), static_cast<int>(name.size()),
+            name.data(), pushes, most, mean);
+}
+
+/**
+ * @brief Times a stream over one text pushed in parts of each size and pushed whole, beside encode(), every pass held
+ *        to encode()'s ids, and prints the bytes held after a push for each size.
+ * @param tokenizer_name The tokenizer's name.
+ * @param encoder The tokenizer's encoder, which allows no special token.
+ * @param name The text's name.
+ * @param text The text.
+ * @param passes The timed passes.
+ * @param sizes The push sizes.
+ */
+void run_stream(
+        const std::string_view tokenizer_name, const Encoder& encoder, const std::string_view name,
+        const std::string_view text, const std::size_t passes, const std::span<const std::size_t> sizes)
+{
+    const auto ids{encoder.encode(text)};
+
+    print_ids(tokenizer_name, name, ids);
+
+    const auto encoding{timed(passes, [&] { return encoder.encode(text); }, ids, ids.size())};
+
+    print_row(tokenizer_name, "encode", name, text.size(), encoding, "tokens");
+
+    for (const auto size : sizes)
+    {
+        print_held(tokenizer_name, encoder, name, text, size);
+
+        const auto timing{timed(passes, [&] { return streamed(encoder, text, size); }, ids, ids.size())};
+
+        const auto row{std::format("stream x{}", size)};
+
+        print_row(tokenizer_name, row, name, text.size(), timing, "tokens");
+    }
+
+    const auto whole_size{std::max(text.size(), 1UZ)};
+
+    const auto whole{timed(passes, [&] { return streamed(encoder, text, whole_size); }, ids, ids.size())};
+
+    print_row(tokenizer_name, "stream whole", name, text.size(), whole, "tokens");
+}
+
+/**
  * @brief Runs the mode asked for, for every tokenizer named.
  * @param options The options.
  * @throws std::runtime_error If a file cannot be read or a result differs from its reference.
@@ -1083,9 +1224,13 @@ void run(const Options& options)
         {
             run_parallel(read_name, encoder, name, text, passes, counts);
         }
-        else
+        else if (mode == "batch")
         {
             run_batch(read_name, encoder, name, parts, passes, counts);
+        }
+        else
+        {
+            run_stream(read_name, encoder, name, text, passes, counts);
         }
 
         std::fflush(stdout);

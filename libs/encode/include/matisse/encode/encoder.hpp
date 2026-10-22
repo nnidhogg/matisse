@@ -10,8 +10,10 @@
 
 #include "matisse/encode/merger.hpp"
 #include "matisse/encode/piece_cache.hpp"
+#include "matisse/encode/verifier_table.hpp"
 #include "matisse/encode/window_index.hpp"
 #include "matisse/load/definition.hpp"
+#include "matisse/pretok/classes.hpp"
 #include "matisse/pretok/pattern.hpp"
 #include "matisse/pretok/segmenter.hpp"
 #include "matisse/validate/report.hpp"
@@ -31,7 +33,10 @@
  * chunk to a worker that segments it with the table's right context and keeps the pieces ending at its cut. The encoder
  * claims one thing: for every text the definition accepts, encode_parallel() returns the ids encode() returns, at every
  * chunk count. That is the splice theorem of the report on pre-tokenizer certification with the proposition that a
- * certified cut is a pre-token boundary and the decided right context.
+ * certified cut is a pre-token boundary and the decided right context. The encoder also builds what the streaming
+ * encoder of stream_encoder.hpp reads, once for every stream over it: the class table of the pattern's alphabet, the
+ * pattern's split verifier as a Verifier_table, in verifier_table.hpp, the ordinary tokens in the order of their
+ * spellings and the tokens the merge does not form, which its accessors give.
  */
 namespace matisse::encode
 {
@@ -134,6 +139,51 @@ public:
      */
     [[nodiscard]] std::string decode(std::span<const load::Token_id_t> ids) const;
 
+    /**
+     * @brief Returns the definition, whose spellings, whole-piece lookup and special tokens a stream reads.
+     * @return The definition.
+     */
+    [[nodiscard]] const load::Definition& definition() const noexcept;
+
+    /**
+     * @brief Returns the definition's whole-piece lookup and merge, which a stream merges its pieces by.
+     * @return The merger.
+     */
+    [[nodiscard]] const Merger& merger() const noexcept;
+
+    /**
+     * @brief Returns the special tokens cut out of a text, in the order their spellings were allowed.
+     * @return The allowed special tokens.
+     */
+    [[nodiscard]] std::span<const load::Special_token> allowed() const noexcept;
+
+    /**
+     * @brief Returns the class table of the pattern's alphabet, which a stream classes its code points by.
+     * @return The class table.
+     */
+    [[nodiscard]] const pretok::Class_table& class_table() const noexcept;
+
+    /**
+     * @brief Returns the pattern's split verifier M in a flat table, which a stream steps its live runs by.
+     * @return The verifier's table.
+     */
+    [[nodiscard]] const Verifier_table& verifier() const noexcept;
+
+    /**
+     * @brief Returns the ids of the ordinary tokens in the order of their spellings, bytewise ascending, which a stream
+     *        finds the tokens that begin with a string in.
+     * @return The ids.
+     */
+    [[nodiscard]] std::span<const load::Token_id_t> spellings_sorted() const noexcept;
+
+    /**
+     * @brief Returns the ids of the ordinary tokens of two or more bytes that the merge does not form from their own
+     *        bytes, which only the whole-piece lookup gives, in the order of their spellings; none when the definition
+     *        does not look pieces up whole.
+     * @return The ids.
+     */
+    [[nodiscard]] std::span<const load::Token_id_t> unformed_sorted() const noexcept;
+
 private:
     /**
      * @brief An occurrence of an allowed special token in a text: where it begins and which token it is.
@@ -160,6 +210,24 @@ private:
      */
     [[nodiscard]] static std::vector<load::Special_token> allowed_of(
             std::span<const load::Special_token> specials, std::span<const std::string> allowed);
+
+    /**
+     * @brief Returns the ids of a definition's ordinary tokens in the order of their spellings, bytewise ascending.
+     * @param spellings The bytes of every ordinary token, by id.
+     * @return The ids.
+     */
+    [[nodiscard]] static std::vector<load::Token_id_t> sorted_of(std::span<const std::string> spellings);
+
+    /**
+     * @brief Returns the ids of the ordinary tokens of two or more bytes that a merger does not form from their own
+     *        bytes, in the order of their spellings, when the definition looks pieces up whole.
+     * @param definition The definition.
+     * @param merger The definition's merger.
+     * @param sorted The ids of the ordinary tokens in the order of their spellings.
+     * @return The ids, none when the definition does not look pieces up whole.
+     */
+    [[nodiscard]] static std::vector<load::Token_id_t> unformed_of(
+            const load::Definition& definition, const Merger& merger, std::span<const load::Token_id_t> sorted);
 
     /**
      * @brief Returns the occurrences of the allowed special tokens in a text that encode() cuts out, front to back:
@@ -241,6 +309,26 @@ private:
      * @brief The right context of the inventory, the code points a worker reads past its chunk's end.
      */
     std::size_t right_context_;
+
+    /**
+     * @brief The class table of the pattern's alphabet, which a stream classes its code points by.
+     */
+    pretok::Class_table class_table_;
+
+    /**
+     * @brief The pattern's split verifier in a flat table.
+     */
+    Verifier_table verifier_;
+
+    /**
+     * @brief The ids of the ordinary tokens in the order of their spellings.
+     */
+    std::vector<load::Token_id_t> spellings_sorted_;
+
+    /**
+     * @brief The ids of the ordinary tokens the merge does not form, in the order of their spellings.
+     */
+    std::vector<load::Token_id_t> unformed_sorted_;
 };
 
 } // namespace matisse::encode

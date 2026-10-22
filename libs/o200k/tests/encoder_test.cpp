@@ -12,6 +12,7 @@
 #include <random>
 #include <ranges>
 #include <set>
+#include <span>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -22,6 +23,7 @@
 #include "matisse/common/sha256.hpp"
 #include "matisse/encode/merger.hpp"
 #include "matisse/encode/piece_cache.hpp"
+#include "matisse/encode/stream_encoder.hpp"
 #include "matisse/encode/window_index.hpp"
 #include "matisse/o200k/tokenizer.hpp"
 #include "matisse/pretok/segmenter.hpp"
@@ -480,6 +482,67 @@ void expect_anchors_are_boundaries(
     }
 }
 
+/**
+ * @brief Returns seeded random ends of the pushes of a text, each push 0 to a bound of bytes long, so that pushes end
+ *        inside UTF-8 sequences and inside spellings and some push nothing.
+ * @param random The random sequence.
+ * @param size The text's size.
+ * @param widest The longest push.
+ * @return The byte after each push, ascending to the text's size.
+ */
+std::vector<std::size_t> random_cuts(std::mt19937& random, const std::size_t size, const std::size_t widest)
+{
+    std::uniform_int_distribution<std::size_t> width{0, widest};
+
+    std::vector<std::size_t> cuts{};
+
+    for (std::size_t at{0}; at < size;)
+    {
+        at = std::min(size, at + width(random));
+
+        cuts.push_back(at);
+    }
+
+    return cuts;
+}
+
+/**
+ * @brief Pushes a text to a stream in parts and expects every push to return ids that extend a prefix of encode() of
+ *        the whole text, and the ids of all pushes and finish() to be encode() of it.
+ * @param encoder The encoder.
+ * @param text The text.
+ * @param cuts The byte after each push.
+ */
+void expect_streamed(const Encoder& encoder, const std::string_view text, const std::span<const std::size_t> cuts)
+{
+    const auto expected{encoder.encode(text)};
+
+    Stream_encoder stream{encoder};
+
+    std::vector<Token_id_t> returned{};
+
+    std::size_t start{0};
+
+    for (const auto cut : cuts)
+    {
+        const auto ids{stream.push(text.substr(start, cut - start))};
+
+        returned.insert(returned.end(), ids.begin(), ids.end());
+
+        start = cut;
+
+        ASSERT_LE(returned.size(), expected.size()) << text << " after " << cut;
+        ASSERT_TRUE(std::ranges::equal(returned, std::span{expected}.first(returned.size())))
+                << text << " after " << cut;
+    }
+
+    const auto rest{stream.finish()};
+
+    returned.insert(returned.end(), rest.begin(), rest.end());
+
+    EXPECT_EQ(returned, expected) << text;
+}
+
 } // namespace
 
 TEST(Encoder_test, The_published_known_answer_tiktoken_is_great_is_83_8251_2488_382_2212_0)
@@ -695,4 +758,34 @@ TEST(Encoder_test, A_cut_in_white_space_holds_with_the_right_context_each_invent
     EXPECT_EQ(factorization.encode_parallel(before_punctuation, 2), factorization.encode(before_punctuation));
     EXPECT_EQ(policy.chunk_boundaries(between_tabs, 2), (std::vector<std::size_t>{0, 5, 11}));
     EXPECT_EQ(policy.encode_parallel(between_tabs, 2), policy.encode(between_tabs));
+}
+
+TEST(Encoder_test, A_stream_pushed_in_parts_of_every_size_returns_prefixes_of_encode_and_concatenates_to_it)
+{
+    auto definition{pinned_o200k()};
+
+    if (!definition)
+    {
+        GTEST_SKIP() << "MATISSE_VOCAB_DIR names no directory holding o200k_base.tiktoken";
+    }
+
+    const std::array encoders{o200k_encoder(*definition, special_spellings()), o200k_encoder(*definition)};
+
+    std::mt19937 random{17};
+
+    for (std::size_t count{0}; count < 40; ++count)
+    {
+        const auto text{random_text(random, 40)};
+
+        const auto one_byte{std::views::iota(1UZ, text.size() + 1)};
+
+        const std::vector<std::size_t> one_byte_cuts{one_byte.begin(), one_byte.end()};
+
+        for (const auto& encoder : encoders)
+        {
+            expect_streamed(encoder, text, random_cuts(random, text.size(), 24));
+            expect_streamed(encoder, text, one_byte_cuts);
+            expect_streamed(encoder, text, std::array{text.size()});
+        }
+    }
 }

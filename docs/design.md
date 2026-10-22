@@ -9,11 +9,12 @@ validate decides a pattern's window tables under both certificates with their ri
 supply on an input and renders the report as text and as JSON, the gpt2, cl100k, o200k and llama3 libraries describe
 their patterns, lookup finds them, `matisse-validate` reports a rank file read under a pattern, and encode encodes a
 text and decodes its ids under both merge rules, with the whole-piece lookup, the special-token cuts, the fast merge,
-its backtracking and the piece cache, and encodes it in parallel, cut only at the certified cuts of either inventory,
-while `validate_merges()` is still to be written; on the fourteen corpora of [benchmarks.md](benchmarks.md) matisse's
-ids equal tiktoken's, Hugging Face tokenizers' and the bpe crate's by digest wherever each of them ran, and the page
-holds what the corpus probe, the bench and the other encoders' harnesses measured. The sketches below give names and
-types, and they change as the code is written.
+its backtracking and the piece cache, encodes it in parallel, cut only at the certified cuts of either inventory, and
+streams it, every id returned as soon as no continuation of the text can change it, while `validate_merges()` is still
+to be written; on the fourteen corpora of [benchmarks.md](benchmarks.md) matisse's ids equal tiktoken's, Hugging Face
+tokenizers' and the bpe crate's by digest wherever each of them ran, and the page holds what the corpus probe, the bench
+and the other encoders' harnesses measured. The sketches below give names and types, and they change as the code is
+written.
 
 ## **What matisse is and is not**
 
@@ -31,7 +32,9 @@ files and special tokens, the vendor pre-tokenizer verifiers tied to a regex and
 runtime with its token ids, normalizers and special-token cuts. The test for where a piece goes is whether it would make
 sense if no LLM existed; if it would, it belongs in munch. matisse is also the intended home of the tokenizer pieces of
 an execution-contract compiler (the full-dictionary verifier, the two-mode WordPiece construction, a labeler carrying
-token ids, certified-prefix streaming), and none of them is in the first version.
+token ids, certified-prefix streaming). Certified-prefix streaming is built, as the `Stream_encoder` of libs/encode,
+with one claim: every id it returns is a prefix of `encode()` of the whole text, and what it returns is the longest such
+prefix but for the two bounded exceptions the encoder's section names; the others are not in the first version.
 
 The name is after Matisse's paper cut-outs, cutting with certainty, beside munch, the lexer library, and hopper, the
 parser toolkit.
@@ -685,6 +688,24 @@ public:
     [[nodiscard]] std::optional<std::size_t> first_anchor(std::string_view stretch, std::size_t from) const;
 };
 
+class Verifier_table
+{
+public:
+    using State_t = std::uint32_t;
+
+    static constexpr State_t no_state{std::numeric_limits<State_t>::max()};
+
+    Verifier_table(const munch::verifier::Verifier& verifier, const pretok::Alphabet& alphabet);
+
+    [[nodiscard]] State_t start() const noexcept;
+
+    [[nodiscard]] State_t step(State_t state, pretok::Class_t symbol_class, bool boundary_after) const noexcept;
+
+    [[nodiscard]] bool accepts(State_t state) const noexcept;
+
+    [[nodiscard]] bool is_dead_end(State_t state) const noexcept;
+};
+
 class Encoder
 {
 public:
@@ -700,6 +721,53 @@ public:
     [[nodiscard]] std::vector<load::Token_id_t> encode_parallel(std::string_view text, std::size_t chunks) const;
 
     [[nodiscard]] std::string decode(std::span<const load::Token_id_t> ids) const;
+
+    [[nodiscard]] const load::Definition& definition() const noexcept;
+
+    [[nodiscard]] const Merger& merger() const noexcept;
+
+    [[nodiscard]] std::span<const load::Special_token> allowed() const noexcept;
+
+    [[nodiscard]] const pretok::Class_table& class_table() const noexcept;
+
+    [[nodiscard]] const Verifier_table& verifier() const noexcept;
+
+    [[nodiscard]] std::span<const load::Token_id_t> spellings_sorted() const noexcept;
+
+    [[nodiscard]] std::span<const load::Token_id_t> unformed_sorted() const noexcept;
+};
+
+class Live_runs
+{
+public:
+    struct Marking
+    {
+        std::vector<std::size_t> ends{};
+
+        bool dead_end{};
+    };
+
+    explicit Live_runs(const Verifier_table& table);
+
+    void step(pretok::Class_t symbol_class, std::size_t end);
+
+    [[nodiscard]] std::optional<std::size_t> next_closed();
+
+    [[nodiscard]] std::vector<Marking> markings() const;
+
+    [[nodiscard]] std::vector<std::size_t> accepted() const;
+
+    void reset();
+};
+
+class Stream_encoder
+{
+public:
+    explicit Stream_encoder(const Encoder& encoder);
+
+    [[nodiscard]] std::vector<load::Token_id_t> push(std::string_view bytes);
+
+    [[nodiscard]] std::vector<load::Token_id_t> finish();
 };
 
 } // namespace matisse::encode
@@ -870,6 +938,85 @@ every certified cut of the report, and a cut in white space, at the right-contex
 each inventory decided. Its speed is what [benchmarks.md](benchmarks.md) measures, and nothing is claimed about the
 vendors' own implementations beyond the ids and the speeds measured there.
 
+`Stream_encoder` encodes a text that arrives in parts. It is made from an `Encoder`, which must outlive it, and allows
+the encoder's special tokens; `push()` takes the next bytes and returns the ids that have become final, and `finish()`
+ends the text and returns the rest, after which the stream reads a new text. A push may end inside a UTF-8 sequence or
+inside a special token's spelling, and those bytes are held until a later push completes them; a sequence that cannot be
+completed is refused as `classes_of()` refuses it. The stream claims one thing: after every push the ids it has returned
+are a prefix of `encode()` of the whole text, whatever the rest of the text turns out to be, and after `finish()` they
+are `encode()` of it. What a push returns is the longest such prefix, the greatest stable prefix of Dalirrooyfard and
+Ye's online tokenization, with two exceptions: while the bytes read end in a proper prefix of an allowed spelling those
+bytes are held, so that the ids lag by fewer bytes than the longest allowed spelling, as their online special-token
+segmentation lags, and inside a piece an id is held against every byte continuation of the piece where the pattern
+allows fewer. One `Encoder` serves any number of streams on as many threads with no lock, since a stream keeps its runs,
+its held bytes and its piece cache to itself and reads the encoder through `const` accessors alone.
+
+The encoder builds what a stream reads once, beside the `Segmenter`: the class table of the pattern's alphabet, the
+split verifier M of `split_verifier()` as a `Verifier_table`, a flat array of its steps by state, class and mark with
+the states that accept and the dead ends, the accepting states with no move, the ids of the ordinary tokens in the order
+of their spellings, and, where the definition looks pieces up whole, the tokens of two or more bytes that the merge does
+not form from their own bytes, Llama 3's 588. That adds 9, 35, 67 and 49 milliseconds to building GPT-2's, cl100k's,
+o200k's and Llama 3's encoders, and a stream is then made in about ten nanoseconds. A step of the table returns a state,
+`no_state` where M has no move, rather than an empty `std::optional`, which GCC 13 returns through a byte and a word
+stored apart and read back as one word, which stalls every step.
+
+The stream has three layers, each exact at its level. The first cuts the special tokens: an occurrence of an allowed
+spelling, the earliest and the longest at its byte, as `encode()` finds it, is committed once no proper prefix of an
+allowed spelling begins at or before it in the bytes read, so that the stretches between special tokens are `encode()`'s
+on every completion of the text, and only the whole code points before the earliest such prefix reach the second layer.
+The second keeps the live runs of M over the stretch, a `Live_runs`. A run is a path of M over a marking of the code
+points read, and since every state of M is reachable and reaches acceptance the runs are exactly the restrictions of the
+segmentations of every continuation, at most one per state of M. They are kept as a tree, one layer per code point since
+the last stable one, each node a state, the mark that led to it and the number of its live children, held in two vectors
+dropped from the front and erased in bulk, and the front layer is stable once only one of its nodes is live. At the last
+code point read every run must say the same of a piece ending there: a marked run says it ends, an unmarked one in a
+state that does not accept says it does not, an unmarked one in an accepting state says both unless the state is a dead
+end, as after cl100k's three digits, where it ends. A piece that ends at a stable code point is closed and its ids
+returned. The third layer works inside each run's open piece. The ids returned of it are those of its merge up to the
+last boundary that every byte continuation keeps, and by interval projection that is decided by the continuations a
+token can straddle the piece's end with, the empty one and the rest of every token that begins with a nonempty suffix of
+the piece: a continuation's merge is the merge of the piece followed by one of them up to its first boundary at or after
+the piece's end. The test runs from the right and stops at the first boundary that holds, since the boundaries every
+continuation keeps are closed downward; a boundary across which no token begins inside the token before it, a token that
+is a suffix of it followed by a prefix of the bytes after the boundary or by all of them and more, holds with no merge,
+since the first join that crosses a boundary joins such a suffix, and is taken first. Where pieces are looked up whole
+no id is stable while a token the merge does not form begins with the piece. Once the ids returned reach into a run's
+open piece the boundary they end at holds for every continuation, so the tests merge only the rest after it, with no
+whole-piece lookup. A push returns the common prefix over the runs of each run's closed pieces followed by its open
+piece's stable ids, less what has been returned.
+
+The third layer rests on results stated for one join at a time, the pair rule. They hold for the rank rule too, which
+makes on every piece the joins one join at a time makes on the dictionary of the tokens' self splits, the last join of
+the merge of each token's own bytes, in the same order: by interval projection a join the rank rule makes is the self
+split of the token it makes, and among the pairs of self splits standing in the piece the rank rule's choice is the
+least, the leftmost on a tie. The problem and its frame are Dalirrooyfard and Ye's, in Online Tokenization with Optimal
+Delay in Linear Time (arXiv:2610.19139): the stable prefix of an online tokenizer and its delay, the special-token
+segmentation, the pre-tokenization and the byte-pair encoding as three stages, the observation that across hard segment
+boundaries the stable output is the output of every segment but the last and the stable prefix of the last, zero delay
+for the composed pipeline NP-hard, and an algorithm of delay O(mt) in near-linear time; they leave open whether
+byte-pair encoding alone has zero delay. The report *The Left Ripple of Byte-Pair Encoding* answers that for the
+byte-pair stage: the stable prefix of a piece is the common prefix of its merge followed by the empty string and by each
+proper suffix of a token, a finite set, and a zero-delay streamer holds at most the right span radius of the dictionary
+past what it has returned, 129 bytes for GPT-2's table. What matisse adds is the combination and three steps it needs.
+The split verifier M, built for the report on pre-tokenizer certification, decides the pre-token boundaries every
+continuation keeps exactly and with no delay, where an online pre-tokenizer that commits a match once it cannot extend
+pays a delay. The rank rule is carried to one join at a time on the self splits. And the continuations are restricted to
+those that can straddle the piece's end, from every proper suffix of every token to the tokens that extend the piece's
+last bytes, with the whole-piece lookup folded in, which makes the exact rule affordable at every push.
+
+The tests hold the stream to `encode()` on seeded texts pushed in random parts of up to 9, 24 and 64 bytes, a byte at a
+time and whole, every push's ids a prefix of `encode()` of the whole text and all of them `encode()` of it, on the
+tests' pattern and definition, special tokens allowed and not, and on GPT-2's, cl100k's, o200k's and Llama 3's pinned
+files, for cl100k, o200k and Llama 3 the vendors' special tokens allowed and not. On letter runs of the tests' pattern
+pushed in parts they hold the ids returned to the common prefix of the merges of the run followed by the empty string
+and by every proper suffix of every token, the stable prefix of the report on the left ripple over its whole finite set.
+On the tests' pattern they hold every push to brute force over every continuation of up to four fragments: its ids are a
+prefix of the encoding of each, and unless the bytes read end in a proper prefix of an allowed spelling they reach every
+boundary the encodings of all of them keep. They hold the live runs over seeded class strings to the segmentations of
+every continuation of up to five code points, the pieces closed to the boundaries those share, the verifier table to
+munch's verifier, and streams on four threads over one encoder to `encode()`; the bench holds every streamed corpus to
+`encode()`'s ids.
+
 ## **The vendor verifiers, from Python into C++**
 
 The Python reference implementation holds everything the port needs: the class alphabets, the per-alternative languages
@@ -954,9 +1101,11 @@ Three layers, each against something independent of the code under test:
 2. **Self-consistency**, in CTest, on texts generated with a fixed seed as hopper's probe generates its corpus:
    `encode_parallel()` against `encode()` under both inventories at every chunk count from one to sixteen, at
    sixty-four, and at every cut the rule takes; the cuts of `chunk_boundaries()` against brute force over the report;
-   `decode(encode(x)) == x`; M accepts the `Segmenter`'s marking of every text; every anchor is a `Segmenter` boundary.
-   The texts mix the known counterexample shapes, whitespace runs before letters and punctuation, newlines followed by
-   tab runs, long letter runs, contractions in both cases, and allowed and disallowed special tokens.
+   `decode(encode(x)) == x`; M accepts the `Segmenter`'s marking of every text; every anchor is a `Segmenter` boundary;
+   the streaming encoder's pushes against `encode()` under random parts, and against brute force over the continuations
+   on the tests' pattern. The texts mix the known counterexample shapes, whitespace runs before letters and punctuation,
+   newlines followed by tab runs, long letter runs, contractions in both cases, and allowed and disallowed special
+   tokens.
 3. **The corpora**, by the probe in tools/probes: `matisse_corpus` takes the vocabulary directory and corpus files,
    holds GPT-2's, cl100k's, o200k's and Llama 3's pinned files to their digests, a corpus the fixtures name to the
    digest of its text, and the ids of `encode()` to the known-answer fixture's digest of the reference ids (the SHA-256

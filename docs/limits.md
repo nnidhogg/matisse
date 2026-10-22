@@ -141,6 +141,34 @@ at every cut of munch's C++ sources under cl100k's factorization inventory, 559,
 fairness section, 24 workers encode enwik9 at 557.5 and 626.1 MiB/s under GPT-2 and cl100k, where `encode()` on one
 thread runs at 54.6 and 57.1.
 
+## **Streaming: Every Id Final When Returned**
+
+A `Stream_encoder` reads a text in pushes and returns each id once no continuation of the text can change it. It claims
+one thing: after every push the ids it has returned are a prefix of `encode()` of the whole text, whatever the rest
+turns out to be, and after `finish()` they are `encode()` of it. What a push returns is the longest such prefix but for
+two exceptions, each bounded: while the bytes read end in a proper prefix of an allowed special token's spelling those
+bytes are held, fewer than the longest allowed spelling, and inside a piece an id is held against every byte
+continuation where the pattern allows fewer. The tests hold the claim on seeded texts pushed in random parts, a byte at
+a time and whole, under all four tokenizers and the tests' own pattern, and against brute force over the continuations
+on the tests' pattern, as [design.md](design.md) describes.
+
+What a stream holds after a push, read and not yet spelled by the ids it has returned, is four things. A UTF-8 sequence
+the push ended inside, at most three bytes. A proper prefix of an allowed spelling. The code points after the last one
+every live run of the pattern's verifier agrees on: on GPT-2's pattern the runs agree on every pre-token boundary but
+the last two code points', by the bounded backoff of the report on pre-tokenizer certification, and on cl100k's no bound
+exists, since a newline followed by tabs is one piece when the text ends there and a newline and pieces of tabs when a
+letter follows, so the run is held whole until something other than white space or the end arrives and no streamer can
+return it earlier, as Dalirrooyfard and Ye show for o200k's as well. And inside each run's open piece what the merge
+cannot yet decide, at most the right span radius of the dictionary by the report *The Left Ripple of Byte-Pair
+Encoding*, finite for every dictionary and 129 bytes for GPT-2's table, not computed for the others.
+
+A stream keeps the stretch's bytes since its last closed piece, so a white space run of the family above is held in
+memory whole, and the pieces it closes are merged as `encode()` merges them, with a piece cache of its own. Each code
+point costs a class lookup and at most two steps of the verifier's table per live run, at most one run per state of the
+verifier; each push costs, for every live run, the merge of what its open piece has left after the ids returned and the
+tests of its boundaries from the right. Ill-formed UTF-8 is refused with `std::invalid_argument` by the push that
+classes it, and a text that ends inside a sequence by `finish()`; a stream that has refused is not read again.
+
 ## **Unicode: Tables Pinned to 15.0.0**
 
 The model is defined on code points. Every entry point that reads a text decodes it as UTF-8 and refuses an ill-formed
@@ -183,9 +211,9 @@ id. Moving the pin is open choice 6 of [design.md](design.md).
   merge table, so character-level SentencePiece waits on a decision about munch's alphabet.
 - `validate()` refuses a pattern that is not total, as `split_verifier()` refuses it, a certified window whose right
   context is unbounded, and a factorization window the split verifier does not certify.
-- `encode()` takes the whole text and returns every id in one vector. There is no streaming or incremental feeding, and
-  certified-prefix streaming is among the pieces [design.md](design.md) leaves out of the first version, so a text is
-  bounded by memory; `encode_parallel()` holds every chunk's ids before it joins them into one vector.
+- `encode()` takes the whole text and returns every id in one vector, so a text it reads is bounded by memory, and
+  `encode_parallel()` holds every chunk's ids before it joins them into one vector. A text that arrives in parts is read
+  by a `Stream_encoder`, which holds what the section on streaming bounds.
 
 ## **Concurrency and Lifetimes**
 
@@ -203,6 +231,9 @@ id. Moving the pin is open choice 6 of [design.md](design.md).
   it. The report must be the one `validate()` decided of the same pattern, which the encoder does not check. The
   tokenizer libraries' patterns point their views and spans into constants of their sources.
 - The text is read during the call only, and the ids are returned by value.
+- A `Stream_encoder` reads one text at a time and serves one thread at a time; the encoder it is made from must outlive
+  it and serves any number of streams on as many threads, each stream keeping its runs, its held bytes and its piece
+  cache to itself with no lock. The tests run four streams on four threads over one encoder.
 
 ## **Construction Cost**
 
@@ -216,8 +247,11 @@ backtracking's condition the split of every token, read from the merge of its ow
 encode to themselves and the split of each by its parts, which take the construction of the merge's tables from 0.01,
 0.05 and 0.15 seconds to 0.04, 0.14 and 0.33 on GPT-2's, cl100k's and o200k's files on the machine of
 [benchmarks.md](benchmarks.md); beside them the `Segmenter`'s product automaton, 36 states for GPT-2's twelve
-alternatives and 33 for cl100k's eight, and the window index. Build the encoder once and reuse it across texts and
-threads; building one per request is a design mistake the library does not try to make cheap.
+alternatives and 33 for cl100k's eight, and the window index. What the streaming encoder reads is built with them, the
+class table, the split verifier's table, the ordinary tokens in the order of their spellings and, where pieces are
+looked up whole, the tokens the merge does not form, which adds 9, 35, 67 and 49 milliseconds on GPT-2's, cl100k's,
+o200k's and Llama 3's files, so that a stream is made in about ten nanoseconds. Build the encoder once and reuse it
+across texts and threads; building one per request is a design mistake the library does not try to make cheap.
 
 A call has a cost of its own. `encode(text)` builds its classes, its segmentation and its piece cache afresh, so on a
 short text a cache kept across the calls is what pays. In the backtracking section of [benchmarks.md](benchmarks.md) a
@@ -235,6 +269,8 @@ instead of weakening them:
   [benchmarks.md](benchmarks.md).
 - **Short calls.** `encode(text, cache)` with a cache kept across the calls amortizes the piece cache `encode(text)`
   builds for each, though every call still classes and segments its own text.
+- **A text that arrives in parts.** A `Stream_encoder` returns each id as soon as it is final, so a caller never
+  re-encodes a growing text and never holds more of it than the section on streaming bounds.
 - **Scarce cuts.** The policy inventory lands on more boundaries than the factorization inventory, at the cost of
   resting on the verifier's one-step relation, and an allowed special token is a cut wherever it stands.
 - **A new pattern.** A tokenizer is added as a library of its own, its pattern described as data; `split_verifier()`

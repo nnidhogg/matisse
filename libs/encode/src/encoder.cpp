@@ -17,6 +17,8 @@
 #include <utility>
 #include <vector>
 
+#include "matisse/pretok/verifier.hpp"
+
 namespace matisse::encode
 {
 namespace
@@ -167,6 +169,10 @@ Encoder::Encoder(
     , allowed_{allowed_of(definition_.specials, allowed)}
     , windows_{table_of(report, inventory), pattern.alphabet}
     , right_context_{table_of(report, inventory).right_context}
+    , class_table_{pattern.alphabet}
+    , verifier_{pretok::split_verifier(pattern), pattern.alphabet}
+    , spellings_sorted_{sorted_of(definition_.spellings)}
+    , unformed_sorted_{unformed_of(definition_, merger_, spellings_sorted_)}
 {}
 
 std::vector<load::Special_token> Encoder::allowed_of(
@@ -188,6 +194,53 @@ std::vector<load::Special_token> Encoder::allowed_of(
     }
 
     return chosen;
+}
+
+std::vector<load::Token_id_t> Encoder::sorted_of(const std::span<const std::string> spellings)
+{
+    const auto ids{std::views::iota(0UZ, spellings.size()) | std::views::transform([](const std::size_t id) {
+                       return static_cast<load::Token_id_t>(id);
+                   })};
+
+    std::vector<load::Token_id_t> sorted{ids.begin(), ids.end()};
+
+    const auto spelling_of{[spellings](const load::Token_id_t id) { return std::string_view{spellings[id]}; }};
+
+    std::ranges::stable_sort(sorted, std::less{}, spelling_of);
+
+    return sorted;
+}
+
+std::vector<load::Token_id_t> Encoder::unformed_of(
+        const load::Definition& definition, const Merger& merger, const std::span<const load::Token_id_t> sorted)
+{
+    std::vector<load::Token_id_t> unformed{};
+
+    if (!definition.whole_piece_lookup)
+    {
+        return unformed;
+    }
+
+    for (const auto id : sorted)
+    {
+        const auto& spelling{definition.spellings[id]};
+
+        if (spelling.size() < 2)
+        {
+            continue;
+        }
+
+        const auto merged{merger.merged(spelling)};
+
+        const auto forms_itself{merged.size() == 1 && merged.front() == id};
+
+        if (!forms_itself)
+        {
+            unformed.push_back(id);
+        }
+    }
+
+    return unformed;
 }
 
 std::vector<load::Token_id_t> Encoder::encode(const std::string_view text) const
@@ -536,6 +589,41 @@ std::string Encoder::decode(const std::span<const load::Token_id_t> ids) const
     }
 
     return text;
+}
+
+const load::Definition& Encoder::definition() const noexcept
+{
+    return definition_;
+}
+
+const Merger& Encoder::merger() const noexcept
+{
+    return merger_;
+}
+
+std::span<const load::Special_token> Encoder::allowed() const noexcept
+{
+    return allowed_;
+}
+
+const pretok::Class_table& Encoder::class_table() const noexcept
+{
+    return class_table_;
+}
+
+const Verifier_table& Encoder::verifier() const noexcept
+{
+    return verifier_;
+}
+
+std::span<const load::Token_id_t> Encoder::spellings_sorted() const noexcept
+{
+    return spellings_sorted_;
+}
+
+std::span<const load::Token_id_t> Encoder::unformed_sorted() const noexcept
+{
+    return unformed_sorted_;
 }
 
 } // namespace matisse::encode

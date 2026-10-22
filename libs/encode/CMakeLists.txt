@@ -7,10 +7,13 @@ add_library(${PROJECT_NAME}
         src/backtracker.cpp
         src/encoder.cpp
         src/join_table.cpp
+        src/live_runs.cpp
         src/merger.cpp
         src/piece_cache.cpp
         src/spelling_table.cpp
+        src/stream_encoder.cpp
         src/token_trie.cpp
+        src/verifier_table.cpp
         src/window_index.cpp
 )
 
@@ -41,10 +44,13 @@ if (MATISSE_BUILD_TESTS)
             tests/backtracker_test.cpp
             tests/encoder_test.cpp
             tests/join_table_test.cpp
+            tests/live_runs_test.cpp
             tests/merger_test.cpp
             tests/piece_cache_test.cpp
             tests/spelling_table_test.cpp
+            tests/stream_encoder_test.cpp
             tests/token_trie_test.cpp
+            tests/verifier_table_test.cpp
             tests/window_index_test.cpp
     )
 

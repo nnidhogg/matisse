@@ -14,6 +14,7 @@
 #include <random>
 #include <ranges>
 #include <set>
+#include <span>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -27,6 +28,7 @@
 #include "matisse/encode/merger.hpp"
 #include "matisse/encode/piece_cache.hpp"
 #include "matisse/encode/spelling_table.hpp"
+#include "matisse/encode/stream_encoder.hpp"
 #include "matisse/encode/window_index.hpp"
 #include "matisse/llama3/tokenizer.hpp"
 #include "matisse/pretok/segmenter.hpp"
@@ -585,6 +587,67 @@ std::vector<Token_id_t> plain_merge(const std::string_view piece, const Rank_tab
     }
 }
 
+/**
+ * @brief Returns seeded random ends of the pushes of a text, each push 0 to a bound of bytes long, so that pushes end
+ *        inside UTF-8 sequences and inside spellings and some push nothing.
+ * @param random The random sequence.
+ * @param size The text's size.
+ * @param widest The longest push.
+ * @return The byte after each push, ascending to the text's size.
+ */
+std::vector<std::size_t> random_cuts(std::mt19937& random, const std::size_t size, const std::size_t widest)
+{
+    std::uniform_int_distribution<std::size_t> width{0, widest};
+
+    std::vector<std::size_t> cuts{};
+
+    for (std::size_t at{0}; at < size;)
+    {
+        at = std::min(size, at + width(random));
+
+        cuts.push_back(at);
+    }
+
+    return cuts;
+}
+
+/**
+ * @brief Pushes a text to a stream in parts and expects every push to return ids that extend a prefix of encode() of
+ *        the whole text, and the ids of all pushes and finish() to be encode() of it.
+ * @param encoder The encoder.
+ * @param text The text.
+ * @param cuts The byte after each push.
+ */
+void expect_streamed(const Encoder& encoder, const std::string_view text, const std::span<const std::size_t> cuts)
+{
+    const auto expected{encoder.encode(text)};
+
+    Stream_encoder stream{encoder};
+
+    std::vector<Token_id_t> returned{};
+
+    std::size_t start{0};
+
+    for (const auto cut : cuts)
+    {
+        const auto ids{stream.push(text.substr(start, cut - start))};
+
+        returned.insert(returned.end(), ids.begin(), ids.end());
+
+        start = cut;
+
+        ASSERT_LE(returned.size(), expected.size()) << text << " after " << cut;
+        ASSERT_TRUE(std::ranges::equal(returned, std::span{expected}.first(returned.size())))
+                << text << " after " << cut;
+    }
+
+    const auto rest{stream.finish()};
+
+    returned.insert(returned.end(), rest.begin(), rest.end());
+
+    EXPECT_EQ(returned, expected) << text;
+}
+
 } // namespace
 
 TEST(Encoder_test, The_published_known_answer_this_is_a_test_sentence_is_2028_374_264_1296_11914_13)
@@ -857,5 +920,35 @@ TEST(Encoder_test, Llama3_s_rank_file_is_refused_the_backtracking_and_the_pieces
         }
 
         EXPECT_EQ(merger.merged(piece), plain_merge(piece, tables)) << piece;
+    }
+}
+
+TEST(Encoder_test, A_stream_pushed_in_parts_of_every_size_returns_prefixes_of_encode_and_concatenates_to_it)
+{
+    auto definition{pinned_llama3()};
+
+    if (!definition)
+    {
+        GTEST_SKIP() << "MATISSE_VOCAB_DIR names no directory holding llama3.tiktoken";
+    }
+
+    const std::array encoders{llama3_encoder(*definition, special_spellings()), llama3_encoder(*definition)};
+
+    std::mt19937 random{17};
+
+    for (std::size_t count{0}; count < 40; ++count)
+    {
+        const auto text{random_text(random, 40)};
+
+        const auto one_byte{std::views::iota(1UZ, text.size() + 1)};
+
+        const std::vector<std::size_t> one_byte_cuts{one_byte.begin(), one_byte.end()};
+
+        for (const auto& encoder : encoders)
+        {
+            expect_streamed(encoder, text, random_cuts(random, text.size(), 24));
+            expect_streamed(encoder, text, one_byte_cuts);
+            expect_streamed(encoder, text, std::array{text.size()});
+        }
     }
 }
