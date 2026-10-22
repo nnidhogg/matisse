@@ -34,17 +34,17 @@ That model excludes, some of it permanently and some only in the first version:
   repair. This one is permanent too.
 - **Normalizers and post-processors.** The first version applies no normalizer but the identity, adds no token of its
   own around the encoding, such as a beginning-of-sequence token, and has no byte fallback. WordPiece, which brings
-  BERT's normalizer and so the first normalizer, comes after o200k in the order of tokenizers that open choice 3 of
-  [design.md](design.md) recommends.
+  BERT's normalizer and so the first normalizer, comes after Llama 3's pattern in the order of tokenizers that open
+  choice 3 of [design.md](design.md) recommends.
 - **Training.** matisse reads the files a vendor published and trains nothing.
 - **A tokenizer.json reader.** `read_tokenizer_json()` is designed in [design.md](design.md) and not yet declared,
   waiting on open choice 5, which JSON reader it uses. Until then load reads GPT-2's encoder.json and vocab.bpe through
   `read_gpt2()` and tiktoken rank files through `read_tiktoken()`, and `matisse-validate` treats a file named without
   `--tiktoken` as a command-line error.
-- **Tokenizers beyond GPT-2 and cl100k_base.** Those two have pattern descriptions, in the gpt2 and cl100k libraries,
-  which lookup finds by name. A further tokenizer, o200k or Llama 3, comes as a library of its own under `libs/`, named
-  in the lookup's list, with no change to the stage libraries, once its pattern has a description that meets the class
-  theorem's conditions; until then it has no encoder.
+- **Tokenizers beyond GPT-2, cl100k_base and o200k_base.** Those three have pattern descriptions, in the gpt2, cl100k
+  and o200k libraries, which lookup finds by name. A further tokenizer, Llama 3 among them, comes as a library of its
+  own under `libs/`, named in the lookup's list, with no change to the stage libraries, once its pattern has a
+  description that meets the class theorem's conditions; until then it has no encoder.
 - **Definitions without a pre-tokenizer.** The `Encoder` takes a pattern, so a definition without one has no encoder in
   the first version.
 
@@ -85,10 +85,10 @@ backtracking and merged to the rule's ids.
 
 The whole-piece lookup is the definition's `whole_piece_lookup` flag: whether a piece that is itself an ordinary token
 is that one token, looked up before any merge. `read_tiktoken()` sets it, since tiktoken looks every piece up, and
-`read_gpt2()` leaves it false, since encoder.py never does. It changes no id on cl100k or GPT-2, where every multi-byte
-token is formed by the merge rule from its own bytes, GPT-2's `<|endoftext|>` aside, which its pattern never leaves as
-one piece. It is load-bearing on Llama 3's rank file, where 588 of 127,744 multi-byte tokens are not formed from their
-own bytes and the lookup is what gives each of them whole.
+`read_gpt2()` leaves it false, since encoder.py never does. It changes no id on cl100k, o200k or GPT-2, where every
+multi-byte token is formed by the merge rule from its own bytes, GPT-2's `<|endoftext|>` aside, which its pattern never
+leaves as one piece. It is load-bearing on Llama 3's rank file, where 588 of 127,744 multi-byte tokens are not formed
+from their own bytes and the lookup is what gives each of them whole.
 
 ## **Parallel: Certified Cuts, or One Chunk**
 
@@ -108,25 +108,29 @@ width less one code points after the previous boundary, so that the occurrence c
 ends, and as far after its stretch's start. A target with no cut after it ends the walk, the last chunk running to the
 text's end. So a text with no certified cut is one chunk, encoded serially, and honestly, on the calling thread, and a
 text whose cuts are scarce gets fewer chunks than it asked for. The longest piece of a text is a floor no cut rule can
-go below, and the boundary gap of GPT-2's and cl100k's verifiers is unbounded, since a letter run of any length is one
-piece. The chunks are of equal bytes, not of equal work, which shows on a text that mixes scripts, as the mixed file of
-[benchmarks.md](benchmarks.md) does under cl100k.
+go below, and the boundary gap of GPT-2's, cl100k's and o200k's verifiers is unbounded, since a letter run of any
+length, of lower case letters under o200k, is one piece. The chunks are of equal bytes, not of equal work, which shows
+on a text that mixes scripts, as the mixed file of [benchmarks.md](benchmarks.md) does under cl100k.
 
 There are two inventories, and the encoder keeps the one it is built with. The factorization inventory's cut holds for
 every complete factorization into the gate-erased languages of the alternatives, whatever the engine does inside its
-matches; it needs one code point of right context on GPT-2 and cl100k. The policy inventory's cut holds for the
+matches; it needs one code point of right context on GPT-2, cl100k and o200k. The policy inventory's cut holds for the
 pattern's own segmentation, decided on its verifier, which rests on the one-step relation the verifier is built from,
 validated against the reference and not machine-checked; it needs two code points and lands on more boundaries. At the
-default width of five, on the three corpora of the test strategy, the factorization inventory's anchors reach 57.30 to
-92.88 per cent of the pre-token boundaries and the policy inventory's 96.09 to 100.00. The factorization inventory,
-which rests on less, is the one [design.md](design.md) recommends by default and the one [benchmarks.md](benchmarks.md)
-times.
+default width of five, on the three corpora of the test strategy under GPT-2 and cl100k, the factorization inventory's
+anchors reach 57.30 to 92.88 per cent of the pre-token boundaries and the policy inventory's 96.09 to 100.00. The
+factorization inventory, which rests on less, is the one [design.md](design.md) recommends by default and the one
+[benchmarks.md](benchmarks.md) times.
 
 The width is five by default, `validate::default_width`, for two reasons. The walk over the windows decides width five
 in 1.1 seconds for GPT-2 and 2.4 for cl100k, and at width five GPT-2's policy anchors are complete, every cut a wider
 window certifies being one of them, as the report on pre-tokenizer certification proves. The windows of a width are
-every string of that length over the class symbols, 14 for GPT-2 and 16 for cl100k, so each further symbol multiplies
-them; `matisse-validate` takes widths two to five.
+every string of that length over the class symbols, 14 for GPT-2, 16 for cl100k and 30 for o200k, so each further symbol
+multiplies them; `matisse-validate` takes widths two to five. The walk decides o200k to width three in 1.5 seconds, to
+four in 16 and to five in 245, holding 2.9 GB, and width four adds almost no factorization anchor to three's, 23 on
+munch's C++ sources and none on twitter.json or wiki-zh, where the policy inventory gains 20,484 on munch's C++ sources,
+from 97.18 to 99.28 per cent of the boundaries, so o200k's tests, the corpus probe and the bench, which time the
+factorization inventory, decide its report to width three.
 
 Each chunk is a thread. `encode_parallel()` starts one `std::jthread` per chunk beyond the last, which runs on the
 calling thread, with no pool and no executor, so the chunk count, at most the count the caller asks for, is also the
@@ -142,9 +146,11 @@ thread runs at 54.6 and 57.1.
 The model is defined on code points. Every entry point that reads a text decodes it as UTF-8 and refuses an ill-formed
 sequence it reads with `std::invalid_argument`, naming its byte offset within the stretch it reads, and every cut falls
 at a code point. A code point's class is the class of the first set of the pattern's alphabet that holds it, the sets
-GPT-2's and cl100k's patterns name being L, N, White_Space and the literals' own, and everything else is of one other
-class. A literal matched caselessly holds its case partners, as cl100k's caseless `s` holds `S`, `s` and U+017F; beyond
-that there is no case folding and no normalization.
+GPT-2's and cl100k's patterns name being L, N, White_Space and the literals' own, and o200k's Lu, Ll, Lt, Lm, Lo, M, N,
+White_Space and its literals', and everything else is of one other class. A literal matched caselessly holds its case
+partners, as cl100k's caseless `s` holds `S`, `s` and U+017F, and where the pattern reads upper and lower case apart, as
+o200k's does, the partners are split by case, `S` in a class of its own and U+017F with `s`; beyond that there is no
+case folding and no normalization.
 
 The tables are generated by tools/unicode/generate_classes.py into each tokenizer library's src/class_ranges.inc,
 checked in so the build never touches the network, and pinned to Unicode 15.0.0, the version of the reference the
@@ -172,9 +178,9 @@ id. Moving the pin is open choice 6 of [design.md](design.md).
   definition alone, so the cache never changes an id; on the three corpora of the test strategy the bound holds every
   piece the merge makes.
 - A `pretok::Class_table` keeps one table per distinct block of 256 code points and refuses an alphabet with more
-  distinct blocks than a byte indexes; GPT-2's and cl100k's have 127 and 128. Class symbols are bytes, as munch's
-  verifier alphabet is, which holds every class alphabet in sight and no character-level merge table, so character-level
-  SentencePiece waits on a decision about munch's alphabet.
+  distinct blocks than a byte indexes; GPT-2's, cl100k's and o200k's have 127, 128 and 135. Class symbols are bytes, as
+  munch's verifier alphabet is, which holds every class alphabet in sight and no character-level merge table, so
+  character-level SentencePiece waits on a decision about munch's alphabet.
 - `validate()` refuses a pattern that is not total, as `split_verifier()` refuses it, a certified window whose right
   context is unbounded, and a factorization window the split verifier does not certify.
 - `encode()` takes the whole text and returns every id in one vector. There is no streaming or incremental feeding, and
@@ -194,8 +200,8 @@ id. Moving the pin is open choice 6 of [design.md](design.md).
   a worker throws is kept, and the first one is rethrown on the calling thread once every worker has joined.
 - The encoder takes the definition by value and keeps its own copies of what it reads from the report and the pattern,
   the window table and its right context, the class table and the segmentation's automaton, so neither has to outlive
-  it. The report must be the one `validate()` decided of the same pattern, which the encoder does not check. GPT-2's and
-  cl100k's patterns point their views and spans into constants of their libraries' sources.
+  it. The report must be the one `validate()` decided of the same pattern, which the encoder does not check. The
+  tokenizer libraries' patterns point their views and spans into constants of their sources.
 - The text is read during the call only, and the ids are returned by value.
 
 ## **Construction Cost**
@@ -234,8 +240,8 @@ instead of weakening them:
 - **A new pattern.** A tokenizer is added as a library of its own, its pattern described as data; `split_verifier()`
   refuses a pattern that is not total with a shortest residual no alternative matches, which is where a wrong
   description shows first, and `validate()` decides its windows.
-- **A rank file under a known pattern.** `matisse-validate FILE --tiktoken PATTERN` reports a rank file read under gpt2
-  or cl100k, its windows and right context, and with `--input` the anchor supply on a text.
+- **A rank file under a known pattern.** `matisse-validate FILE --tiktoken PATTERN` reports a rank file read under gpt2,
+  cl100k or o200k, its windows and right context, and with `--input` the anchor supply on a text.
 - **No pre-tokenizer.** The lazy certification of byte-level merge tables, `validate_merges()`, is step 14 of the order
   of work in [design.md](design.md) and not written yet.
 

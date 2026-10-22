@@ -280,6 +280,7 @@ jobs:
           #include <matisse/gpt2/tokenizer.hpp>
           #include <matisse/load/definition.hpp>
           #include <matisse/lookup/tokenizers.hpp>
+          #include <matisse/o200k/tokenizer.hpp>
           #include <matisse/pretok/segmenter.hpp>
           #include <matisse/validate/report.hpp>
           int main()

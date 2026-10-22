@@ -1,7 +1,7 @@
-// Holds the ids of encode() and of encode_parallel() on GPT-2's and cl100k's pinned vocabularies to their references on
-// real text. This is the third layer of design.md's test strategy run as a program.
+// Holds the ids of encode() and of encode_parallel() on GPT-2's, cl100k's and o200k's pinned vocabularies to their
+// references on real text. This is the third layer of design.md's test strategy run as a program.
 //
-// What it checks on every text, for both tokenizers: that encode() gives the ids of every piece looked up whole where
+// What it checks on every text, for every tokenizer: that encode() gives the ids of every piece looked up whole where
 // the definition says so and otherwise merged with no cache, and that decode() spells the text back; and for both
 // inventories that encode_parallel() gives encode()'s ids at the chunk counts the bench times, at the chunkings of
 // 4,096 and 65,536 code points and at one chunk per byte asked for, which takes every cut the rule offers; and that at
@@ -20,7 +20,8 @@
 // corpus is measured with no reference. For each tokenizer the probe prints the ids line, `ids TOKENIZER NAME COUNT
 // DIGEST`, the digest being the SHA-256 of the ids as little-endian 32-bit words, as the fixtures write it, which a
 // vendor's ids are compared by, and the supply section of both inventories, which docs/benchmarks.md quotes. The
-// fixtures must hold the three corpora's texts and both tokenizers' ids of them. Any failure exits 1.
+// fixtures must hold the three corpora's texts and every tokenizer's ids of them. Each report is decided to
+// validate()'s default width, o200k's to three. Any failure exits 1.
 //
 // Usage: matisse_corpus VOCAB_DIR [CORPUS...]
 
@@ -52,6 +53,7 @@
 #include "matisse/encode/merger.hpp"
 #include "matisse/gpt2/tokenizer.hpp"
 #include "matisse/load/definition.hpp"
+#include "matisse/o200k/tokenizer.hpp"
 #include "matisse/pretok/segmenter.hpp"
 #include "matisse/validate/report.hpp"
 #include "matisse/validate/supply.hpp"
@@ -79,7 +81,19 @@ constexpr std::string_view gpt2_vocab_digest{"1ce1664773c50f3e0cc8842619a93edc46
 constexpr std::string_view cl100k_digest{"223921b76ee99bde995b7ff738513eef100fb51d18c93597a113bcffe865b2a7"};
 
 /**
- * @brief The corpora the fixtures name, each with its text's digest and both tokenizers' ids of it.
+ * @brief The SHA-256 of o200k_base.tiktoken as pinned.
+ */
+constexpr std::string_view o200k_digest{"446a9538cb6c348e3516120d7c08b09f57c36495e2acfffe59a5bf8b0cfb1a2d"};
+
+/**
+ * @brief The widest window of o200k's report: its 30 classes take validate()'s default of five to 245 seconds and 2.9
+ *        GB, and four, at 16 seconds, adds to three's factorization inventory, the one timed, 23 anchors on munch's C++
+ *        sources and none on twitter.json or wiki-zh.
+ */
+constexpr std::size_t o200k_width{3};
+
+/**
+ * @brief The corpora the fixtures name, each with its text's digest and every tokenizer's ids of it.
  */
 constexpr std::size_t fixture_corpora{3};
 
@@ -136,12 +150,13 @@ void expect(const bool condition, const std::string_view what)
 }
 
 /**
- * @brief A tokenizer under measure: its name as the fixtures write it, its pattern and its definition.
+ * @brief A tokenizer under measure: its name as the fixtures write it, its pattern, the widest window its report is
+ *        decided to and its definition.
  */
 struct Tokenizer
 {
     /**
-     * @brief The universe name of the fixtures, gpt2 or cl100k.
+     * @brief The universe name of the fixtures, gpt2, cl100k or o200k.
      */
     std::string_view name{};
 
@@ -149,6 +164,11 @@ struct Tokenizer
      * @brief The pattern, whose views point into the tokenizer library's constants.
      */
     matisse::pretok::Pattern pattern{};
+
+    /**
+     * @brief The widest window of the pattern's report.
+     */
+    std::size_t width{};
 
     /**
      * @brief The definition read from the pinned vocabulary.
@@ -217,9 +237,10 @@ std::filesystem::path pinned(
 }
 
 /**
- * @brief Returns GPT-2 and cl100k read from the pinned files of a vocabulary directory, each held to its digest.
- * @param directory The vocabulary directory, holding gpt2-vocab.json, gpt2-merges.txt and cl100k_base.tiktoken.
- * @return The two tokenizers.
+ * @brief Returns GPT-2, cl100k and o200k read from the pinned files of a vocabulary directory, each held to its digest.
+ * @param directory The vocabulary directory, holding gpt2-vocab.json, gpt2-merges.txt, cl100k_base.tiktoken and
+ *        o200k_base.tiktoken.
+ * @return The three tokenizers.
  * @throws std::runtime_error If a file cannot be read or is not the pinned one.
  */
 std::vector<Tokenizer> tokenizers(const std::filesystem::path& directory)
@@ -228,19 +249,29 @@ std::vector<Tokenizer> tokenizers(const std::filesystem::path& directory)
 
     const auto vocab{pinned(directory, "gpt2-merges.txt", gpt2_vocab_digest)};
 
-    const auto ranks{pinned(directory, "cl100k_base.tiktoken", cl100k_digest)};
+    const auto cl100k_ranks{pinned(directory, "cl100k_base.tiktoken", cl100k_digest)};
+
+    const auto o200k_ranks{pinned(directory, "o200k_base.tiktoken", o200k_digest)};
 
     std::vector<Tokenizer> read{};
 
     read.push_back(Tokenizer{
             .name = "gpt2",
             .pattern = matisse::gpt2::pattern(),
+            .width = matisse::validate::default_width,
             .definition = matisse::load::read_gpt2(encoder, vocab)});
 
     read.push_back(Tokenizer{
             .name = "cl100k",
             .pattern = matisse::cl100k::pattern(),
-            .definition = matisse::load::read_tiktoken(ranks, matisse::cl100k::specials())});
+            .width = matisse::validate::default_width,
+            .definition = matisse::load::read_tiktoken(cl100k_ranks, matisse::cl100k::specials())});
+
+    read.push_back(Tokenizer{
+            .name = "o200k",
+            .pattern = matisse::o200k::pattern(),
+            .width = o200k_width,
+            .definition = matisse::load::read_tiktoken(o200k_ranks, matisse::o200k::specials())});
 
     return read;
 }
@@ -605,7 +636,7 @@ void expect_every_cut_splices(
  */
 void check_generated(const Tokenizer& tokenizer, const matisse::validate::Report& report)
 {
-    const auto& [tokenizer_name, pattern, definition]{tokenizer};
+    const auto& [tokenizer_name, pattern, width, definition]{tokenizer};
 
     const matisse::encode::Merger merger{definition};
 
@@ -738,7 +769,7 @@ void check_corpus(
         const Tokenizer& tokenizer, const matisse::validate::Report& report, const References& found,
         const std::string& name, const std::string_view text)
 {
-    const auto& [tokenizer_name, pattern, definition]{tokenizer};
+    const auto& [tokenizer_name, pattern, width, definition]{tokenizer};
 
     const Encoder factorization{definition, report, Inventory::factorization, pattern, {}};
 
@@ -833,8 +864,8 @@ int main(const int argc, char** argv)
 
         const auto found{references()};
 
-        expect(found.texts.size() == fixture_corpora && found.ids.size() == 2 * fixture_corpora,
-               "the fixtures hold the three corpora's texts and both tokenizers' ids of them");
+        expect(found.texts.size() == fixture_corpora && found.ids.size() == measured.size() * fixture_corpora,
+               "the fixtures hold the three corpora's texts and every tokenizer's ids of them");
 
         std::vector<std::pair<std::string, std::string>> corpora{};
 
@@ -861,9 +892,9 @@ int main(const int argc, char** argv)
 
         for (const auto& tokenizer : measured)
         {
-            const auto& [tokenizer_name, pattern, definition]{tokenizer};
+            const auto& [tokenizer_name, pattern, width, definition]{tokenizer};
 
-            const auto report{matisse::validate::validate(pattern)};
+            const auto report{matisse::validate::validate(pattern, width)};
 
             if (corpora.empty())
             {

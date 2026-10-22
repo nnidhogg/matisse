@@ -13,13 +13,20 @@ them share a code point is refused. The generated file is checked in, so buildin
 rerun this script against a newer database to move the pinned Unicode version.
 
 Each tokenizer library keeps its own output, libs/<name>/src/class_ranges.inc, with the sets its pattern names.
-GPT-2's and cl100k's patterns name \\p{L}, \\p{N} and \\s, and both tables are pinned to Unicode 15.0.0, the version of
+GPT-2's and cl100k's patterns name \\p{L}, \\p{N} and \\s, and every table is pinned to Unicode 15.0.0, the version of
 the Python reference the fixtures are written by, so that the fixtures replay:
 
     tools/unicode/generate_classes.py --version 15.0.0 PropList.txt DerivedGeneralCategory.txt \\
         libs/gpt2/src/class_ranges.inc letter_ranges=L number_ranges=N white_space_ranges=White_Space
 
-and the same for libs/cl100k/src/class_ranges.inc. Pass --version to require the database to be a given version.
+and the same for libs/cl100k/src/class_ranges.inc. o200k's pattern names \\p{Lu}, \\p{Ll}, \\p{Lt}, \\p{Lm}, \\p{Lo},
+\\p{M}, \\p{N} and \\s:
+
+    tools/unicode/generate_classes.py --version 15.0.0 PropList.txt DerivedGeneralCategory.txt \\
+        libs/o200k/src/class_ranges.inc upper_ranges=Lu lower_ranges=Ll title_ranges=Lt modifier_ranges=Lm \\
+        other_letter_ranges=Lo mark_ranges=M number_ranges=N white_space_ranges=White_Space
+
+Pass --version to require the database to be a given version.
 
 Usage: tools/unicode/generate_classes.py [--version X.Y.Z] <PropList.txt> <DerivedGeneralCategory.txt> <output.inc>
        TABLE=SET...

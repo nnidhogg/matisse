@@ -23,9 +23,9 @@ add_custom_target(matisse_provenance
         COMMENT "Recording the commit the bench is built from"
         VERBATIM)
 
-# The corpus probe: the ids of encode() and of encode_parallel() on GPT-2's and cl100k's pinned vocabularies, held to
-# the known-answer fixture's corpus digests, to encode() itself at every certified cut, and to the merge with no cache.
-# Runs as a test on generated texts when the vocabulary directory is given, and on the three corpora of the test
+# The corpus probe: the ids of encode() and of encode_parallel() on GPT-2's, cl100k's and o200k's pinned vocabularies,
+# held to the known-answer fixture's corpus digests, to encode() itself at every certified cut, and to the merge with no
+# cache. Runs as a test on generated texts when the vocabulary directory is given, and on the three corpora of the test
 # strategy as well when the corpus directory is given; any other corpus is named on its command line.
 add_executable(matisse_corpus src/corpus.cpp)
 
@@ -35,6 +35,7 @@ target_link_libraries(matisse_corpus
         matisse_common
         matisse_encode
         matisse_gpt2
+        matisse_o200k
         matisse_validate
 )
 
@@ -59,6 +60,7 @@ target_link_libraries(matisse_bench
         matisse_common
         matisse_encode
         matisse_gpt2
+        matisse_o200k
         matisse_validate
 )
 
@@ -67,7 +69,7 @@ if (MATISSE_VOCAB_DIR)
     add_test(NAME matisse_corpus COMMAND matisse_corpus ${MATISSE_VOCAB_DIR})
 
     add_test(NAME matisse_bench
-            COMMAND matisse_bench single ${MATISSE_VOCAB_DIR} gpt2,cl100k 1
+            COMMAND matisse_bench single ${MATISSE_VOCAB_DIR} gpt2,cl100k,o200k 1
                     ${MATISSE_SOURCE_DIR}/tools/validate/tests/data/sample.txt)
 endif ()
 

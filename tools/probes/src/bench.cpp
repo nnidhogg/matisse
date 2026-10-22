@@ -1,5 +1,5 @@
-// Times matisse's encoder on GPT-2's and cl100k's pinned vocabularies, every figure taken after the result it times is
-// held to a reference, so that a row measures a proved-identical encoding: the encoding with no cache,
+// Times matisse's encoder on GPT-2's, cl100k's and o200k's pinned vocabularies, every figure taken after the result it
+// times is held to a reference, so that a row measures a proved-identical encoding: the encoding with no cache,
 // encode_parallel(), the batch and the prompts with a kept cache to encode()'s ids, and encode() itself to the digest
 // it prints, which the fixtures' and the vendors' digests are compared by.
 //
@@ -22,8 +22,9 @@
 // processors the process may run on, since a figure is quotable only beside the tree and the machine that produced it.
 //
 // Usage: matisse_bench MODE VOCAB_DIR TOKENIZERS PASSES FILE [COUNT...]
-// MODE is single, prompts, parallel or batch, TOKENIZERS is gpt2, cl100k or both separated by a comma, and the counts
-// are the worker counts of parallel (1, 2, 4, 8, 12, 16 and 24 unless given) or the thread counts of batch (1 and 24).
+// MODE is single, prompts, parallel or batch, TOKENIZERS is one or more of gpt2, cl100k and o200k separated by commas,
+// and the counts are the worker counts of parallel (1, 2, 4, 8, 12, 16 and 24 unless given) or the thread counts of
+// batch (1 and 24). Each report is decided to validate()'s default width, o200k's to three.
 
 #include <algorithm>
 #include <array>
@@ -60,6 +61,7 @@
 #include "matisse/encode/piece_cache.hpp"
 #include "matisse/gpt2/tokenizer.hpp"
 #include "matisse/load/definition.hpp"
+#include "matisse/o200k/tokenizer.hpp"
 #include "matisse/pretok/segmenter.hpp"
 #include "matisse/tools/probes/provenance.hpp"
 #include "matisse/validate/report.hpp"
@@ -97,6 +99,18 @@ constexpr std::string_view gpt2_vocab_digest{"1ce1664773c50f3e0cc8842619a93edc46
 constexpr std::string_view cl100k_digest{"223921b76ee99bde995b7ff738513eef100fb51d18c93597a113bcffe865b2a7"};
 
 /**
+ * @brief The SHA-256 of o200k_base.tiktoken as pinned.
+ */
+constexpr std::string_view o200k_digest{"446a9538cb6c348e3516120d7c08b09f57c36495e2acfffe59a5bf8b0cfb1a2d"};
+
+/**
+ * @brief The widest window of o200k's report: its 30 classes take validate()'s default of five to 245 seconds and 2.9
+ *        GB, and four, at 16 seconds, adds to three's factorization inventory, the one timed, 23 anchors on munch's C++
+ *        sources and none on twitter.json or wiki-zh.
+ */
+constexpr std::size_t o200k_width{3};
+
+/**
  * @brief The bytes in a mebibyte, the unit every throughput is reported in.
  */
 constexpr double bytes_per_mebibyte{1024.0 * 1024.0};
@@ -117,12 +131,13 @@ constexpr std::array<std::size_t, 2> default_threads{1, 24};
 constexpr std::array<std::string_view, 4> modes{"single", "prompts", "parallel", "batch"};
 
 /**
- * @brief A tokenizer under measure: its name, its pattern and its definition.
+ * @brief A tokenizer under measure: its name, its pattern, the widest window its report is decided to and its
+ *        definition.
  */
 struct Tokenizer
 {
     /**
-     * @brief The name, gpt2 or cl100k.
+     * @brief The name, gpt2, cl100k or o200k.
      */
     std::string_view name{};
 
@@ -130,6 +145,11 @@ struct Tokenizer
      * @brief The pattern, whose views point into the tokenizer library's constants.
      */
     matisse::pretok::Pattern pattern{};
+
+    /**
+     * @brief The widest window of the pattern's report.
+     */
+    std::size_t width{};
 
     /**
      * @brief The definition read from the pinned vocabulary.
@@ -410,10 +430,10 @@ std::filesystem::path pinned(
 /**
  * @brief Returns a tokenizer read from the pinned files of a vocabulary directory, each held to its digest.
  * @param directory The vocabulary directory.
- * @param name The tokenizer, gpt2 or cl100k.
+ * @param name The tokenizer, gpt2, cl100k or o200k.
  * @return The tokenizer.
  * @throws std::runtime_error If a file cannot be read or is not the pinned one.
- * @throws std::invalid_argument If the name is neither gpt2 nor cl100k.
+ * @throws std::invalid_argument If the name is none of the three.
  */
 Tokenizer tokenizer_of(const std::filesystem::path& directory, const std::string_view name)
 {
@@ -425,6 +445,7 @@ Tokenizer tokenizer_of(const std::filesystem::path& directory, const std::string
 
         return {.name = "gpt2",
                 .pattern = matisse::gpt2::pattern(),
+                .width = matisse::validate::default_width,
                 .definition = matisse::load::read_gpt2(encoder, vocab)};
     }
 
@@ -434,10 +455,21 @@ Tokenizer tokenizer_of(const std::filesystem::path& directory, const std::string
 
         return {.name = "cl100k",
                 .pattern = matisse::cl100k::pattern(),
+                .width = matisse::validate::default_width,
                 .definition = matisse::load::read_tiktoken(ranks, matisse::cl100k::specials())};
     }
 
-    throw std::invalid_argument{std::format("the tokenizers are gpt2 and cl100k, not '{}'", name)};
+    if (name == "o200k")
+    {
+        const auto ranks{pinned(directory, "o200k_base.tiktoken", o200k_digest)};
+
+        return {.name = "o200k",
+                .pattern = matisse::o200k::pattern(),
+                .width = o200k_width,
+                .definition = matisse::load::read_tiktoken(ranks, matisse::o200k::specials())};
+    }
+
+    throw std::invalid_argument{std::format("the tokenizers are gpt2, cl100k and o200k, not '{}'", name)};
 }
 
 /**
@@ -628,7 +660,7 @@ void run_single(
         const Tokenizer& tokenizer, const Encoder& encoder, const std::string_view name, const std::string_view text,
         const std::size_t passes)
 {
-    const auto& [tokenizer_name, pattern, definition]{tokenizer};
+    const auto& [tokenizer_name, pattern, width, definition]{tokenizer};
 
     const auto ids{encoder.encode(text)};
 
@@ -1017,9 +1049,9 @@ void run(const Options& options)
     {
         const auto tokenizer{tokenizer_of(vocabularies, tokenizer_name)};
 
-        const auto& [read_name, pattern, definition]{tokenizer};
+        const auto& [read_name, pattern, width, definition]{tokenizer};
 
-        const auto report{matisse::validate::validate(pattern)};
+        const auto report{matisse::validate::validate(pattern, width)};
 
         const Encoder encoder{definition, report, Inventory::factorization, pattern, {}};
 

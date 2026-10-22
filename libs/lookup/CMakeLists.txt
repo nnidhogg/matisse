@@ -26,6 +26,7 @@ target_link_libraries(${PROJECT_NAME}
         PRIVATE
         matisse_gpt2
         matisse_cl100k
+        matisse_o200k
 )
 
 if (MATISSE_BUILD_TESTS)

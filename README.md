@@ -10,11 +10,11 @@
 
 `matisse` is a **C++23 library** that reads the definition of a **real tokenizer**, decides where its output can be
 **cut with certainty**, and **encodes text in parallel** by cutting only there, with token ids byte-identical to the
-sequential encoding. The first version does this for **GPT-2** and **cl100k_base**, whose deployed pre-tokenizer
-patterns have exact verifiers, and for a byte-level tokenizer without a pre-tokenizer it reports the certified windows
-of the merge table through the lazy certification. It is not a general tokenizer library: it trains nothing, applies no
-normalizer but the identity, and does not try to match Hugging Face's feature surface. Its product is exactness against
-the reference tokenizer, shown on pinned vocabularies and corpora.
+sequential encoding. The first version does this for **GPT-2**, **cl100k_base** and **o200k_base**, whose deployed
+pre-tokenizer patterns have exact verifiers, and for a byte-level tokenizer without a pre-tokenizer it reports the
+certified windows of the merge table through the lazy certification. It is not a general tokenizer library: it trains
+nothing, applies no normalizer but the identity, and does not try to match Hugging Face's feature surface. Its product
+is exactness against the reference tokenizer, shown on pinned vocabularies and corpora.
 
 matisse is built on **[`munch`](https://github.com/nnidhogg/munch)**, and the two divide the work by one test: whether a
 piece would make sense if no LLM existed. munch keeps the general constructions, the verifier framework and the
@@ -30,15 +30,15 @@ to Unicode 15.0.0, the version of the reference the fixtures are written by, seg
 and builds the pattern's split verifier and factorization lexer, the automata the policy and factorization certificates
 are decided on; validate decides each pattern's certified windows to width five under both certificates, with the right
 context each inventory needs, measures each inventory's anchor supply on an input and renders its report as text and as
-JSON; gpt2 and cl100k describe their patterns and lookup finds them by name; `matisse-validate` reports a tiktoken rank
-file read under a pattern, with the supply on an input when one is given; encode encodes a text and decodes its ids
-under both merge rules, with the whole-piece lookup, the special-token cuts and a bounded cache of merged pieces, its
-merge held to the plain references on every multi-byte token of four vocabularies and its ids to the fixtures' known
-answers, and encodes it in parallel, cut only at the certified cuts of either inventory, its ids held to the sequential
-encoding's on seeded texts at one to sixteen chunks, at sixty-four and at every cut, while the tokenizer.json reader and
-the lazy certification of merge tables are still to be written. The version is 0.1.0, pre-1.0, and nothing is stable
-yet. What each library will hold, the proved results the loaders rest on and the order of work are in
-[docs/design.md](docs/design.md).
+JSON; gpt2, cl100k and o200k describe their patterns and lookup finds them by name; `matisse-validate` reports a
+tiktoken rank file read under a pattern, with the supply on an input when one is given; encode encodes a text and
+decodes its ids under both merge rules, with the whole-piece lookup, the special-token cuts and a bounded cache of
+merged pieces, its merge held to the plain references on every multi-byte token of four vocabularies and its ids to the
+fixtures' known answers, and encodes it in parallel, cut only at the certified cuts of either inventory, its ids held to
+the sequential encoding's on seeded texts at one to sixteen chunks, at sixty-four and at every cut, while the
+tokenizer.json reader and the lazy certification of merge tables are still to be written. The version is 0.1.0, pre-1.0,
+and nothing is stable yet. What each library will hold, the proved results the loaders rest on and the order of work are
+in [docs/design.md](docs/design.md).
 
 ## **Libraries**
 
@@ -59,11 +59,13 @@ vendor's special tokens and its tests, and a consumer of one tokenizer links its
 - **gpt2** describes GPT-2's pattern, whose files load reads from encoder.json and vocab.bpe or from a tiktoken rank
   file.
 - **cl100k** describes cl100k_base's pattern, whose tiktoken rank file load reads with the special tokens it supplies.
+- **o200k** describes o200k_base's pattern over its 30 classes, whose tiktoken rank file load reads with the special
+  tokens it supplies.
 
 The **lookup** library finds the tokenizer libraries by name, for the command line and any choice made at run time.
 
-A further tokenizer, o200k or Llama 3, is added as a new directory under `libs/` with no change to the stage libraries,
-as [docs/design.md](docs/design.md) describes.
+A further tokenizer, Llama 3 among them, is added as a new directory under `libs/` with no change to the stage
+libraries, as [docs/design.md](docs/design.md) describes.
 
 ## **Getting Started**
 
@@ -116,7 +118,7 @@ Tests and warnings-as-errors are enabled by default only when matisse is the top
 matisse through `add_subdirectory` opts in with `-DMATISSE_BUILD_TESTS=ON` or `-DMATISSE_WERROR=ON`.
 
 The vocabulary files the loaders' and the encoder's tests read, GPT-2's gpt2-vocab.json and gpt2-merges.txt,
-cl100k_base.tiktoken, and for the merge's tests also o200k_base.tiktoken and llama3.tiktoken, are not in the tree. A
+cl100k_base.tiktoken and o200k_base.tiktoken, and for the merge's tests also llama3.tiktoken, are not in the tree. A
 directory holding them is named with `-DMATISSE_VOCAB_DIR=DIR`, each file is held to the SHA-256 docs/design.md gives,
 and the tests that need them skip when no directory is named; nothing is fetched at test time.
 

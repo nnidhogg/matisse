@@ -70,8 +70,8 @@ enters it, and print rows and ids lines in the same format:
 | llama3-tokenizer.json | beside the pinned vocabulary files | `e134af98b985517b4f068e3755ae90d4e9cd2d45d328325dc503f1c6b2d06cc7` |
 | gpt2.tiktoken | GPT-2's ranks, written by tiktoken from the pinned encoder.json and vocab.bpe | `306cd27f03c1a714eca7108e03d66b7dc042abe8c258b44c199a7ed9838dd930` |
 
-The rank files o200k_base.tiktoken and llama3.tiktoken are pinned in design.md's test strategy. matisse has no o200k or
-Llama 3 library yet, so those two tokenizers are measured for the other encoders only.
+The rank files o200k_base.tiktoken and llama3.tiktoken are pinned in design.md's test strategy. matisse's rows of the
+sections below are GPT-2's and cl100k's, and o200k and Llama 3 are measured there for the other encoders only.
 
 ## **The machine**
 

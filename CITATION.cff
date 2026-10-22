@@ -4,8 +4,8 @@ title: "matisse"
 abstract: >-
   A C++23 library that reads the definition of a real tokenizer, decides where its output can be cut with certainty,
   and encodes text in parallel by cutting only there, with token ids byte-identical to the sequential encoding. The
-  first version covers GPT-2 and cl100k_base, whose pre-tokenizer patterns have exact verifiers, and reports the
-  certified windows of a byte-level merge table without a pre-tokenizer through the lazy certification.
+  first version covers GPT-2, cl100k_base and o200k_base, whose pre-tokenizer patterns have exact verifiers, and reports
+  the certified windows of a byte-level merge table without a pre-tokenizer through the lazy certification.
 keywords:
   - tokenization
   - byte-pair encoding

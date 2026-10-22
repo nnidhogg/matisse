@@ -2,8 +2,8 @@
 
 ## Unicode Character Database
 
-The letter, number and white-space tables in each tokenizer library's `src/class_ranges.inc` under `libs/` are generated
-from the Unicode Character Database and are used under the Unicode License v3. The complete notice follows.
+The letter, mark, number and white-space tables in each tokenizer library's `src/class_ranges.inc` under `libs/` are
+generated from the Unicode Character Database and are used under the Unicode License v3. The complete notice follows.
 
     UNICODE LICENSE V3
     
