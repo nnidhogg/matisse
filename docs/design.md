@@ -776,9 +776,9 @@ tokens in a double array; it holds each token to the one before it by a pair tes
 proper prefix of it when the test fails, and when no prefix is left takes the last token back and marks the position it
 went back from, to which no token is laid again. The pieces it takes are where it pays: timed piece by piece on nine
 corpora, it takes 0.28 to 0.90 times the scan's time on a piece of up to 128 bytes at least half outside ASCII, 0.10 to
-0.34 times the heap's on the 520 pieces longer than 128 bytes of those corpora and enwik8, and on the others 1.16 to
-2.36 times under cl100k, whose whole-piece lookup leaves the merge only the pieces that are no token, and 0.60 to 1.38
-times under GPT-2.
+0.34 times the heap's on the pieces longer than 128 bytes, which only `twitter.json`, `wiki-zh` and enwik8 hold, and on
+the others 1.16 to 2.36 times under cl100k, whose whole-piece lookup leaves the merge only the pieces that are no token,
+and 0.60 to 1.38 times under GPT-2.
 
 Its ids are the heap merge's on every piece, in four steps. Interval projection: while no join of a run crosses either
 end of an interval, the joins inside it are a prefix of the run on the interval alone, the least pair inside being the

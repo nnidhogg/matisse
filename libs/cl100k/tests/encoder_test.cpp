@@ -154,14 +154,12 @@ Encoder cl100k_encoder(Definition definition, const std::vector<std::string>& al
 /**
  * @brief Returns the ids of a text with no allowed special token, each piece cl100k's pattern segments looked up whole
  *        or merged, with no cache.
- * @param definition cl100k_base's definition.
+ * @param merger cl100k_base's merger.
  * @param text The text.
  * @return The ids.
  */
-std::vector<Token_id_t> uncached_ids(const Definition& definition, const std::string_view text)
+std::vector<Token_id_t> uncached_ids(const Merger& merger, const std::string_view text)
 {
-    const Merger merger{definition};
-
     const matisse::pretok::Segmenter segmenter{matisse::cl100k::pattern()};
 
     std::vector<Token_id_t> ids{};
@@ -549,6 +547,8 @@ TEST(Encoder_test, The_ids_are_those_of_no_cache_and_decode_spells_the_text_back
 
     const auto refusing{cl100k_encoder(*definition)};
 
+    const Merger merger{*definition};
+
     std::mt19937 random{7};
 
     for (std::size_t count{0}; count < 300; ++count)
@@ -557,7 +557,7 @@ TEST(Encoder_test, The_ids_are_those_of_no_cache_and_decode_spells_the_text_back
 
         const auto ids{refusing.encode(text)};
 
-        EXPECT_EQ(ids, uncached_ids(*definition, text)) << text;
+        EXPECT_EQ(ids, uncached_ids(merger, text)) << text;
         EXPECT_EQ(refusing.decode(ids), text);
         EXPECT_EQ(allowing.decode(allowing.encode(text)), text);
     }
@@ -609,7 +609,7 @@ TEST(Encoder_test, The_ids_are_those_of_no_cache_on_a_text_whose_distinct_pieces
 
     const auto encoder{cl100k_encoder(*definition)};
 
-    EXPECT_EQ(encoder.encode(text), uncached_ids(*definition, text));
+    EXPECT_EQ(encoder.encode(text), uncached_ids(merger, text));
 }
 
 TEST(Encoder_test, Encode_parallel_gives_encode_s_ids_under_both_inventories_and_every_anchor_ends_a_piece)

@@ -214,9 +214,9 @@ alternatives and 33 for cl100k's eight, and the window index. Build the encoder 
 threads; building one per request is a design mistake the library does not try to make cheap.
 
 A call has a cost of its own. `encode(text)` builds its classes, its segmentation and its piece cache afresh, so on a
-short text a cache kept across the calls is what pays. In the fairness section of [benchmarks.md](benchmarks.md) a call
-on a prompt of about a kilobyte costs a mean of 29.39 microseconds under GPT-2 and 38.57 under cl100k with a cache of
-its own, and 21.67 and 31.53 with one kept across the calls.
+short text a cache kept across the calls is what pays. In the backtracking section of [benchmarks.md](benchmarks.md) a
+call on a prompt of about a kilobyte costs a mean of 24.52 microseconds under GPT-2 and 24.77 under cl100k with a cache
+of its own, and 16.44 and 20.53 with one kept across the calls.
 
 ## **The Escape Hatches**
 

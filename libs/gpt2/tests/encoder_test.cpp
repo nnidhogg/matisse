@@ -157,14 +157,12 @@ Encoder gpt2_encoder(Definition definition)
 
 /**
  * @brief Returns the ids of a text, each piece GPT-2's pattern segments merged with no cache.
- * @param definition GPT-2's definition.
+ * @param merger GPT-2's merger.
  * @param text The text.
  * @return The ids.
  */
-std::vector<Token_id_t> uncached_ids(const Definition& definition, const std::string_view text)
+std::vector<Token_id_t> uncached_ids(const Merger& merger, const std::string_view text)
 {
-    const Merger merger{definition};
-
     const matisse::pretok::Segmenter segmenter{matisse::gpt2::pattern()};
 
     std::vector<Token_id_t> ids{};
@@ -503,6 +501,8 @@ TEST(Encoder_test, The_ids_are_those_of_no_cache_and_decode_spells_the_text_back
 
     const auto encoder{gpt2_encoder(*definition)};
 
+    const Merger merger{*definition};
+
     std::mt19937 random{7};
 
     for (std::size_t count{0}; count < 300; ++count)
@@ -511,7 +511,7 @@ TEST(Encoder_test, The_ids_are_those_of_no_cache_and_decode_spells_the_text_back
 
         const auto ids{encoder.encode(text)};
 
-        EXPECT_EQ(ids, uncached_ids(*definition, text)) << text;
+        EXPECT_EQ(ids, uncached_ids(merger, text)) << text;
         EXPECT_EQ(encoder.decode(ids), text);
     }
 }
@@ -557,7 +557,9 @@ TEST(Encoder_test, The_ids_are_those_of_no_cache_on_a_text_whose_distinct_pieces
 
     const auto encoder{gpt2_encoder(*definition)};
 
-    EXPECT_EQ(encoder.encode(text), uncached_ids(*definition, text));
+    const Merger merger{*definition};
+
+    EXPECT_EQ(encoder.encode(text), uncached_ids(merger, text));
 }
 
 TEST(Encoder_test, Encode_parallel_gives_encode_s_ids_under_both_inventories_and_every_anchor_ends_a_piece)
