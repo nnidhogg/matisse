@@ -18,6 +18,8 @@
 #include <utility>
 #include <vector>
 
+#include <munch/regex/regex.hpp>
+#include <munch/regex/set.hpp>
 #include <munch/regex/utf8.hpp>
 
 #include "matisse/encode/merger.hpp"
@@ -37,6 +39,12 @@ using matisse::pretok::Code_point_set;
 using matisse::pretok::Pattern;
 using matisse::validate::Inventory;
 using matisse::validate::Window_table;
+using munch::regex::any_of;
+using munch::regex::concat;
+using munch::regex::optional;
+using munch::regex::plus;
+using munch::regex::Set;
+using munch::regex::text;
 using munch::regex::utf8::Code_point_range;
 
 namespace
@@ -77,17 +85,17 @@ constexpr Alphabet alphabet{.symbols = " !a", .sets = sets, .other = '!'};
  *        optional space, a run of spaces that only a space or the end follows, as GPT-2's `\s+(?!\S)`, and a run of
  *        spaces.
  */
-constexpr std::array<Alternative, 4> alternatives{{
-        {.language = R"(\x20?a+)", .gate = " !a"},
-        {.language = R"(\x20?[!]+)", .gate = " !a"},
-        {.language = R"(\x20+)", .gate = " "},
-        {.language = R"(\x20+)", .gate = " !a"},
-}};
+const std::vector<Alternative> alternatives{
+        {.language = concat(optional(text(" ")), plus(text("a"))), .gate = " !a"},
+        {.language = concat(optional(text(" ")), plus(any_of(Set{'!'}))), .gate = " !a"},
+        {.language = plus(text(" ")), .gate = " "},
+        {.language = plus(text(" ")), .gate = " !a"},
+};
 
 /**
  * @brief The test pattern.
  */
-constexpr Pattern pattern{.alphabet = alphabet, .alternatives = alternatives};
+const Pattern pattern{.alphabet = alphabet, .alternatives = alternatives};
 
 /**
  * @brief Returns a definition under the rank rule: the single bytes, then every string of two and three letters over a,

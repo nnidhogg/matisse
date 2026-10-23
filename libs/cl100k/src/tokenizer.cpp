@@ -4,12 +4,24 @@
 #include <string_view>
 #include <vector>
 
+#include <munch/regex/regex.hpp>
+#include <munch/regex/set.hpp>
 #include <munch/regex/utf8.hpp>
 
 namespace matisse::cl100k
 {
 namespace
 {
+using munch::regex::any_of;
+using munch::regex::choice;
+using munch::regex::concat;
+using munch::regex::kleene;
+using munch::regex::optional;
+using munch::regex::plus;
+using munch::regex::range;
+using munch::regex::Regex;
+using munch::regex::Set;
+using munch::regex::text;
 using munch::regex::utf8::Code_point_range;
 
 #include "class_ranges.inc"
@@ -24,7 +36,7 @@ constexpr std::string_view symbols{"\t\n\r !'0Adelmrstv"};
 /**
  * @brief The class symbols of the white space, `\s`, the gate of `(?!\S)`.
  */
-constexpr std::string_view white_space{"\t\n\r "};
+constexpr std::string_view white_space_symbols{"\t\n\r "};
 
 /**
  * @brief The gate of `\s++$`, which no symbol passes, only the end of the input.
@@ -130,27 +142,118 @@ constexpr pretok::Alphabet alphabet{
         .unicode_version = class_unicode_version};
 
 /**
- * @brief cl100k's pattern alternative by alternative over its classes: the letters are `A` and the contraction
- *        letters, each holding both cases, the numbers `0`, the white space `\t`, `\n`, `\r` and the space, and
- *        everything else `!` and the apostrophe. The run `\s+(?!\S)` passes only before white space, `\s++$` only at
- *        the end of the input, and every other alternative is ungated, its gate every symbol.
+ * @brief Returns the contractions, `'(?i:[sdmt]|ll|ve|re)`: the apostrophe and the contraction letters, each class
+ *        holding both cases.
+ * @return The contractions.
  */
-constexpr std::array<pretok::Alternative, 8> alternatives{{
-        {.language = "'([sdmt]|ll|ve|re)", .gate = symbols},
-        {.language = R"([\t\x20!']?[Adelmrstv]+)", .gate = symbols},
-        {.language = "0{1,3}", .gate = symbols},
-        {.language = R"(\x20?[!']+[\r\n]*)", .gate = symbols},
-        {.language = R"([\t\n\r\x20]+)", .gate = end_of_input},
-        {.language = R"([\t\n\r\x20]*[\r\n])", .gate = symbols},
-        {.language = R"([\t\n\r\x20]+)", .gate = white_space},
-        {.language = R"([\t\n\r\x20])", .gate = symbols},
-}};
+[[nodiscard]] Regex contraction()
+{
+    const auto one_letter{any_of(Set{'s', 'd', 'm', 't'})};
+
+    const auto suffix{choice(one_letter, text("ll"), text("ve"), text("re"))};
+
+    return concat(text("'"), suffix);
+}
+
+/**
+ * @brief Returns one symbol of `[^\r\n\p{L}\p{N}]`, which may lead a run of letters: `\t`, the space, `!` or the
+ *        apostrophe.
+ * @return The symbol.
+ */
+[[nodiscard]] Regex lead()
+{
+    return any_of(Set{'\t', ' ', '!', '\''});
+}
+
+/**
+ * @brief Returns one symbol of the letters, `\p{L}`: `A` or a contraction letter.
+ * @return The letter.
+ */
+[[nodiscard]] Regex letter()
+{
+    return any_of(Set{'A', 'd', 'e', 'l', 'm', 'r', 's', 't', 'v'});
+}
+
+/**
+ * @brief Returns one symbol of the numbers, `\p{N}`: `0`.
+ * @return The number.
+ */
+[[nodiscard]] Regex number()
+{
+    return any_of(Set{'0'});
+}
+
+/**
+ * @brief Returns the space, a literal, as the one class symbol it is.
+ * @return The space.
+ */
+[[nodiscard]] Regex space()
+{
+    return text(" ");
+}
+
+/**
+ * @brief Returns one symbol of `[^\s\p{L}\p{N}]`: `!` or the apostrophe.
+ * @return The symbol.
+ */
+[[nodiscard]] Regex other()
+{
+    return any_of(Set{'!', '\''});
+}
+
+/**
+ * @brief Returns one symbol of `[\r\n]`: the carriage return or the line feed.
+ * @return The line break.
+ */
+[[nodiscard]] Regex line_break()
+{
+    return any_of(Set{'\r', '\n'});
+}
+
+/**
+ * @brief Returns one symbol of the white space, `\s`: `\t`, `\n`, `\r` or the space.
+ * @return The white space.
+ */
+[[nodiscard]] Regex white_space()
+{
+    return any_of(Set{'\t', '\n', '\r', ' '});
+}
+
+/**
+ * @brief Returns cl100k's pattern alternative by alternative over its classes, each below the vendor's alternative it
+ *        describes: the letters are `A` and the contraction letters, each holding both cases, the numbers `0`, the
+ *        white space `\t`, `\n`, `\r` and the space, and everything else `!` and the apostrophe. The run `\s+(?!\S)`
+ *        passes only before white space, `\s++$` only at the end of the input, and every other alternative is ungated,
+ *        its gate every symbol.
+ * @return The alternatives, in the order of the published pattern.
+ */
+[[nodiscard]] std::vector<pretok::Alternative> alternatives()
+{
+    return {
+            // `'(?i:[sdmt]|ll|ve|re)`
+            {.language = contraction(), .gate = symbols},
+            // `[^\r\n\p{L}\p{N}]?+\p{L}++`
+            {.language = concat(optional(lead()), plus(letter())), .gate = symbols},
+            // `\p{N}{1,3}+`
+            {.language = range(number(), 1, 3), .gate = symbols},
+            // ` ?[^\s\p{L}\p{N}]++[\r\n]*+`
+            {.language = concat(optional(space()), plus(other()), kleene(line_break())), .gate = symbols},
+            // `\s++$`
+            {.language = plus(white_space()), .gate = end_of_input},
+            // `\s*[\r\n]`
+            {.language = concat(kleene(white_space()), line_break()), .gate = symbols},
+            // `\s+(?!\S)`
+            {.language = plus(white_space()), .gate = white_space_symbols},
+            // `\s`
+            {.language = white_space(), .gate = symbols},
+    };
+}
 
 } // namespace
 
-pretok::Pattern pattern() noexcept
+pretok::Pattern pattern()
 {
-    return {.alphabet = alphabet, .alternatives = alternatives};
+    return {.alphabet = alphabet, .alternatives = alternatives()};
 }
 
 std::vector<load::Special_token> specials()

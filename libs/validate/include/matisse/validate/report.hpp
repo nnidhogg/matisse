@@ -147,7 +147,6 @@ struct Report
  * @return The report.
  * @throws std::invalid_argument If the pattern is not total, as split_verifier() refuses it, the right context of a
  *         certified window is unbounded, or a factorization window is not certified by the split verifier.
- * @throws munch::pattern::Syntax_error If an alternative's language is not in munch's pattern syntax.
  */
 [[nodiscard]] Report validate(const pretok::Pattern& pattern, std::size_t width = default_width);
 

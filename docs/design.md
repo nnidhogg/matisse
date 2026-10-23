@@ -307,7 +307,7 @@ struct Alphabet
 
 struct Alternative
 {
-    std::string_view language{};
+    munch::regex::Regex language{};
 
     std::string_view gate{};
 };
@@ -316,7 +316,7 @@ struct Pattern
 {
     Alphabet alphabet{};
 
-    std::span<const Alternative> alternatives{};
+    std::vector<Alternative> alternatives{};
 };
 
 using Class_t = unsigned char;
@@ -368,11 +368,14 @@ a class string is a text of the pattern again; a class with none is written by t
 of the class of everything else, in the order of the classes' least code points, which makes o200k's other letters,
 title case letters, modifier letters and marks `#`, `$`, `%` and `&`. Such a symbol is no member of its class, so an
 o200k class string is no text of its pattern, and the fixtures and the tests read one with each of those symbols
-replaced by its class's least code point, U+00AA, U+01C5, U+02B0 and U+0300. An alternative is its language written over
-the class symbols in munch's pattern syntax and its gate as a string of class symbols: every symbol for an ungated
-alternative, the white space for `(?!\S)`, and none for an alternative anchored at the end of the input. Everything the
-verifier construction reads, the alphabet, the languages and the gates, is in the description, so split_verifier() and
-factorization_lexer() take the pattern and nothing else.
+replaced by its class's least code point, U+00AA, U+01C5, U+02B0 and U+0300. An alternative is its language over the
+class symbols, a value of munch's regex nodes built with munch's combinators, and its gate as a string of class symbols:
+every symbol for an ungated alternative, the white space for `(?!\S)`, and none for an alternative anchored at the end
+of the input. A spelling of the language over the class symbols in munch's pattern syntax, as a vendor's published
+alternative reads over the classes, is read into the same nodes by `munch::pattern::parse()`. The pattern holds its
+alternatives by value, its gates' and its alphabet's views and spans pointing into the tokenizer library's constants.
+Everything the verifier construction reads, the alphabet, the languages and the gates, is in the description, so
+split_verifier() and factorization_lexer() take the pattern and nothing else.
 
 `classes_of()` decodes UTF-8 and maps every codepoint to its class under an alphabet, numbered from zero, read from the
 Unicode tables the tokenizer library pins (open choice 6). Malformed UTF-8 is refused with its byte offset, since the
@@ -414,7 +417,7 @@ published.
 ```cpp
 namespace matisse::cl100k
 {
-[[nodiscard]] pretok::Pattern pattern() noexcept;
+[[nodiscard]] pretok::Pattern pattern();
 
 [[nodiscard]] std::vector<load::Special_token> specials();
 
@@ -440,12 +443,17 @@ struct Tokenizer
 
 Each tokenizer library declares the same two functions in `matisse/<name>/tokenizer.hpp`, matisse::gpt2 as
 matisse::cl100k does. `pattern()` is the description of the published pattern over its classes, 14 for GPT-2, 16 for
-cl100k and Llama 3 and 30 for o200k, its views and spans pointing into constants of the library's source, among them the
-Unicode tables generated into the library's src/class_ranges.inc. `specials()` is the vendor's special tokens of a rank
-file read under the pattern, which `read_tiktoken()` takes. A file format of its own would be a reader binding in the
-library beside them; GPT-2's encoder.json and vocab.bpe are read by `read_gpt2()`, which needs nothing from the
-description. The library's tests hold the description to the classes, segmentation and known-answer fixtures, the pinned
-vocabulary to its digest, and the vendor's special tokens to their quoted values.
+cl100k and Llama 3 and 30 for o200k: each alternative is built with munch's combinators, below a comment quoting the
+vendor's alternative it describes, from small documented pieces of the library's source, each one symbol of a set or
+literal the pattern names, such as `letter()` for `\p{L}` and `white_space()` for `\s`, or the contractions, so that
+what the alternatives share is written once; its views and spans point into constants of the library's source, among
+them the Unicode tables generated into the library's src/class_ranges.inc. `specials()` is the vendor's special tokens
+of a rank file read under the pattern, which `read_tiktoken()` takes. A file format of its own would be a reader binding
+in the library beside them; GPT-2's encoder.json and vocab.bpe are read by `read_gpt2()`, which needs nothing from the
+description. The library's tests hold the description to the classes, segmentation and known-answer fixtures, each
+alternative's combinators to its spelling over the class symbols in munch's pattern syntax, both compiled to the same
+minimal DFA state for state, the pinned vocabulary to its digest, and the vendor's special tokens to their quoted
+values.
 
 `tokenizers()` lists every tokenizer library by name, gpt2, cl100k, o200k and llama3, and `tokenizer()` finds one by its
 name, for the command line and any caller choosing a tokenizer at run time. The list is one function naming the
@@ -458,13 +466,15 @@ calls it directly.
 
 A tokenizer is added as a new directory under libs/, as o200k and Llama 3 are, and the stage libraries do not change.
 libs/o200k/ holds its CMakeLists.txt, `matisse/o200k/tokenizer.hpp` declaring `pattern()` and `specials()`,
-src/tokenizer.cpp with the description, src/class_ranges.inc generated by tools/unicode/generate_classes.py with the
-sets its pattern names, and its tests, which check the lines of its universe in the shared fixtures the fixture script
-writes. Outside the directory it is named in five places: its `add_subdirectory()` in libs/CMakeLists.txt, its entry in
-`tokenizers()` with the link in libs/lookup/CMakeLists.txt, its alias and umbrella link in the top-level CMakeLists.txt,
-its target and include directory in the install rules, and its name in `matisse-validate`'s usage text. Its pattern must
-meet the class theorem's conditions above, which the fixtures, written by the engine, hold it to; where the pattern
-needs a reader of its own, the binding goes into the library beside `specials()`.
+src/tokenizer.cpp with the description, its alternatives built with munch's combinators below the vendor's alternatives
+they describe, src/class_ranges.inc generated by tools/unicode/generate_classes.py with the sets its pattern names, and
+its tests, which check the lines of its universe in the shared fixtures the fixture script writes and hold each
+alternative's combinators to its spelling in munch's pattern syntax. Outside the directory it is named in five places:
+its `add_subdirectory()` in libs/CMakeLists.txt, its entry in `tokenizers()` with the link in
+libs/lookup/CMakeLists.txt, its alias and umbrella link in the top-level CMakeLists.txt, its target and include
+directory in the install rules, and its name in `matisse-validate`'s usage text. Its pattern must meet the class
+theorem's conditions above, which the fixtures, written by the engine, hold it to; where the pattern needs a reader of
+its own, the binding goes into the library beside `specials()`.
 
 ### **The validator, matisse::validate**
 
@@ -1138,6 +1148,8 @@ from the input, which turns the encoder's one claim into a fuzz property.
 
 Used as munch 3.0.0 has it:
 
+- `munch::regex::Regex` and its combinators for the alternatives' languages, and `munch::pattern::parse()` reading a
+  spelling of one into the same nodes.
 - `munch::verifier::Verifier`, built from a table, for M over the class symbols, which fit the byte alphabet (16 of 256
   for cl100k).
 - `Verifier::step()` and `state_count()`, which validate's walk over the windows reads to decide the certificate of

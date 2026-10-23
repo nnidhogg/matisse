@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <cstddef>
-#include <format>
 #include <limits>
 #include <map>
 #include <optional>
@@ -16,7 +15,8 @@
 #include <munch/dfa/builder.hpp>
 #include <munch/dfa/label.hpp>
 #include <munch/dfa/token.hpp>
-#include <munch/pattern/parse.hpp>
+#include <munch/regex/regex.hpp>
+#include <munch/regex/set.hpp>
 
 namespace matisse::pretok
 {
@@ -29,41 +29,29 @@ namespace
 constexpr char sentinel{'\xFF'};
 
 /**
- * @brief Returns the bracket of a gate's symbols and the sentinel in munch's pattern syntax, each written as a byte
- *        escape, `[\xHH...\xFF]`.
+ * @brief Returns the lookahead of a gate, one of its symbols or the sentinel.
  * @param gate The class symbols that may follow an accept.
- * @return The bracket.
+ * @return The lookahead.
  */
-[[nodiscard]] std::string lookahead_of(const std::string_view gate)
+[[nodiscard]] munch::regex::Regex lookahead_of(const std::string_view gate)
 {
-    std::string members{gate};
+    munch::regex::Set::Symbols_t members{gate.begin(), gate.end()};
 
-    members += sentinel;
+    members.insert(sentinel);
 
-    std::string bracket{"["};
-
-    for (const auto symbol : members)
-    {
-        const auto value{static_cast<unsigned char>(symbol)};
-
-        bracket += std::format(R"(\x{:02X})", value);
-    }
-
-    bracket += ']';
-
-    return bracket;
+    return munch::regex::any_of(std::move(members));
 }
 
 /**
  * @brief Returns the DFA of an alternative's language followed by its lookahead, compiled by munch as a single token.
- * @param gated The language and its lookahead, in munch's pattern syntax.
+ * @param gated The language and its lookahead.
  * @return The DFA.
  */
-[[nodiscard]] munch::dfa::Simulator simulator_of(const std::string_view gated)
+[[nodiscard]] munch::dfa::Simulator simulator_of(const munch::regex::Regex& gated)
 {
     munch::core::Builder builder{};
 
-    builder.add_token(munch::pattern::parse(gated), std::size_t{0}, 0);
+    builder.add_token(gated, std::size_t{0}, 0);
 
     const auto lexer{builder.build()};
 
@@ -210,7 +198,7 @@ munch::dfa::Simulator Segmenter::automaton_of(const Pattern& pattern)
     {
         const auto lookahead{lookahead_of(gate)};
 
-        const auto gated_language{std::format("({}){}", language, lookahead)};
+        const auto gated_language{munch::regex::concat(language, lookahead)};
 
         gated.push_back(simulator_of(gated_language));
     }

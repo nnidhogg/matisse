@@ -56,7 +56,6 @@ public:
      * @param allowed The spellings of the special tokens cut out of a text; every other special token is ordinary text.
      * @throws std::invalid_argument If an allowed spelling is not one of the definition's special tokens, or the
      *         definition cannot be merged, as Merger refuses it; the message names the spelling, the byte or the merge.
-     * @throws munch::pattern::Syntax_error If an alternative's language is not in munch's pattern syntax.
      */
     Encoder(load::Definition definition, const validate::Report& report, validate::Inventory inventory,
             const pretok::Pattern& pattern, std::span<const std::string> allowed);

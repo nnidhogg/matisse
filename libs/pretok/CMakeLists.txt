@@ -20,9 +20,10 @@ target_include_directories(${PROJECT_NAME}
         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
 
-# munch is header-visible: a pattern's sets are munch's code point ranges, the segmenter runs munch's DFAs, a pattern's
-# verifier is a munch::verifier::Verifier and its factorization lexer a munch::core::Lexer, so consumers link it too.
-# The umbrella target carries the pattern parser, which reads the alternatives, and the core, which compiles them.
+# munch is header-visible: a pattern's sets are munch's code point ranges, its languages munch's regex nodes, the
+# segmenter runs munch's DFAs, a pattern's verifier is a munch::verifier::Verifier and its factorization lexer a
+# munch::core::Lexer, so consumers link it too. The umbrella target carries the combinators that build the languages,
+# the pattern parser that reads a spelling into the same nodes, and the core, which compiles them.
 target_link_libraries(${PROJECT_NAME}
         PUBLIC
         munch::munch

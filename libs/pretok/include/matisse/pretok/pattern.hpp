@@ -3,7 +3,9 @@
 
 #include <span>
 #include <string_view>
+#include <vector>
 
+#include <munch/regex/regex.hpp>
 #include <munch/regex/utf8.hpp>
 
 /**
@@ -17,8 +19,8 @@
  * alternative's gate, for the first alternative that has one. An engine running the published pattern realizes the
  * description when no alternative reads left of where its match begins, each alternative matches the longest
  * gate-passing prefix of its language and fails only where there is none, the pattern is total, and the engine reads
- * code points only through the classes. Each tokenizer library gives its own description; the stages read it and name
- * no tokenizer.
+ * code points only through the classes. Each tokenizer library gives its own description, its languages built with
+ * munch's combinators as values; the stages read it and name no tokenizer.
  */
 namespace matisse::pretok
 {
@@ -79,10 +81,11 @@ struct Alphabet
 struct Alternative
 {
     /**
-     * @brief The alternative's language, nonempty class strings written over the class symbols in munch's pattern
-     *        syntax, with the published pattern's possessive quantifiers read as greedy.
+     * @brief The alternative's language, nonempty class strings over the class symbols as munch's regex nodes, built
+     *        with munch's combinators or read from a spelling in munch's pattern syntax by munch::pattern::parse(),
+     *        with the published pattern's possessive quantifiers read as greedy.
      */
-    std::string_view language{};
+    munch::regex::Regex language{};
 
     /**
      * @brief The class symbols that may follow an accept, the end of the input always passing: every symbol for an
@@ -104,7 +107,7 @@ struct Pattern
     /**
      * @brief The alternatives, in the order of the published pattern.
      */
-    std::span<const Alternative> alternatives{};
+    std::vector<Alternative> alternatives{};
 };
 
 } // namespace matisse::pretok

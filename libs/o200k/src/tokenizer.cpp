@@ -4,12 +4,24 @@
 #include <string_view>
 #include <vector>
 
+#include <munch/regex/regex.hpp>
+#include <munch/regex/set.hpp>
 #include <munch/regex/utf8.hpp>
 
 namespace matisse::o200k
 {
 namespace
 {
+using munch::regex::any_of;
+using munch::regex::choice;
+using munch::regex::concat;
+using munch::regex::kleene;
+using munch::regex::optional;
+using munch::regex::plus;
+using munch::regex::range;
+using munch::regex::Regex;
+using munch::regex::Set;
+using munch::regex::text;
 using munch::regex::utf8::Code_point_range;
 
 #include "class_ranges.inc"
@@ -26,7 +38,7 @@ constexpr std::string_view symbols{"\t\n\r !#$%&'/0ADELMRSTVadelmrstv"};
 /**
  * @brief The class symbols of the white space, `\s`, the gate of `(?!\S)`.
  */
-constexpr std::string_view white_space{"\t\n\r "};
+constexpr std::string_view white_space_symbols{"\t\n\r "};
 
 /**
  * @brief The line feed, a literal.
@@ -184,30 +196,150 @@ constexpr pretok::Alphabet alphabet{
         .unicode_version = class_unicode_version};
 
 /**
- * @brief o200k's pattern alternative by alternative over its classes: `[^\r\n\p{L}\p{N}]` is `\t`, the space, `!`, the
- *        marks `&`, the apostrophe and the slash, `[^\s\p{L}\p{N}]` is `!`, `&`, the apostrophe and the slash, the
- *        upper case side `[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]` is `A`, the upper case contraction letters and `#`, `$`, `%`
- *        and `&`, the lower case side `[\p{Ll}\p{Lm}\p{Lo}\p{M}]` is `a`, the lower case contraction letters and `#`,
- *        `%` and `&`, the numbers are `0` and the white space `\t`, `\n`, `\r` and the space. The run `\s+(?!\S)`
- *        passes only before white space, and every other alternative is ungated, its gate every symbol.
+ * @brief Returns one symbol of `[^\r\n\p{L}\p{N}]`, which may lead a run of letters: `\t`, the space, `!`, the marks
+ *        `&`, the apostrophe or the slash.
+ * @return The symbol.
  */
-constexpr std::array<pretok::Alternative, 7> alternatives{{
-        {.language = R"([\t\x20!&'/]?[ADELMRSTV#$%&]*[adelmrstv#%&]+('([DMSTdmst]|[Rr][Ee]|[Vv][Ee]|[Ll][Ll]))?)",
-         .gate = symbols},
-        {.language = R"([\t\x20!&'/]?[ADELMRSTV#$%&]+[adelmrstv#%&]*('([DMSTdmst]|[Rr][Ee]|[Vv][Ee]|[Ll][Ll]))?)",
-         .gate = symbols},
-        {.language = "0{1,3}", .gate = symbols},
-        {.language = R"(\x20?[!&'/]+[\n\r/]*)", .gate = symbols},
-        {.language = R"([\t\n\r\x20]*[\n\r]+)", .gate = symbols},
-        {.language = R"([\t\n\r\x20]+)", .gate = white_space},
-        {.language = R"([\t\n\r\x20]+)", .gate = symbols},
-}};
+[[nodiscard]] Regex lead()
+{
+    return any_of(Set{'\t', ' ', '!', '&', '\'', '/'});
+}
+
+/**
+ * @brief Returns one symbol of the upper case side, `[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]`: `A`, an upper case contraction
+ *        letter, or `#`, `$`, `%` or `&`.
+ * @return The symbol.
+ */
+[[nodiscard]] Regex upper()
+{
+    return any_of(Set{'A', 'D', 'E', 'L', 'M', 'R', 'S', 'T', 'V', '#', '$', '%', '&'});
+}
+
+/**
+ * @brief Returns one symbol of the lower case side, `[\p{Ll}\p{Lm}\p{Lo}\p{M}]`: `a`, a lower case contraction letter,
+ *        or `#`, `%` or `&`.
+ * @return The symbol.
+ */
+[[nodiscard]] Regex lower()
+{
+    return any_of(Set{'a', 'd', 'e', 'l', 'm', 'r', 's', 't', 'v', '#', '%', '&'});
+}
+
+/**
+ * @brief Returns the contractions, `(?i:'s|'t|'re|'ve|'m|'ll|'d)`: the apostrophe and the contraction letters, each
+ *        letter either of its two classes, the upper and the lower case.
+ * @return The contractions.
+ */
+[[nodiscard]] Regex contraction()
+{
+    const auto cased{[](const char upper_case, const char lower_case) { return any_of(Set{upper_case, lower_case}); }};
+
+    const auto one_letter{any_of(Set{'D', 'M', 'S', 'T', 'd', 'm', 's', 't'})};
+
+    const auto re{concat(cased('R', 'r'), cased('E', 'e'))};
+
+    const auto ve{concat(cased('V', 'v'), cased('E', 'e'))};
+
+    const auto ll{concat(cased('L', 'l'), cased('L', 'l'))};
+
+    const auto suffix{choice(one_letter, re, ve, ll)};
+
+    return concat(text("'"), suffix);
+}
+
+/**
+ * @brief Returns one symbol of the numbers, `\p{N}`: `0`.
+ * @return The number.
+ */
+[[nodiscard]] Regex number()
+{
+    return any_of(Set{'0'});
+}
+
+/**
+ * @brief Returns the space, a literal, as the one class symbol it is.
+ * @return The space.
+ */
+[[nodiscard]] Regex space()
+{
+    return text(" ");
+}
+
+/**
+ * @brief Returns one symbol of `[^\s\p{L}\p{N}]`: `!`, `&`, the apostrophe or the slash.
+ * @return The symbol.
+ */
+[[nodiscard]] Regex other()
+{
+    return any_of(Set{'!', '&', '\'', '/'});
+}
+
+/**
+ * @brief Returns one symbol of `[\r\n/]`: the carriage return, the line feed or the slash.
+ * @return The symbol.
+ */
+[[nodiscard]] Regex line_break_or_slash()
+{
+    return any_of(Set{'\r', '\n', '/'});
+}
+
+/**
+ * @brief Returns one symbol of the white space, `\s`: `\t`, `\n`, `\r` or the space.
+ * @return The white space.
+ */
+[[nodiscard]] Regex white_space()
+{
+    return any_of(Set{'\t', '\n', '\r', ' '});
+}
+
+/**
+ * @brief Returns one symbol of `[\r\n]`: the carriage return or the line feed.
+ * @return The line break.
+ */
+[[nodiscard]] Regex line_break()
+{
+    return any_of(Set{'\r', '\n'});
+}
+
+/**
+ * @brief Returns o200k's pattern alternative by alternative over its classes, each below the vendor's alternative it
+ *        describes: `[^\r\n\p{L}\p{N}]` is `\t`, the space, `!`, the marks `&`, the apostrophe and the slash,
+ *        `[^\s\p{L}\p{N}]` is `!`, `&`, the apostrophe and the slash, the upper case side
+ *        `[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]` is `A`, the upper case contraction letters and `#`, `$`, `%` and `&`, the
+ *        lower case side `[\p{Ll}\p{Lm}\p{Lo}\p{M}]` is `a`, the lower case contraction letters and `#`, `%` and `&`,
+ *        the numbers are `0` and the white space `\t`, `\n`, `\r` and the space. The run `\s+(?!\S)` passes only before
+ *        white space, and every other alternative is ungated, its gate every symbol.
+ * @return The alternatives, in the order of the published pattern.
+ */
+[[nodiscard]] std::vector<pretok::Alternative> alternatives()
+{
+    return {
+            // `[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]*[\p{Ll}\p{Lm}\p{Lo}\p{M}]+`
+            // `(?i:'s|'t|'re|'ve|'m|'ll|'d)?`
+            {.language = concat(optional(lead()), kleene(upper()), plus(lower()), optional(contraction())),
+             .gate = symbols},
+            // `[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]+[\p{Ll}\p{Lm}\p{Lo}\p{M}]*`
+            // `(?i:'s|'t|'re|'ve|'m|'ll|'d)?`
+            {.language = concat(optional(lead()), plus(upper()), kleene(lower()), optional(contraction())),
+             .gate = symbols},
+            // `\p{N}{1,3}`
+            {.language = range(number(), 1, 3), .gate = symbols},
+            // ` ?[^\s\p{L}\p{N}]+[\r\n/]*`
+            {.language = concat(optional(space()), plus(other()), kleene(line_break_or_slash())), .gate = symbols},
+            // `\s*[\r\n]+`
+            {.language = concat(kleene(white_space()), plus(line_break())), .gate = symbols},
+            // `\s+(?!\S)`
+            {.language = plus(white_space()), .gate = white_space_symbols},
+            // `\s+`
+            {.language = plus(white_space()), .gate = symbols},
+    };
+}
 
 } // namespace
 
-pretok::Pattern pattern() noexcept
+pretok::Pattern pattern()
 {
-    return {.alphabet = alphabet, .alternatives = alternatives};
+    return {.alphabet = alphabet, .alternatives = alternatives()};
 }
 
 std::vector<load::Special_token> specials()

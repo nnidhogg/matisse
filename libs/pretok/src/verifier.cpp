@@ -14,7 +14,7 @@
 
 #include <munch/core/builder.hpp>
 #include <munch/dfa/simulator.hpp>
-#include <munch/pattern/parse.hpp>
+#include <munch/regex/regex.hpp>
 
 #include "matisse/pretok/automata.hpp"
 
@@ -43,16 +43,14 @@ using automata::Symbol_t;
 
 /**
  * @brief Returns the DFA of one alternative's language, compiled by munch as a single token.
- * @param language The language, over the class symbols in munch's pattern syntax.
+ * @param language The language, over the class symbols.
  * @return The DFA.
  */
-[[nodiscard]] munch::dfa::Simulator simulator_of(const std::string_view language)
+[[nodiscard]] munch::dfa::Simulator simulator_of(const munch::regex::Regex& language)
 {
     munch::core::Builder builder{};
 
-    const auto parsed{munch::pattern::parse(language)};
-
-    builder.add_token(parsed, std::size_t{0}, 0);
+    builder.add_token(language, std::size_t{0}, 0);
 
     const auto lexer{builder.build()};
 
@@ -174,10 +172,10 @@ private:
     /**
      * @brief Returns the DFA of an alternative's language over the class symbols and the marker, which no word holds,
      *        read from munch's compilation of it.
-     * @param language The language, in munch's pattern syntax.
+     * @param language The language.
      * @return The DFA.
      */
-    [[nodiscard]] Dfa language_of(std::string_view language) const;
+    [[nodiscard]] Dfa language_of(const munch::regex::Regex& language) const;
 
     /**
      * @brief Returns the state munch's DFA of a language moves to from a state on a symbol.
@@ -356,7 +354,7 @@ Dfa Construction::endpoints_of(const Alternative& alternative) const
     return automata::concatenation(words, tails);
 }
 
-Dfa Construction::language_of(const std::string_view language) const
+Dfa Construction::language_of(const munch::regex::Regex& language) const
 {
     const auto simulator{simulator_of(language)};
 
@@ -728,7 +726,7 @@ munch::core::Lexer factorization_lexer(const Pattern& pattern)
 
     for (std::size_t index{0}; index < pattern.alternatives.size(); ++index)
     {
-        const auto language{munch::pattern::parse(pattern.alternatives[index].language)};
+        const auto& language{pattern.alternatives[index].language};
 
         builder.add_token(language, index, index);
     }

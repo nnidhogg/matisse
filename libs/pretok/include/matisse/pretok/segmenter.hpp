@@ -40,7 +40,6 @@ public:
     /**
      * @brief Compiles the alternatives of a pattern into the automaton of its segmentation.
      * @param pattern The pattern, total.
-     * @throws munch::pattern::Syntax_error If an alternative's language is not in munch's pattern syntax.
      */
     explicit Segmenter(const Pattern& pattern);
 
@@ -68,7 +67,6 @@ private:
      * that alternative's longest. The product's states are numbered in the order they are found, the start zero.
      * @param pattern The pattern.
      * @return The automaton, a munch DFA over the class symbols and the sentinel.
-     * @throws munch::pattern::Syntax_error If an alternative's language is not in munch's pattern syntax.
      */
     [[nodiscard]] static munch::dfa::Simulator automaton_of(const Pattern& pattern);
 

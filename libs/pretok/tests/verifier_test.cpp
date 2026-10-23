@@ -10,11 +10,14 @@
 #include <tuple>
 #include <vector>
 
+#include <munch/regex/regex.hpp>
 #include <munch/regex/utf8.hpp>
 
 #include "matisse/pretok/segmenter.hpp"
 
 using namespace matisse::pretok;
+using munch::regex::plus;
+using munch::regex::text;
 using munch::regex::utf8::Code_point_range;
 
 namespace
@@ -48,46 +51,46 @@ constexpr Alphabet two_symbols{.symbols = "ab", .sets = a_set, .other = 'b'};
  * @brief A pattern whose first alternative passes only before another `a`, as `\s+(?!\S)` passes only before white
  *        space, so that a run of `a` before a `b` leaves its last `a` to the second alternative.
  */
-constexpr std::array<Alternative, 3> gated_alternatives{{
-        {.language = "a+", .gate = "a"},
-        {.language = "a+", .gate = "ab"},
-        {.language = "b", .gate = "ab"},
-}};
+const std::vector<Alternative> gated_alternatives{
+        {.language = plus(text("a")), .gate = "a"},
+        {.language = plus(text("a")), .gate = "ab"},
+        {.language = text("b"), .gate = "ab"},
+};
 
 /**
  * @brief The gated pattern over the two classes.
  */
-constexpr Pattern gated{.alphabet = two_symbols, .alternatives = gated_alternatives};
+const Pattern gated{.alphabet = two_symbols, .alternatives = gated_alternatives};
 
 /**
  * @brief A pattern whose first alternative passes only at the end of the input, as `\s++$` does, and whose earlier
  *        alternative takes a word a later one would extend, so that the order of the alternatives decides the pieces.
  */
-constexpr std::array<Alternative, 4> anchored_alternatives{{
-        {.language = "a+", .gate = ""},
-        {.language = "ab", .gate = "ab"},
-        {.language = "a", .gate = "ab"},
-        {.language = "b+", .gate = "ab"},
-}};
+const std::vector<Alternative> anchored_alternatives{
+        {.language = plus(text("a")), .gate = ""},
+        {.language = text("ab"), .gate = "ab"},
+        {.language = text("a"), .gate = "ab"},
+        {.language = plus(text("b")), .gate = "ab"},
+};
 
 /**
  * @brief The anchored pattern over the two classes.
  */
-constexpr Pattern anchored{.alphabet = two_symbols, .alternatives = anchored_alternatives};
+const Pattern anchored{.alphabet = two_symbols, .alternatives = anchored_alternatives};
 
 /**
  * @brief A pattern that is not total: a `b` passes its gate only before an `a` or at the end of the input, so no
  *        alternative matches a residual that begins with two of them.
  */
-constexpr std::array<Alternative, 2> partial_alternatives{{
-        {.language = "a", .gate = "ab"},
-        {.language = "b", .gate = "a"},
-}};
+const std::vector<Alternative> partial_alternatives{
+        {.language = text("a"), .gate = "ab"},
+        {.language = text("b"), .gate = "a"},
+};
 
 /**
  * @brief The partial pattern over the two classes.
  */
-constexpr Pattern partial{.alphabet = two_symbols, .alternatives = partial_alternatives};
+const Pattern partial{.alphabet = two_symbols, .alternatives = partial_alternatives};
 
 /**
  * @brief Returns whether a verifier accepts a class string under a marking.

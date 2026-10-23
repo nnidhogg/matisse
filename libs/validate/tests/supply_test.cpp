@@ -7,7 +7,9 @@
 #include <string>
 #include <string_view>
 #include <tuple>
+#include <vector>
 
+#include <munch/regex/regex.hpp>
 #include <munch/regex/utf8.hpp>
 
 #include "matisse/validate/report.hpp"
@@ -17,6 +19,8 @@ using matisse::pretok::Alphabet;
 using matisse::pretok::Alternative;
 using matisse::pretok::Code_point_set;
 using matisse::pretok::Pattern;
+using munch::regex::plus;
+using munch::regex::text;
 using munch::regex::utf8::Code_point_range;
 
 namespace
@@ -40,31 +44,31 @@ constexpr Alphabet two_symbols{.symbols = "ab", .sets = a_set, .other = 'b'};
  * @brief A pattern whose every piece is one symbol, so that every window is certified at its last symbol and every
  *        interior code point of a text is a boundary and an anchor.
  */
-constexpr std::array<Alternative, 2> single_alternatives{{
-        {.language = "a", .gate = "ab"},
-        {.language = "b", .gate = "ab"},
-}};
+const std::vector<Alternative> single_alternatives{
+        {.language = text("a"), .gate = "ab"},
+        {.language = text("b"), .gate = "ab"},
+};
 
 /**
  * @brief The single-symbol pattern over the two classes.
  */
-constexpr Pattern single{.alphabet = two_symbols, .alternatives = single_alternatives};
+const Pattern single{.alphabet = two_symbols, .alternatives = single_alternatives};
 
 /**
  * @brief A pattern whose first alternative passes only before another `a`, so that a run of `a` before a `b` leaves its
  *        last `a` to the second alternative: the boundary before the last `a` of the run is certified by no window,
  *        since a run of `a` at the end of the text is one piece, and the boundary before the `b` is.
  */
-constexpr std::array<Alternative, 3> gated_alternatives{{
-        {.language = "a+", .gate = "a"},
-        {.language = "a+", .gate = "ab"},
-        {.language = "b", .gate = "ab"},
-}};
+const std::vector<Alternative> gated_alternatives{
+        {.language = plus(text("a")), .gate = "a"},
+        {.language = plus(text("a")), .gate = "ab"},
+        {.language = text("b"), .gate = "ab"},
+};
 
 /**
  * @brief The gated pattern over the two classes.
  */
-constexpr Pattern gated{.alphabet = two_symbols, .alternatives = gated_alternatives};
+const Pattern gated{.alphabet = two_symbols, .alternatives = gated_alternatives};
 
 } // namespace
 

@@ -1,20 +1,23 @@
 #include "matisse/pretok/segmenter.hpp"
 
-#include <array>
 #include <gtest/gtest.h>
 #include <stdexcept>
 #include <string>
 #include <string_view>
 #include <tuple>
+#include <vector>
+
+#include <munch/regex/regex.hpp>
 
 using namespace matisse::pretok;
+using munch::regex::text;
 
 namespace
 {
 /**
  * @brief The one alternative of a pattern over one class, every code point a piece, ungated.
  */
-constexpr std::array<Alternative, 1> one_piece_each{{{.language = "!", .gate = "!"}}};
+const std::vector<Alternative> one_piece_each{{.language = text("!"), .gate = "!"}};
 
 /**
  * @brief An alphabet of one class, every code point's.
@@ -24,7 +27,7 @@ constexpr Alphabet one_symbol{.symbols = "!", .sets = {}, .other = '!'};
 /**
  * @brief A pattern over one class, every code point's, which is all the decoding of a text needs.
  */
-constexpr Pattern one_class{.alphabet = one_symbol, .alternatives = one_piece_each};
+const Pattern one_class{.alphabet = one_symbol, .alternatives = one_piece_each};
 
 /**
  * @brief Returns the refusal a Segmenter makes of a text, empty when it makes none.

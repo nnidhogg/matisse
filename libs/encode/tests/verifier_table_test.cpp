@@ -5,7 +5,10 @@
 #include <gtest/gtest.h>
 #include <optional>
 #include <ranges>
+#include <vector>
 
+#include <munch/regex/regex.hpp>
+#include <munch/regex/set.hpp>
 #include <munch/regex/utf8.hpp>
 #include <munch/verifier/verifier.hpp>
 
@@ -17,6 +20,13 @@ using matisse::pretok::Alphabet;
 using matisse::pretok::Alternative;
 using matisse::pretok::Code_point_set;
 using matisse::pretok::Pattern;
+using munch::regex::any_of;
+using munch::regex::concat;
+using munch::regex::optional;
+using munch::regex::plus;
+using munch::regex::range;
+using munch::regex::Set;
+using munch::regex::text;
 using munch::regex::utf8::Code_point_range;
 
 namespace
@@ -50,22 +60,22 @@ constexpr Alphabet alphabet{.symbols = " !a", .sets = sets, .other = '!'};
 /**
  * @brief A pattern in GPT-2's shape over the three classes, with no bounded run and so no dead end.
  */
-constexpr std::array<Alternative, 4> gpt2_shaped{{
-        {.language = R"(\x20?a+)", .gate = " !a"},
-        {.language = R"(\x20?[!]+)", .gate = " !a"},
-        {.language = R"(\x20+)", .gate = " "},
-        {.language = R"(\x20+)", .gate = " !a"},
-}};
+const std::vector<Alternative> gpt2_shaped{
+        {.language = concat(optional(text(" ")), plus(text("a"))), .gate = " !a"},
+        {.language = concat(optional(text(" ")), plus(any_of(Set{'!'}))), .gate = " !a"},
+        {.language = plus(text(" ")), .gate = " "},
+        {.language = plus(text(" ")), .gate = " !a"},
+};
 
 /**
  * @brief A pattern whose letter runs are cut every three letters, as cl100k cuts digits, so that a run of three letters
  *        unmarked ends in a dead end.
  */
-constexpr std::array<Alternative, 3> bounded{{
-        {.language = R"(a{1,3})", .gate = " !a"},
-        {.language = R"([!]+)", .gate = " !a"},
-        {.language = R"(\x20+)", .gate = " !a"},
-}};
+const std::vector<Alternative> bounded{
+        {.language = range(text("a"), 1, 3), .gate = " !a"},
+        {.language = plus(any_of(Set{'!'})), .gate = " !a"},
+        {.language = plus(text(" ")), .gate = " !a"},
+};
 
 /**
  * @brief Expects a pattern's verifier table to step, accept and end as munch's verifier does, on every state, class and

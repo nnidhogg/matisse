@@ -29,6 +29,7 @@ if (MATISSE_BUILD_TESTS)
             tests/classes_test.cpp
             tests/definition_test.cpp
             tests/encoder_test.cpp
+            tests/pattern_test.cpp
             tests/report_test.cpp
             tests/segmenter_test.cpp
             tests/supply_test.cpp

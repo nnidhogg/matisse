@@ -38,7 +38,6 @@ namespace matisse::pretok
  * @return The verifier, over the class symbols marked.
  * @throws std::invalid_argument If the pattern is not total, the message naming a shortest nonempty residual no
  *         alternative matches.
- * @throws munch::pattern::Syntax_error If an alternative's language is not in munch's pattern syntax.
  */
 [[nodiscard]] munch::verifier::Verifier split_verifier(const Pattern& pattern);
 
@@ -51,7 +50,6 @@ namespace matisse::pretok
  * pattern's segmentation whatever its discipline.
  * @param pattern The pattern.
  * @return The lexer.
- * @throws munch::pattern::Syntax_error If an alternative's language is not in munch's pattern syntax.
  */
 [[nodiscard]] munch::core::Lexer factorization_lexer(const Pattern& pattern);
 

@@ -25,9 +25,9 @@ namespace matisse::cl100k
  * caseless, so each contraction letter's class holds both cases and that of `s` also U+017F, which matches `s`
  * caselessly; the symbols are `\t\n\r !'0Adelmrstv`, read from tables pinned to Unicode 15.0.0, the version of the
  * Python reference the fixtures are written by.
- * @return The pattern, whose views and spans are static.
+ * @return The pattern, its languages built with munch's combinators and its views and spans static.
  */
-[[nodiscard]] pretok::Pattern pattern() noexcept;
+[[nodiscard]] pretok::Pattern pattern();
 
 /**
  * @brief Returns the vendor's special tokens of cl100k_base's rank file, quoted from tiktoken's openai_public.py:
