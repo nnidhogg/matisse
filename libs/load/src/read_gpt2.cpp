@@ -134,13 +134,13 @@ constexpr Byte_map_t byte_map{byte_map_of()};
 
     const auto available{std::min(length, text.size() - at)};
 
-    char32_t character{length == 1 ? lead : lead & (0xFFU >> (length + 1))};
+    char32_t character{static_cast<char32_t>(length == 1 ? lead : lead & (0xFFU >> (length + 1)))};
 
     for (std::size_t index{1}; index < available; ++index)
     {
         const auto continuation{static_cast<unsigned char>(text[at + index])};
 
-        character = (character << 6U) | (continuation & 0x3FU);
+        character = (character << 6U) | static_cast<char32_t>(continuation & 0x3FU);
     }
 
     return {character, available};

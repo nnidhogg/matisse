@@ -412,7 +412,7 @@ std::size_t Stream_encoder::read(const std::string_view text, const bool ended, 
 
     for (const auto [special, token] : std::views::enumerate(allowed))
     {
-        next[special] = text.find(token.spelling);
+        next[static_cast<std::size_t>(special)] = text.find(token.spelling);
     }
 
     std::size_t from{0};

@@ -440,6 +440,7 @@ TEST(Classes_test, The_class_table_gives_every_scalar_value_the_symbol_of_the_fi
     {
         const auto expected{symbol_of(alphabet, point)};
 
-        ASSERT_EQ(symbols[index], expected) << std::format("U+{:04X}", static_cast<std::uint32_t>(point));
+        ASSERT_EQ(symbols[static_cast<std::size_t>(index)], expected)
+                << std::format("U+{:04X}", static_cast<std::uint32_t>(point));
     }
 }

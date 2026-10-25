@@ -303,7 +303,7 @@ void expect_brute_table(const Window_table& table, const std::map<std::string, s
 
         EXPECT_EQ(decided, origin) << window;
 
-        brute_certified += origin ? 1 : 0;
+        brute_certified += origin ? 1UZ : 0UZ;
     }
 
     EXPECT_EQ(table.windows.size(), brute_certified);

@@ -264,7 +264,7 @@ std::vector<Encoder::Occurrence> Encoder::occurrences(const std::string_view tex
 
     for (const auto [special, token] : std::views::enumerate(allowed_))
     {
-        next[special] = text.find(token.spelling);
+        next[static_cast<std::size_t>(special)] = text.find(token.spelling);
     }
 
     std::vector<Occurrence> found{};

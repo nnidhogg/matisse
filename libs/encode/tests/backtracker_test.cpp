@@ -493,7 +493,7 @@ Vocabulary_check expect_vocabulary_backtracks_as_the_plain_loop(const Definition
 
         ++check.tokens;
 
-        check.not_their_own_merge += merged != std::vector{static_cast<Token_id_t>(id)} ? 1 : 0;
+        check.not_their_own_merge += merged != std::vector{static_cast<Token_id_t>(id)} ? 1UZ : 0UZ;
     }
 
     for (const auto& piece : random_pieces(definition.spellings, 20000))

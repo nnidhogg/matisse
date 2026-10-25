@@ -775,7 +775,7 @@ TEST(Encoder_test, Threads_that_each_keep_a_cache_of_their_own_give_encode_s_ids
 
     for (const auto [index, document] : std::views::enumerate(documents))
     {
-        EXPECT_EQ(encoded[index], encoder.encode(document)) << document;
+        EXPECT_EQ(encoded[static_cast<std::size_t>(index)], encoder.encode(document)) << document;
     }
 }
 

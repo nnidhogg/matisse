@@ -73,7 +73,7 @@ TEST(Join_table_test, A_table_finds_the_join_of_every_pair_its_map_holds_and_of_
 
             EXPECT_EQ(answer, held(joins, left, right)) << left << " " << right;
 
-            found += answer ? 1 : 0;
+            found += answer ? 1UZ : 0UZ;
         }
     }
 

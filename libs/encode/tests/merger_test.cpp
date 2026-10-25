@@ -649,7 +649,7 @@ Vocabulary_check expect_vocabulary_merges_as_the_references(
 
         ++check.tokens;
 
-        check.not_their_own_merge += merged != std::vector{static_cast<Token_id_t>(id)} ? 1 : 0;
+        check.not_their_own_merge += merged != std::vector{static_cast<Token_id_t>(id)} ? 1UZ : 0UZ;
     }
 
     for (const auto& piece : random_pieces(definition.spellings, random_count))
@@ -903,7 +903,7 @@ TEST(Merger_test, On_random_tables_over_three_symbols_the_merge_is_the_plain_ref
             EXPECT_EQ(ranks_merger.merged(piece), ids_of(tiktoken_scan(piece, rank_table), rank_ids))
                     << "table " << table << " " << piece;
 
-            pass_differs += pass_loop(piece, pair_ranks) != one_at_a_time ? 1 : 0;
+            pass_differs += pass_loop(piece, pair_ranks) != one_at_a_time ? 1UZ : 0UZ;
         }
     }
 

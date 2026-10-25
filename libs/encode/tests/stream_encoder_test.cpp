@@ -747,6 +747,6 @@ TEST(Stream_encoder_test, Streams_on_threads_of_their_own_over_one_encoder_give_
 
     for (const auto [index, document] : std::views::enumerate(documents))
     {
-        EXPECT_EQ(streamed[index], encoder.encode(document)) << document;
+        EXPECT_EQ(streamed[static_cast<std::size_t>(index)], encoder.encode(document)) << document;
     }
 }
