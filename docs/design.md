@@ -20,11 +20,11 @@ written.
 
 matisse reads the definition of a real tokenizer, decides where its output can be cut with certainty, and encodes text
 in parallel by cutting only there, with token ids byte-identical to the sequential encoding. The first version does this
-for GPT-2, cl100k_base, o200k_base and Llama 3, whose deployed pre-tokenizer patterns have exact verifiers, and for a
-byte-level tokenizer without a pre-tokenizer it reports the certified windows of the merge table through the lazy
-certification. It is not a general tokenizer library. It trains nothing, applies no normalizer but the identity, and
-does not try to match Hugging Face's feature surface; its product is exactness against the reference tokenizer, shown on
-pinned vocabularies and corpora.
+for GPT-2, cl100k_base, o200k_base and Llama 3, whose deployed pre-tokenizer patterns have exact verifiers; for a
+byte-level tokenizer without a pre-tokenizer, reporting the certified windows of the merge table through the lazy
+certification is step 14 of the order of work and not written yet. It is not a general tokenizer library. It trains
+nothing, applies no normalizer but the identity, and does not try to match Hugging Face's feature surface; its product
+is exactness against the reference tokenizer, shown on pinned vocabularies and corpora.
 
 munch stays the decision library, with the verifier framework and the general constructions on abstract inputs, merge
 tables and vocabularies among them. matisse takes everything about specific real tokenizers, which is reading their
@@ -46,10 +46,11 @@ tools beside them, munch as a git submodule and googletest beside it:
 
 ```
 matisse/
-  CMakeLists.txt  CITATION.cff  LICENSE  README.md  THIRD_PARTY_NOTICES.md  .clang-format  .gitignore  .gitmodules
+  CMakeLists.txt  CITATION.cff  LICENSE  README.md  THIRD_PARTY_NOTICES.md
+  .clang-format  .gitattributes  .gitignore  .gitmodules
   .github/workflows/  ci.yml  codeql.yml
   cmake/matisse-config.cmake
-  docs/  usage.md  how_it_works.md  design.md  benchmarks.md
+  docs/  design.md  limits.md  benchmarks.md
   external/  CMakeLists.txt  googletest/  munch/          (submodule, pinned to the munch release it builds against)
   libs/
     CMakeLists.txt
@@ -57,7 +58,7 @@ matisse/
     load/       include/matisse/load/      src/  tests/  tests/data/
     pretok/     include/matisse/pretok/    src/  tests/  tests/data/
     validate/   include/matisse/validate/  src/  tests/  tests/data/
-    encode/     include/matisse/encode/    src/  tests/  tests/data/
+    encode/     include/matisse/encode/    src/  tests/
     gpt2/       include/matisse/gpt2/      src/  tests/
     cl100k/     include/matisse/cl100k/    src/  tests/
     o200k/      include/matisse/o200k/     src/  tests/
@@ -65,11 +66,12 @@ matisse/
     lookup/     include/matisse/lookup/    src/  tests/
   tools/
     CMakeLists.txt
-    validate/   the matisse-validate command line
-    probes/     the corpus probe and the bench
-    fuzz/       libFuzzer harnesses
+    validate/   src/  tests/  tests/data/              (the matisse-validate command line)
+    probes/     src/                                    (the corpus probe and the bench)
     unicode/    generate_classes.py
 ```
+
+The fuzz harnesses, step 16 of the order of work, are to live in tools/fuzz beside them.
 
 The libraries are of two kinds, as hopper's generic parse library sits beside its json and clike grammars. The four
 stage libraries are the four subjects of the first version, and none of them holds a tokenizer's pattern or special
@@ -80,10 +82,11 @@ anchor supply. encode is the runtime. Beside them every tokenizer is a small lib
 llama3 in the first version, holding its pattern description, its generated class tables, the vendor's special tokens
 for a file that names none, and its tests, and lookup finds the tokenizer libraries by name. Each is a target
 `matisse_<name>` with the alias `matisse::<name>`, in namespace `matisse::<name>`, and the umbrella `matisse::matisse`
-links all of them, as `hopper::hopper` links hopper's; a consumer of one tokenizer links its library alone,
-`matisse::cl100k`, which brings load and pretok with it. common holds the tests' and the probes' SHA-256 alone, which
-the tokenizer tests hold the pinned files and the class tables to, and the probes the corpora and their ids; its target
-`matisse_common` lives in the build tree only, with no alias, no install rule and no place in the umbrella.
+links all of them, as `hopper::hopper` links hopper's; a consumer that encodes under one tokenizer links its library,
+which brings load and pretok with it, beside encode, which brings validate, as `matisse::cl100k matisse::encode`. common
+holds the tests' and the probes' SHA-256 alone, which the tokenizer tests hold the pinned files and the class tables to,
+and the probes the corpora and their ids; its target `matisse_common` lives in the build tree only, with no alias, no
+install rule and no place in the umbrella.
 
 The top-level CMakeLists.txt is hopper's with the prefix changed: `project(matisse VERSION 0.1.0 LANGUAGES CXX)`, C++23
 required, `MATISSE_IS_TOP_LEVEL`, Release by default at the top level only, `MATISSE_SOURCE_DIR` for test data paths,
@@ -104,8 +107,9 @@ CI copies hopper's workflow with munch's sanitizer matrix: format-check with cla
 sanitizers and, because the encoder spawns threads, munch's thread-sanitizer job and its `-fprofile-update=atomic`
 coverage flag, the fuzz job once the harnesses exist, the installed-consumer job, and CodeQL. The README has hopper's
 sections (Status, Features, a first example, Getting Started, Documentation, Testing, Versioning and Stability, License,
-Author), docs/ has hopper's three pages, and CITATION.cff names the munch release with its version DOI under
-`references`, as hopper's does. Tests run with `ctest --test-dir build --timeout 300`, as munch's do.
+Author), docs/ has three pages, design.md, limits.md and benchmarks.md, and CITATION.cff names the munch release with
+its version DOI under `references`, as hopper's does. Tests run with `ctest --test-dir build --timeout 300`, as munch's
+do.
 
 ## **The API**
 
@@ -795,23 +799,24 @@ otherwise merged alone by its merge rule, the pair rule or tiktoken's rank merge
 ordinary text, which is tiktoken's `encode()` with that `allowed_special` and an empty `disallowed_special`,
 encoder.py's behavior when none is allowed; tiktoken leaves the choice between allowed spellings that begin at one byte
 to the order of its table, and no allowed spelling begins another on any definition in scope. `decode()` spells each
-ordinary id's bytes and each special id's spelling, and refuses an id that is neither, naming it and its index.
-`chunk_boundaries()` aims for `chunks` pieces of equal size, as `core::Lexer`'s does: each interior boundary is the
-first cut at or after the later of its equal-division target and one past the previous boundary, and a target with no
-cut after it ends the walk. A cut is an anchor, a position `t + o` for an occurrence at `t` inside one stretch of a
-window the table certifies at origin `o`, at least the width less one codepoints after the previous boundary, so that
-the occurrence certifying it begins in the chunk the cut ends, as the splice needs, and as far after the stretch's
-start, as the Python reference spaces its first cut from the text's start; or it is where an allowed special token
-begins or ends, a cut of its own. The spacing is the Python reference's, and it leaves out an anchor that stands closer
-than that to the previous boundary even when its occurrence begins after it. `Window_index` holds the table's windows by
-their class strings and finds the least anchor of a stretch at or after a byte, classing the text in blocks of 256 bytes
-from there, so that a walk reads the text near its target and no more. `encode_parallel()` finds the allowed special
-tokens once and gives each chunk to a worker, one `std::jthread` per chunk beyond the last, which runs on the calling
-thread, as `tokenize_all_parallel()` does (open choice 4). A worker segments its chunk's stretches as `encode()` does,
-the last one followed by `right_context` further codepoints of the real text, read as a complete input there unless a
-special token or the text's end comes first, keeps the pieces that end at or before its cut, and merges them with a
-piece cache of its own. The ids of the chunks, concatenated, are the result, and an exception a worker throws is
-rethrown on the calling thread once every worker has joined.
+ordinary id's bytes and each special id's spelling as raw bytes, not checked to be UTF-8, since a run of ids cut inside
+a code point spells bytes that are not, and refuses an id that is neither, naming it and its index. `chunk_boundaries()`
+aims for `chunks` pieces of equal size, as `core::Lexer`'s does: each interior boundary is the first cut at or after the
+later of its equal-division target and one past the previous boundary, and a target with no cut after it ends the walk.
+A cut is an anchor, a position `t + o` for an occurrence at `t` inside one stretch of a window the table certifies at
+origin `o`, at least the width less one codepoints after the previous boundary, so that the occurrence certifying it
+begins in the chunk the cut ends, as the splice needs, and as far after the stretch's start, as the Python reference
+spaces its first cut from the text's start; or it is where an allowed special token begins or ends, a cut of its own.
+The spacing is the Python reference's, and it leaves out an anchor that stands closer than that to the previous boundary
+even when its occurrence begins after it. `Window_index` holds the table's windows by their class strings and finds the
+least anchor of a stretch at or after a byte, classing the text in blocks of 256 bytes from there, so that a walk reads
+the text near its target and no more. `encode_parallel()` finds the allowed special tokens once and gives each chunk to
+a worker, one `std::jthread` per chunk beyond the last, which runs on the calling thread, as `tokenize_all_parallel()`
+does (open choice 4). A worker segments its chunk's stretches as `encode()` does, the last one followed by
+`right_context` further codepoints of the real text, read as a complete input there unless a special token or the text's
+end comes first, keeps the pieces that end at or before its cut, and merges them with a piece cache of its own. The ids
+of the chunks, concatenated, are the result, and an exception a worker throws is rethrown on the calling thread once
+every worker has joined.
 
 `Merger` holds a definition's whole-piece lookup and its merge, built once: the id of every spelling and of every byte,
 and the rank and product of every pair of parts the merge may join, keyed by the ids of the parts: under the rank rule
@@ -1139,10 +1144,11 @@ would name the codepoint. On the three corpora and the eleven of [benchmarks.md]
 tiktoken's, Hugging Face's and the bpe crate's ids are matisse's by digest on every corpus each of them ran on, and
 recording them into the fixture is step 15.
 
-The fuzz harnesses in tools/fuzz follow hopper's contract (a refusal is the answer to bad input, a crash, a sanitizer
-report or a hang is a finding): one feeds arbitrary bytes to the tokenizer.json and tiktoken readers, and one feeds
-arbitrary well-formed UTF-8 to the encoder and asserts that `encode_parallel()` equals `encode()` at a chunk count drawn
-from the input, which turns the encoder's one claim into a fuzz property.
+The fuzz harnesses are step 16 of the order of work and not written yet. They are to live in tools/fuzz and follow
+hopper's contract (a refusal is the answer to bad input, a crash, a sanitizer report or a hang is a finding): one is to
+feed arbitrary bytes to the tiktoken reader, and to the tokenizer.json reader once it is written, and one arbitrary
+well-formed UTF-8 to the encoder, asserting that `encode_parallel()` equals `encode()` at a chunk count drawn from the
+input, which turns the encoder's one claim into a fuzz property.
 
 ## **What matisse needs from munch 3.0.0**
 
@@ -1275,12 +1281,13 @@ Each step lands green on its own, its tests first where a fixture exists.
     matisse's ids under GPT-2 and cl100k equal tiktoken's, Hugging Face's and the bpe crate's by digest wherever each
     ran. At the default width of five the supply on the three corpora reaches 57.30 to 92.88 per cent of the pre-token
     boundaries under the factorization inventory and 96.09 to 100.00 under the policy inventory, the longest gap between
-    anchors within 24 bytes of the longest piece. On one core `encode()` runs at 9.0 to 37.1 MiB/s, 0.42 to 1.74 times
-    tiktoken's rate, and the bpe crate runs 1.8 to 5.1 times faster than matisse. A call on a prompt of about a kilobyte
-    costs matisse a mean of 94 microseconds under GPT-2 and 116 under cl100k, against tiktoken's 58 and 63 and the bpe
-    crate's 26 and 25. `encode_parallel()` encodes enwik9 at 162.7 and 177.9 MiB/s with 24 workers, 11.2 times
-    `encode()`. The profile puts the class of a code point first on prose and code, 35 to 58 per cent of the time, and
-    the merge first on Chinese under cl100k, 76 per cent.
+    anchors within 24 bytes of the longest piece. The timings are the first implementation's, at 97aa503, before the
+    performance iterations whose figures [benchmarks.md](benchmarks.md) gives after them: on one core `encode()` runs at
+    9.0 to 37.1 MiB/s, 0.42 to 1.74 times tiktoken's rate, and the bpe crate runs 1.8 to 5.1 times faster than matisse.
+    A call on a prompt of about a kilobyte costs matisse a mean of 94 microseconds under GPT-2 and 116 under cl100k,
+    against tiktoken's 58 and 63 and the bpe crate's 26 and 25. `encode_parallel()` encodes enwik9 at 162.7 and 177.9
+    MiB/s with 24 workers, 11.2 times `encode()`. The profile puts the class of a code point first on prose and code, 35
+    to 58 per cent of the time, and the merge first on Chinese under cl100k, 76 per cent.
 14. validate: `validate_merges()`, the lazy route for byte-level tables without a pre-tokenizer, held to the lazy
     fixture.
 15. The vendor cross-check (tiktoken, Hugging Face tokenizers), its digests into the fixture, the Unicode version

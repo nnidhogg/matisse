@@ -20,9 +20,9 @@
 
 /**
  * @file
- * @brief The encoder, Encoder with encode() and decode(): the token ids of a text under a definition, and the text of a
- *        run of ids; and the parallel encoding, chunk_boundaries() and encode_parallel(), which cuts the text only
- *        where the inventory's window table certifies a cut.
+ * @brief The encoder, Encoder with encode() and decode(): the token ids of a text under a definition, and the bytes
+ *        of a run of ids; and the parallel encoding, chunk_boundaries() and encode_parallel(), which cuts the text
+ *        only where the inventory's window table certifies a cut.
  *
  * encode() splits the text at every allowed special token, segments each stretch between them as a complete input, and
  * merges every piece alone by the definition's merge rule, the pair rule or tiktoken's rank merge, a piece that is a
@@ -130,9 +130,13 @@ public:
     [[nodiscard]] std::vector<load::Token_id_t> encode_parallel(std::string_view text, std::size_t chunks) const;
 
     /**
-     * @brief Returns the text a run of ids spells: each ordinary token's bytes and each special token's spelling.
+     * @brief Returns the bytes a run of ids spells: each ordinary token's bytes and each special token's spelling.
+     *
+     * The bytes are raw, not checked to be UTF-8: a token can begin or end inside a code point's sequence, so a run of
+     * ids other than those of a whole text, a prefix of them among others, can spell bytes that are not well-formed
+     * UTF-8, while decode() of the ids encode() returns is the text.
      * @param ids The ids.
-     * @return The text.
+     * @return The bytes.
      * @throws std::invalid_argument If an id is neither an ordinary nor a special token of the definition; the message
      *         names the id and its index.
      */

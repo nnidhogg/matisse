@@ -7,13 +7,15 @@ deciding whether matisse fits a tokenizer, not after.
 
 ## **The Model: The Vendor's Ids, or a Refusal**
 
-matisse reproduces the token ids of a vendor's tokenizer exactly, or it refuses. A tokenizer reaches it as two things
-read apart: a `load::Definition`, which holds the merge rule, the whole-piece lookup, the bytes of every ordinary token,
-the merge table and the special tokens, and a `pretok::Pattern` from the tokenizer's own library, which describes the
-published pre-tokenizer as data. A pattern is the contract of the class theorem of the report on pre-tokenizer
-certification: an ordered gated pattern over a class alphabet, each alternative a regular language of class strings with
-a gate, the class symbols that may follow its accepts. At each boundary it commits the longest gate-passing prefix of
-the first alternative that has one. The theorem carries a cut to the vendor's engine only when the pattern is total, and
+matisse reproduces the token ids of a vendor's tokenizer exactly, or it refuses, under the Unicode version its class
+tables are pinned to: a text holding a code point whose class moved after Unicode 15.0.0 can be segmented differently by
+an engine with newer tables, as the section on Unicode below describes. A tokenizer reaches it as two things read apart:
+a `load::Definition`, which holds the merge rule, the whole-piece lookup, the bytes of every ordinary token, the merge
+table and the special tokens, and a `pretok::Pattern` from the tokenizer's own library, which describes the published
+pre-tokenizer as data. A pattern is the contract of the class theorem of the report on pre-tokenizer certification: an
+ordered gated pattern over a class alphabet, each alternative a regular language of class strings with a gate, the class
+symbols that may follow its accepts. At each boundary it commits the longest gate-passing prefix of the first
+alternative that has one. The theorem carries a cut to the vendor's engine only when the pattern is total, and
 `split_verifier()` decides that as it builds the verifier, refusing with `std::invalid_argument` a pattern on which some
 nonempty residual matches no alternative and naming a shortest such residual. `validate()` builds the verifier before
 anything else, so a pattern that is not total gets no window table and therefore no `Encoder`. The theorem's other

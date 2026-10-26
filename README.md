@@ -11,10 +11,11 @@
 `matisse` is a **C++23 library** that reads the definition of a **real tokenizer**, decides where its output can be
 **cut with certainty**, and **encodes text in parallel** by cutting only there, with token ids byte-identical to the
 sequential encoding. The first version does this for **GPT-2**, **cl100k_base**, **o200k_base** and **Llama 3**, whose
-deployed pre-tokenizer patterns have exact verifiers, and for a byte-level tokenizer without a pre-tokenizer it reports
-the certified windows of the merge table through the lazy certification. It is not a general tokenizer library: it
-trains nothing, applies no normalizer but the identity, and does not try to match Hugging Face's feature surface. Its
-product is exactness against the reference tokenizer, shown on pinned vocabularies and corpora.
+deployed pre-tokenizer patterns have exact verifiers. It is not a general tokenizer library: it trains nothing, applies
+no normalizer but the identity, and does not try to match Hugging Face's feature surface. Its product is exactness
+against the reference tokenizer, shown on pinned vocabularies and corpora under the Unicode 15.0.0 tables it pins: a
+text holding a code point assigned a letter or a number since then can be segmented differently by an engine with newer
+tables, as [docs/limits.md](docs/limits.md) describes.
 
 matisse is built on **[`munch`](https://github.com/nnidhogg/munch)**, and the two divide the work by one test: whether a
 piece would make sense if no LLM existed. munch keeps the general constructions, the verifier framework and the
@@ -24,28 +25,22 @@ tables, and the runtime with its token ids, normalizers and special-token cuts.
 
 ## **Status**
 
-Not yet released; matisse depends on munch 3.0.0, the release its submodule is pinned to. load reads GPT-2's
-encoder.json and vocab.bpe and tiktoken rank files, and pretok maps a text to each pattern's classes, from tables pinned
-to Unicode 15.0.0, the version of the reference the fixtures are written by, segments it as the pattern's engine does,
-and builds the pattern's split verifier and factorization lexer, the automata the policy and factorization certificates
-are decided on; validate decides each pattern's certified windows to width five under both certificates, with the right
-context each inventory needs, measures each inventory's anchor supply on an input and renders its report as text and as
-JSON; gpt2, cl100k, o200k and llama3 describe their patterns and lookup finds them by name; `matisse-validate` reports a
-tiktoken rank file read under a pattern, with the supply on an input when one is given; encode encodes a text and
-decodes its ids under both merge rules, with the whole-piece lookup, the special-token cuts and a bounded cache of
-merged pieces, its merge held to the plain references on every multi-byte token of four vocabularies and its ids to the
-fixtures' known answers, and encodes it in parallel, cut only at the certified cuts of either inventory, its ids held to
-the sequential encoding's on seeded texts at one to sixteen chunks, at sixty-four and at every cut, while the
-tokenizer.json reader and the lazy certification of merge tables are still to be written. The version is 0.1.0, pre-1.0,
-and nothing is stable yet. What each library will hold, the proved results the loaders rest on and the order of work are
-in [docs/design.md](docs/design.md).
+Not yet released; the version is 0.1.0, pre-1.0, and nothing is stable yet. matisse depends on munch 3.0.0, the release
+its submodule is pinned to. It loads GPT-2's encoder.json and vocab.bpe and tiktoken rank files, and it encodes text
+under GPT-2, cl100k_base, o200k_base and Llama 3 sequentially, in parallel at certified cuts and as a stream, with the
+vendors' special tokens cut out where they are allowed, and decodes ids back to bytes; validate decides each pattern's
+certified windows, and `matisse-validate` reports them for a rank file. The ids are held to the vendors' on pinned
+vocabularies, fixtures and corpora, with the classes of code points pinned to Unicode 15.0.0. A Hugging Face
+tokenizer.json reader and the certification of merge tables without a pre-tokenizer are planned and not written. What
+each library will hold, the proved results the loaders rest on and the order of work are in
+[docs/design.md](docs/design.md), and what every call guarantees is in [docs/limits.md](docs/limits.md).
 
 ## **Libraries**
 
 Four stage libraries hold nothing of a specific tokenizer and take its description as data:
 
-- **load** reads a tokenizer's files, a Hugging Face tokenizer.json, GPT-2's encoder.json and vocab.bpe, or a tiktoken
-  rank file, into one definition held in raw bytes, refusing whatever it cannot take exactly.
+- **load** reads a tokenizer's files, GPT-2's encoder.json and vocab.bpe or a tiktoken rank file, into one definition
+  held in raw bytes, refusing whatever it cannot take exactly.
 - **pretok** holds the pre-tokenizers over a pattern description, the ordered alternatives with their languages and
   gates and the class alphabet: the classes of a text, the runtime segmenter, and the construction of the pattern's
   verifier for munch.
@@ -54,7 +49,8 @@ Four stage libraries hold nothing of a specific tokenizer and take its descripti
 - **encode** is the runtime, a sequential and a parallel encoder whose ids are identical at every chunk count.
 
 Each tokenizer is a small library of its own beside them, holding its pattern description, its Unicode class tables, the
-vendor's special tokens and its tests, and a consumer of one tokenizer links its library alone:
+vendor's special tokens and its tests, and a consumer that encodes under one tokenizer links its library, which brings
+load and pretok, beside encode, which brings validate, as `matisse::cl100k matisse::encode` for cl100k:
 
 - **gpt2** describes GPT-2's pattern, whose files load reads from encoder.json and vocab.bpe or from a tiktoken rank
   file.
@@ -90,6 +86,66 @@ cmake --build build -j 8
 ```
 
 The default `CMAKE_BUILD_TYPE` is `Release` when unset.
+
+## **A First Encoding**
+
+A complete program, from a rank file to its ids and back. It takes the path of cl100k_base.tiktoken, decides the
+pattern's report once, allows `<|endoftext|>` and encodes a text sequentially and in four chunks:
+
+```cpp
+#include <iostream>
+#include <string>
+#include <vector>
+
+#include <matisse/cl100k/tokenizer.hpp>
+#include <matisse/encode/encoder.hpp>
+#include <matisse/load/definition.hpp>
+#include <matisse/validate/report.hpp>
+
+using namespace matisse;
+
+int main(int argc, char** argv)
+{
+    if (argc != 2)
+    {
+        std::cerr << "usage: first cl100k_base.tiktoken\n";
+
+        return 1;
+    }
+
+    // The rank file names neither its pattern nor its special tokens, so the cl100k library supplies both.
+    auto definition{load::read_tiktoken(argv[1], cl100k::specials())};
+
+    const auto pattern{cl100k::pattern()};
+
+    // Decided once per pattern, in about two seconds for cl100k at the default width of five.
+    const auto report{validate::validate(pattern)};
+
+    const std::vector<std::string> allowed{"<|endoftext|>"};
+
+    const encode::Encoder encoder{std::move(definition), report, validate::Inventory::factorization, pattern, allowed};
+
+    const std::string text{"Hello, world!<|endoftext|>"};
+
+    for (const auto id : encoder.encode(text))
+    {
+        std::cout << id << ' ';
+    }
+
+    std::cout << '\n' << encoder.decode(encoder.encode_parallel(text, 4)) << '\n';
+
+    return 0;
+}
+```
+
+It prints `9906 11 1917 0 100257`, the special token's id last, and then the text again, decoded from the parallel ids.
+A CMake project builds it with the cl100k library and encode:
+
+```cmake
+add_subdirectory(matisse)
+add_executable(first first.cpp)
+target_link_libraries(first PRIVATE matisse::cl100k matisse::encode)
+```
 
 ## **Documentation**
 
