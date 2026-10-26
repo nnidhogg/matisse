@@ -98,6 +98,24 @@ const std::vector<Alternative> alternatives{
 const Pattern pattern{.alphabet = alphabet, .alternatives = alternatives};
 
 /**
+ * @brief An alphabet of one class, every code point in it.
+ */
+constexpr Alphabet one_symbol{.symbols = "a", .sets = {}, .other = 'a'};
+
+/**
+ * @brief A pattern over the one class whose every piece is one code point, so that a window of any width is certified
+ *        at its last symbol.
+ */
+const std::vector<Alternative> single_alternatives{
+        {.language = text("a"), .gate = "a"},
+};
+
+/**
+ * @brief The single-symbol pattern over the one class.
+ */
+const Pattern single{.alphabet = one_symbol, .alternatives = single_alternatives};
+
+/**
  * @brief Returns a definition under the rank rule: the single bytes, then every string of two and three letters over a,
  *        b and c and every space followed by one of them, ranked in a seeded random order, then the given tokens, with
  *        three special tokens after them, the last a single byte.
@@ -952,4 +970,18 @@ TEST(Encoder_test, A_one_byte_special_token_at_the_text_s_end_leaves_no_empty_ch
 
     EXPECT_EQ(encoder.chunk_boundaries("aaaaaaaa!", 3), (std::vector<std::size_t>{0, 8, 9}));
     EXPECT_EQ(encoder.chunk_boundaries("aaaaaaaa!!", 9), (std::vector<std::size_t>{0, 8, 9, 10}));
+}
+
+TEST(Encoder_test, Windows_wider_than_the_block_the_walk_classes_cut_at_their_spacing_and_give_the_ids_of_encode)
+{
+    const auto report{matisse::validate::validate(single, 257)};
+
+    const Encoder encoder{test_definition(), report, Inventory::factorization, single, {}};
+
+    const std::string text(1000, 'a');
+
+    // Every cut stands at least 256 code points after the previous one, as far as the 256 bytes the walk classes at a
+    // time, so the walk reads on past the block it starts in.
+    EXPECT_EQ(encoder.chunk_boundaries(text, 4), (std::vector<std::size_t>{0, 256, 512, 768, 1000}));
+    EXPECT_EQ(encoder.encode_parallel(text, 4), encoder.encode(text));
 }

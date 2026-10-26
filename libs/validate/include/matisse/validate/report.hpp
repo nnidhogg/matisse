@@ -143,10 +143,11 @@ struct Report
  * shorter one at the same place, with its failing contexts and truncations. GPT-2's and cl100k's patterns need one
  * under the factorization certificate and two under the policy certificate.
  * @param pattern The pattern.
- * @param width The widest window decided, default_width unless told.
+ * @param width The widest window decided, default_width unless told, at least one.
  * @return The report.
- * @throws std::invalid_argument If the pattern is not total, as split_verifier() refuses it, the right context of a
- *         certified window is unbounded, or a factorization window is not certified by the split verifier.
+ * @throws std::invalid_argument If the width is zero, the pattern is not total, as split_verifier() refuses it, the
+ *         right context of a certified window is unbounded, or a factorization window is not certified by the split
+ *         verifier.
  */
 [[nodiscard]] Report validate(const pretok::Pattern& pattern, std::size_t width = default_width);
 

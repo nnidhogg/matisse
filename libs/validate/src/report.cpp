@@ -466,6 +466,11 @@ Cloud_t Policy_search::extended(const Cloud_t& cloud, const std::size_t at, cons
 
 Report validate(const pretok::Pattern& pattern, const std::size_t width)
 {
+    if (width == 0)
+    {
+        throw std::invalid_argument{"validate: the widest window decided is zero symbols wide"};
+    }
+
     const auto verifier{pretok::split_verifier(pattern)};
 
     auto factorization{factorization_windows(pattern, width)};

@@ -8,8 +8,10 @@
 #include <map>
 #include <optional>
 #include <set>
+#include <stdexcept>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -503,6 +505,11 @@ TEST(Report_test, The_tables_carry_their_inventory_and_width)
 
     // A run of a has no bound.
     EXPECT_TRUE(std::holds_alternative<munch::verifier::Lasso>(report.gap));
+}
+
+TEST(Report_test, A_width_of_zero_is_refused)
+{
+    EXPECT_THROW(std::ignore = validate(single, 0), std::invalid_argument);
 }
 
 TEST(Report_test, The_text_reads_as_the_verdict_then_each_inventory_then_the_gap)
