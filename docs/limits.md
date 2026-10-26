@@ -148,11 +148,11 @@ thread runs at 54.6 and 57.1.
 A `Stream_encoder` reads a text in pushes and returns each id once no continuation of the text can change it. It claims
 one thing: after every push the ids it has returned are a prefix of `encode()` of the whole text, whatever the rest
 turns out to be, and after `finish()` they are `encode()` of it. What a push returns is the longest such prefix but for
-two exceptions, each bounded: while the bytes read end in a proper prefix of an allowed special token's spelling those
-bytes are held, fewer than the longest allowed spelling, and inside a piece an id is held against every byte
-continuation where the pattern allows fewer. The tests hold the claim on seeded texts pushed in random parts, a byte at
-a time and whole, under all four tokenizers and the tests' own pattern, and against brute force over the continuations
-on the tests' pattern, as [design.md](design.md) describes.
+two exceptions: while the bytes read end in a proper prefix of an allowed special token's spelling those bytes are held,
+fewer than the longest allowed spelling, and a push returns the longest prefix final for the bytes before them, and
+inside a piece an id is held against every byte continuation where the pattern allows fewer. The tests hold the claim on
+seeded texts pushed in random parts, a byte at a time and whole, under all four tokenizers and the tests' own pattern,
+and against brute force over the continuations on the tests' pattern, as [design.md](design.md) describes.
 
 What a stream holds after a push, read and not yet spelled by the ids it has returned, is four things. A UTF-8 sequence
 the push ended inside, at most three bytes. A proper prefix of an allowed spelling. The code points after the last one

@@ -347,7 +347,12 @@ namespace
 } // namespace
 
 Stream_encoder::Stream_encoder(const Encoder& encoder)
-    : encoder_{encoder}, runs_{encoder.verifier()}, cache_{piece_cache_capacity}, closed_end_{0}
+    : encoder_{encoder}
+    , runs_{encoder.verifier()}
+    , cache_{piece_cache_capacity}
+    , closed_end_{0}
+    , returned_ids_{0}
+    , returned_bytes_{0}
 {}
 
 std::vector<load::Token_id_t> Stream_encoder::push(const std::string_view bytes)
@@ -516,7 +521,7 @@ void Stream_encoder::close_piece(const std::size_t end, std::vector<load::Token_
 
     const auto piece{std::string_view{stretch_}.substr(0, length)};
 
-    if (returned_.empty())
+    if (returned_ids_ == 0)
     {
         append_ids(piece, ids);
 
@@ -531,19 +536,22 @@ void Stream_encoder::close_piece(const std::size_t end, std::vector<load::Token_
 
     append_ids(piece, closed);
 
-    if (returned_.size() < closed.size())
+    if (returned_ids_ < closed.size())
     {
-        const auto unreturned{std::span{closed}.subspan(returned_.size())};
+        const auto unreturned{std::span{closed}.subspan(returned_ids_)};
 
         ids.insert(ids.end(), unreturned.begin(), unreturned.end());
 
-        returned_.clear();
+        returned_ids_ = 0;
+
+        returned_bytes_ = 0;
     }
     else
     {
-        const auto returned_of_piece{static_cast<std::ptrdiff_t>(closed.size())};
+        // The ids returned begin with the piece's, which spell its bytes.
+        returned_ids_ -= closed.size();
 
-        returned_.erase(returned_.begin(), returned_.begin() + returned_of_piece);
+        returned_bytes_ -= length;
     }
 
     stretch_.erase(0, length);
@@ -589,24 +597,18 @@ void Stream_encoder::flush(std::vector<load::Token_id_t>& ids)
 
     closed_end_ = 0;
 
-    returned_.clear();
+    returned_ids_ = 0;
+
+    returned_bytes_ = 0;
 }
 
 void Stream_encoder::emit(std::vector<load::Token_id_t>& ids)
 {
-    const auto& spellings{encoder_.definition().spellings};
-
-    const auto sizes{returned_ | std::views::transform([&spellings](const load::Token_id_t id) {
-                         return spellings[id].size();
-                     })};
-
-    const auto returned_bytes{std::ranges::fold_left(sizes, 0UZ, std::plus{})};
-
     std::optional<std::vector<load::Token_id_t>> common{};
 
     for (const auto& marking : runs_.markings())
     {
-        const auto listed{run_ids(marking, returned_bytes)};
+        const auto listed{run_ids(marking)};
 
         if (!common)
         {
@@ -620,29 +622,55 @@ void Stream_encoder::emit(std::vector<load::Token_id_t>& ids)
         common->erase(ours, common->end());
     }
 
-    if (!common || common->size() <= returned_.size())
+    if (!common || common->empty())
     {
         return;
     }
 
-    const auto unreturned{std::span{*common}.subspan(returned_.size())};
+    const auto& spellings{encoder_.definition().spellings};
 
-    ids.insert(ids.end(), unreturned.begin(), unreturned.end());
+    const auto sizes{
+            *common | std::views::transform([&spellings](const load::Token_id_t id) { return spellings[id].size(); })};
 
-    returned_ = std::move(*common);
+    returned_bytes_ += std::ranges::fold_left(sizes, 0UZ, std::plus{});
+
+    returned_ids_ += common->size();
+
+    ids.insert(ids.end(), common->begin(), common->end());
 }
 
-std::vector<load::Token_id_t> Stream_encoder::run_ids(
-        const Live_runs::Marking& marking, const std::size_t returned_bytes)
+std::vector<load::Token_id_t> Stream_encoder::run_ids(const Live_runs::Marking& marking)
 {
     const auto& [ends, dead_end]{marking};
 
     const std::string_view stretch{stretch_};
 
+    // The ids returned spell the stretch from its last closed piece to here, and the ids of every run begin with them.
+    const auto covered{closed_end_ + returned_bytes_};
+
     std::vector<load::Token_id_t> listed{};
 
     const auto append{[&listed](const std::span<const load::Token_id_t> more) {
         listed.insert(listed.end(), more.begin(), more.end());
+    }};
+
+    // A piece the run closes adds nothing where the ids returned cover it, and where they reach into it every
+    // continuation keeps the boundary they end at, so the merge of the rest after it is the rest of the piece's merge,
+    // with no whole-piece lookup; the bytes before it are not merged again.
+    const auto append_closed{[&](const std::size_t start, const std::size_t end) {
+        if (end <= covered)
+        {
+            return;
+        }
+
+        if (start < covered)
+        {
+            append(encoder_.merger().merged(stretch.substr(covered - closed_end_, end - covered)));
+
+            return;
+        }
+
+        append_ids(stretch.substr(start - closed_end_, end - start), listed);
     }};
 
     auto start{closed_end_};
@@ -654,51 +682,37 @@ std::vector<load::Token_id_t> Stream_encoder::run_ids(
             continue;
         }
 
-        const auto piece{stretch.substr(start - closed_end_, end - start)};
-
-        append_ids(piece, listed);
+        append_closed(start, end);
 
         start = end;
     }
 
-    const auto open{stretch.substr(start - closed_end_)};
+    const auto stretch_end{closed_end_ + stretch.size()};
 
-    if (open.empty())
+    if (start == stretch_end)
     {
         return listed;
     }
 
     if (dead_end)
     {
-        append_ids(open, listed);
+        append_closed(start, stretch_end);
 
         return listed;
     }
 
-    const auto covered{closed_end_ + returned_bytes};
-
-    if (covered <= start)
+    // The open piece adds its stable ids, or where the ids returned reach into it, by the same projection, the stable
+    // ids of the rest after them.
+    if (start < covered)
     {
-        const auto whole_piece{encoder_.definition().whole_piece_lookup};
-
-        const auto stable{stable_ids(encoder_, open, whole_piece)};
-
-        append(stable);
+        append(stable_ids(encoder_, stretch.substr(covered - closed_end_), false));
 
         return listed;
     }
 
-    // The ids returned reach into the open piece, and every continuation keeps the boundary they end at, so the merge
-    // of the rest after it is the rest of every continuation's merge, with no whole-piece lookup.
-    const auto returned_of_open{std::span{returned_}.subspan(listed.size())};
+    const auto whole_piece{encoder_.definition().whole_piece_lookup};
 
-    append(returned_of_open);
-
-    const auto tail{stretch.substr(covered - closed_end_)};
-
-    const auto stable{stable_ids(encoder_, tail, false)};
-
-    append(stable);
+    append(stable_ids(encoder_, stretch.substr(start - closed_end_), whole_piece));
 
     return listed;
 }

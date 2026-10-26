@@ -34,7 +34,7 @@ sense if no LLM existed; if it would, it belongs in munch. matisse is also the i
 an execution-contract compiler (the full-dictionary verifier, the two-mode WordPiece construction, a labeler carrying
 token ids, certified-prefix streaming). Certified-prefix streaming is built, as the `Stream_encoder` of libs/encode,
 with one claim: every id it returns is a prefix of `encode()` of the whole text, and what it returns is the longest such
-prefix but for the two bounded exceptions the encoder's section names; the others are not in the first version.
+prefix but for the two exceptions the encoder's section names; the others are not in the first version.
 
 The name is after Matisse's paper cut-outs, cutting with certainty, beside munch, the lexer library, and hopper, the
 parser toolkit.
@@ -779,6 +779,8 @@ class Stream_encoder
 public:
     explicit Stream_encoder(const Encoder& encoder);
 
+    explicit Stream_encoder(const Encoder&& encoder) = delete;
+
     [[nodiscard]] std::vector<load::Token_id_t> push(std::string_view bytes);
 
     [[nodiscard]] std::vector<load::Token_id_t> finish();
@@ -953,18 +955,21 @@ every certified cut of the report, and a cut in white space, at the right-contex
 each inventory decided. Its speed is what [benchmarks.md](benchmarks.md) measures, and nothing is claimed about the
 vendors' own implementations beyond the ids and the speeds measured there.
 
-`Stream_encoder` encodes a text that arrives in parts. It is made from an `Encoder`, which must outlive it, and allows
-the encoder's special tokens; `push()` takes the next bytes and returns the ids that have become final, and `finish()`
-ends the text and returns the rest, after which the stream reads a new text. A push may end inside a UTF-8 sequence or
-inside a special token's spelling, and those bytes are held until a later push completes them; a sequence that cannot be
+`Stream_encoder` encodes a text that arrives in parts. It is made from an `Encoder` it borrows, which must outlive it
+and not be moved while the stream reads it, so the constructor taking a temporary encoder is deleted, and allows the
+encoder's special tokens; `push()` takes the next bytes and returns the ids that have become final, and `finish()` ends
+the text and returns the rest, after which the stream reads a new text. A push may end inside a UTF-8 sequence or inside
+a special token's spelling, and those bytes are held until a later push completes them; a sequence that cannot be
 completed is refused as `classes_of()` refuses it. The stream claims one thing: after every push the ids it has returned
 are a prefix of `encode()` of the whole text, whatever the rest of the text turns out to be, and after `finish()` they
 are `encode()` of it. What a push returns is the longest such prefix, the greatest stable prefix of Dalirrooyfard and
 Ye's online tokenization, with two exceptions: while the bytes read end in a proper prefix of an allowed spelling those
-bytes are held, so that the ids lag by fewer bytes than the longest allowed spelling, as their online special-token
-segmentation lags, and inside a piece an id is held against every byte continuation of the piece where the pattern
-allows fewer. One `Encoder` serves any number of streams on as many threads with no lock, since a stream keeps its runs,
-its held bytes and its piece cache to itself and reads the encoder through `const` accessors alone.
+bytes are held, fewer than the longest allowed spelling, and not classed, as their online special-token segmentation
+holds them, so that a push returns the longest prefix final for the bytes before them and the ids can lag by more than
+the held bytes, a word before a held `<` staying an open piece when `<|endoftext|>` is allowed, and inside a piece an id
+is held against every byte continuation of the piece where the pattern allows fewer. One `Encoder` serves any number of
+streams on as many threads with no lock, since a stream keeps its runs, its held bytes and its piece cache to itself and
+reads the encoder through `const` accessors alone.
 
 The encoder builds what a stream reads once, beside the `Segmenter`: the class table of the pattern's alphabet, the
 split verifier M of `split_verifier()` as a `Verifier_table`, a flat array of its steps by state, class and mark with
@@ -995,10 +1000,12 @@ the piece's end. The test runs from the right and stops at the first boundary th
 continuation keeps are closed downward; a boundary across which no token begins inside the token before it, a token that
 is a suffix of it followed by a prefix of the bytes after the boundary or by all of them and more, holds with no merge,
 since the first join that crosses a boundary joins such a suffix, and is taken first. Where pieces are looked up whole
-no id is stable while a token the merge does not form begins with the piece. Once the ids returned reach into a run's
-open piece the boundary they end at holds for every continuation, so the tests merge only the rest after it, with no
-whole-piece lookup. A push returns the common prefix over the runs of each run's closed pieces followed by its open
-piece's stable ids, less what has been returned.
+no id is stable while a token the merge does not form begins with the piece. Once the ids returned reach into a piece of
+a run, open or closed by the run, the boundary they end at holds for every continuation, so only the rest after it is
+merged, with no whole-piece lookup, and the stream keeps the number of ids returned and the bytes they spell rather than
+the ids themselves, so that the work of a push does not grow with the part of a piece already returned. A push returns
+the common prefix over the runs of each run's closed pieces followed by its open piece's stable ids, less what has been
+returned.
 
 The third layer rests on results stated for one join at a time, the pair rule. They hold for the rank rule too, which
 makes on every piece the joins one join at a time makes on the dictionary of the tokens' self splits, the last join of
