@@ -31,8 +31,7 @@ TEST(Supply_test, The_published_hello_world_is_cut_where_its_second_piece_begins
 
     for (const auto inventory : {Inventory::factorization, Inventory::policy})
     {
-        const auto [bytes, anchors, boundary_share, longest_piece]{
-                supply(report, inventory, matisse::gpt2::pattern(), "Hello world")};
+        const auto [bytes, anchors, boundary_share, longest_piece]{supply(report, inventory, "Hello world")};
 
         EXPECT_EQ(bytes, 11U);
         EXPECT_EQ(anchors.count, 1U);
@@ -50,7 +49,7 @@ TEST(Supply_test, An_anchor_after_letters_beyond_ascii_stands_at_their_byte_offs
     const auto& report{decided_report()};
 
     const auto [bytes, anchors, boundary_share, longest_piece]{
-            supply(report, Inventory::policy, matisse::gpt2::pattern(), "h\u00E9llo w\u00F6rld")};
+            supply(report, Inventory::policy, "h\u00E9llo w\u00F6rld")};
 
     EXPECT_EQ(bytes, 13U);
     EXPECT_EQ(anchors.count, 1U);
@@ -66,8 +65,7 @@ TEST(Supply_test, A_cut_no_window_narrower_than_four_certifies_is_an_anchor)
     // certificate the apostrophe may be a piece of its own, so only the cut after the tab is certified.
     const auto& report{decided_report()};
 
-    const auto [policy_bytes, policy_anchors, policy_share, policy_piece]{
-            supply(report, Inventory::policy, matisse::gpt2::pattern(), "\t'dog")};
+    const auto [policy_bytes, policy_anchors, policy_share, policy_piece]{supply(report, Inventory::policy, "\t'dog")};
 
     EXPECT_EQ(policy_anchors.count, 2U);
     ASSERT_TRUE(policy_anchors.gaps.has_value());
@@ -75,7 +73,7 @@ TEST(Supply_test, A_cut_no_window_narrower_than_four_certifies_is_an_anchor)
     EXPECT_DOUBLE_EQ(policy_share, 1.0);
 
     const auto [factorization_bytes, factorization_anchors, factorization_share, factorization_piece]{
-            supply(report, Inventory::factorization, matisse::gpt2::pattern(), "\t'dog")};
+            supply(report, Inventory::factorization, "\t'dog")};
 
     EXPECT_EQ(factorization_anchors.count, 1U);
     EXPECT_DOUBLE_EQ(factorization_share, 0.5);

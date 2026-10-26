@@ -6,7 +6,6 @@
 #include <string>
 #include <string_view>
 
-#include "matisse/pretok/pattern.hpp"
 #include "matisse/validate/report.hpp"
 
 /**
@@ -113,15 +112,13 @@ struct Supply
  * The input is classed under the pattern's alphabet and every certified window of the inventory's table is looked for
  * at every code point, its origin placing an anchor; the anchors are counted at the byte offsets of their code points,
  * and the input is segmented by the pattern's Segmenter for its pre-token boundaries and its longest piece.
- * @param report The report validate() decided of the pattern.
+ * @param report The report validate() decided of the pattern, which it holds.
  * @param inventory The inventory whose windows are measured.
- * @param pattern The pattern.
  * @param input The input, well-formed UTF-8.
  * @return The supply.
  * @throws std::invalid_argument If the input is not well-formed UTF-8, as classes_of() refuses it.
  */
-[[nodiscard]] Supply supply(
-        const Report& report, Inventory inventory, const pretok::Pattern& pattern, std::string_view input);
+[[nodiscard]] Supply supply(const Report& report, Inventory inventory, std::string_view input);
 
 /**
  * @brief Renders the supply of both inventories on one input as the JSON object of its account: the input's name and

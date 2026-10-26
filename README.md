@@ -116,14 +116,13 @@ int main(int argc, char** argv)
     // The rank file names neither its pattern nor its special tokens, so the cl100k library supplies both.
     auto definition{load::read_tiktoken(argv[1], cl100k::specials())};
 
-    const auto pattern{cl100k::pattern()};
-
-    // Decided once per pattern, in about two seconds for cl100k at the default width of five.
-    const auto report{validate::validate(pattern)};
+    // Decided once per pattern, in about two seconds for cl100k at the default width of five; the report holds the
+    // pattern, which the encoder segments by.
+    const auto report{validate::validate(cl100k::pattern())};
 
     const std::vector<std::string> allowed{"<|endoftext|>"};
 
-    const encode::Encoder encoder{std::move(definition), report, validate::Inventory::factorization, pattern, allowed};
+    const encode::Encoder encoder{std::move(definition), report, validate::Inventory::factorization, allowed};
 
     const std::string text{"Hello, world!<|endoftext|>"};
 

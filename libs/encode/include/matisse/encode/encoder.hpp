@@ -14,7 +14,6 @@
 #include "matisse/encode/window_index.hpp"
 #include "matisse/load/definition.hpp"
 #include "matisse/pretok/classes.hpp"
-#include "matisse/pretok/pattern.hpp"
 #include "matisse/pretok/segmenter.hpp"
 #include "matisse/validate/report.hpp"
 
@@ -47,18 +46,17 @@ class Encoder
 {
 public:
     /**
-     * @brief Builds the encoder of a definition under the pattern a report was decided of, keeping the inventory's
-     *        window table and the special tokens allowed.
+     * @brief Builds the encoder of a definition under the pattern a report was decided of, which the report holds,
+     *        keeping the inventory's window table and the special tokens allowed.
      * @param definition The definition.
      * @param report The report validate() decided of the pattern.
      * @param inventory The inventory whose window table and right context the encoder keeps.
-     * @param pattern The pattern.
      * @param allowed The spellings of the special tokens cut out of a text; every other special token is ordinary text.
      * @throws std::invalid_argument If an allowed spelling is not one of the definition's special tokens, or the
      *         definition cannot be merged, as Merger refuses it; the message names the spelling, the byte or the merge.
      */
     Encoder(load::Definition definition, const validate::Report& report, validate::Inventory inventory,
-            const pretok::Pattern& pattern, std::span<const std::string> allowed);
+            std::span<const std::string> allowed);
 
     /**
      * @brief Returns the ids of a text, as the definition's tokenizer encodes it with the allowed special tokens.
@@ -81,13 +79,14 @@ public:
      * @brief Returns the ids of a text as encode() does, the merged pieces kept in a cache the caller owns across its
      *        calls.
      *
-     * The cache holds the ids of a piece as this encoder's definition merges them, so a cache filled by one encoder is
-     * not passed to another; the encoder is not changed by a call and the cache is the only state a call shares with
-     * its caller, so it serves one thread at a time with no lock, each thread of a pool holding its own.
+     * The cache holds the ids of a piece as this encoder's definition merges them, so it is made for this encoder and
+     * a cache made for another is refused; the encoder is not changed by a call and the cache is the only state a call
+     * shares with its caller, so it serves one thread at a time with no lock, each thread of a pool holding its own.
      * @param text The text, well-formed UTF-8.
-     * @param cache The cache, filled by this encoder alone.
+     * @param cache The cache, made for this encoder.
      * @return The ids.
-     * @throws std::invalid_argument If the text is not well-formed UTF-8, as encode() refuses it.
+     * @throws std::invalid_argument If the cache was made for another encoder, or the text is not well-formed UTF-8, as
+     *         encode() refuses it.
      * @throws std::length_error If a piece is 2^32 bytes or longer, as encode() refuses it.
      */
     [[nodiscard]] std::vector<load::Token_id_t> encode(std::string_view text, Piece_cache& cache) const;

@@ -349,7 +349,7 @@ namespace
 Stream_encoder::Stream_encoder(const Encoder& encoder)
     : encoder_{encoder}
     , runs_{encoder.verifier()}
-    , cache_{piece_cache_capacity}
+    , cache_{encoder, piece_cache_capacity}
     , closed_end_{0}
     , returned_ids_{0}
     , returned_bytes_{0}

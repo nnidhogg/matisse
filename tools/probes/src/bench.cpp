@@ -896,7 +896,7 @@ void run_prompts(
 
     print_prompt_rows(tokenizer_name, "prompts", "latency", name, prompts, alone);
 
-    matisse::encode::Piece_cache cache{matisse::encode::piece_cache_capacity};
+    matisse::encode::Piece_cache cache{encoder, matisse::encode::piece_cache_capacity};
 
     const auto encode_kept{[&](const std::string_view prompt) { return encoder.encode(prompt, cache); }};
 
@@ -981,7 +981,7 @@ Batch_ids encode_batch(
     const auto work{[&] {
         try
         {
-            matisse::encode::Piece_cache cache{matisse::encode::piece_cache_capacity};
+            matisse::encode::Piece_cache cache{encoder, matisse::encode::piece_cache_capacity};
 
             for (auto index{next.fetch_add(1)}; index < documents.size(); index = next.fetch_add(1))
             {
@@ -1210,7 +1210,7 @@ void run(const Options& options)
 
         const auto report{matisse::validate::validate(pattern, width)};
 
-        const Encoder encoder{definition, report, Inventory::factorization, pattern, {}};
+        const Encoder encoder{definition, report, Inventory::factorization, {}};
 
         if (mode == "single")
         {

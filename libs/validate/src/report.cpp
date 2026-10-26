@@ -464,6 +464,14 @@ Cloud_t Policy_search::extended(const Cloud_t& cloud, const std::size_t at, cons
 
 } // namespace
 
+Report::Report(
+        Window_table factorization, Window_table policy, munch::verifier::Boundary_gap gap, pretok::Pattern pattern)
+    : factorization{std::move(factorization)}
+    , policy{std::move(policy)}
+    , gap{std::move(gap)}
+    , pattern{std::move(pattern)}
+{}
+
 Report validate(const pretok::Pattern& pattern, const std::size_t width)
 {
     if (width == 0)
@@ -483,7 +491,7 @@ Report validate(const pretok::Pattern& pattern, const std::size_t width)
 
     auto gap{munch::verifier::boundary_gap(verifier)};
 
-    return {.factorization = std::move(factorization_table), .policy = std::move(policy_table), .gap = std::move(gap)};
+    return Report{std::move(factorization_table), std::move(policy_table), std::move(gap), pattern};
 }
 
 } // namespace matisse::validate

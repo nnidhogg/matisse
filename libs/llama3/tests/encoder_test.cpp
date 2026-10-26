@@ -155,7 +155,7 @@ Encoder llama3_encoder(Definition definition, const std::vector<std::string>& al
 {
     const auto pattern{matisse::llama3::pattern()};
 
-    return {std::move(definition), decided_report(), matisse::validate::Inventory::factorization, pattern, allowed};
+    return {std::move(definition), decided_report(), matisse::validate::Inventory::factorization, allowed};
 }
 
 /**
@@ -812,7 +812,7 @@ TEST(Encoder_test, Encode_parallel_gives_encode_s_ids_under_both_inventories_and
     {
         for (const auto& allowed : {std::vector<std::string>{}, special_spellings()})
         {
-            const Encoder encoder{*definition, report, inventory, pattern, allowed};
+            const Encoder encoder{*definition, report, inventory, allowed};
 
             const Window_index index{
                     inventory == Inventory::factorization ? report.factorization : report.policy, pattern.alphabet};
@@ -849,9 +849,9 @@ TEST(Encoder_test, A_cut_in_white_space_holds_with_the_right_context_each_invent
 
     const auto& report{decided_report()};
 
-    const Encoder factorization{*definition, report, Inventory::factorization, pattern, {}};
+    const Encoder factorization{*definition, report, Inventory::factorization, {}};
 
-    const Encoder policy{*definition, report, Inventory::policy, pattern, {}};
+    const Encoder policy{*definition, report, Inventory::policy, {}};
 
     // The right-context fixture's counterexamples: a worker reading one code point less past the cut before the
     // punctuation, or the one between the tabs, reads the tabs as one piece.

@@ -35,7 +35,7 @@ constexpr unsigned char delete_control{0x7F};
  */
 [[nodiscard]] std::string verdict(const Report& report)
 {
-    const auto& [factorization, policy, gap]{report};
+    const auto& [factorization, policy, gap, pattern]{report};
 
     if (factorization.windows.empty() && policy.windows.empty())
     {
@@ -465,7 +465,7 @@ template <typename Items, typename One>
 
 std::string render(const Report& report)
 {
-    const auto& [factorization, policy, gap]{report};
+    const auto& [factorization, policy, gap, pattern]{report};
 
     auto out{row("verdict", verdict(report))};
 
@@ -484,7 +484,7 @@ std::string render(const Report& report)
 
 std::string json(const Report& report)
 {
-    const auto& [factorization, policy, gap]{report};
+    const auto& [factorization, policy, gap, pattern]{report};
 
     std::string out{"{\n"};
 

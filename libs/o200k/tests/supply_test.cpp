@@ -40,8 +40,7 @@ TEST(Supply_test, The_published_tiktoken_example_is_cut_at_each_of_its_boundarie
 
     for (const auto inventory : {Inventory::factorization, Inventory::policy})
     {
-        const auto [bytes, anchors, boundary_share, longest_piece]{
-                supply(report, inventory, matisse::o200k::pattern(), "tiktoken is great!")};
+        const auto [bytes, anchors, boundary_share, longest_piece]{supply(report, inventory, "tiktoken is great!")};
 
         EXPECT_EQ(bytes, 18U);
         EXPECT_EQ(anchors.count, 3U);
@@ -66,8 +65,7 @@ TEST(Supply_test, A_window_certified_at_its_first_symbol_places_no_anchor_at_the
     ASSERT_NE(opening, report.policy.windows.end());
     EXPECT_EQ(opening->origin, 0U);
 
-    const auto [bytes, anchors, boundary_share, longest_piece]{
-            supply(report, Inventory::policy, matisse::o200k::pattern(), " world")};
+    const auto [bytes, anchors, boundary_share, longest_piece]{supply(report, Inventory::policy, " world")};
 
     EXPECT_EQ(anchors.count, 0U);
     EXPECT_DOUBLE_EQ(boundary_share, 0.0);

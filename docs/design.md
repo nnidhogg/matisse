@@ -520,6 +520,13 @@ struct Report
     Window_table policy{};
 
     munch::verifier::Boundary_gap gap{};
+
+    pretok::Pattern pattern{};
+
+private:
+    friend Report validate(const pretok::Pattern& pattern, std::size_t width);
+
+    Report(Window_table factorization, Window_table policy, munch::verifier::Boundary_gap gap, pretok::Pattern pattern);
 };
 
 [[nodiscard]] Report validate(const pretok::Pattern& pattern, std::size_t width = default_width);
@@ -535,8 +542,7 @@ struct Supply
     std::size_t longest_piece{};
 };
 
-[[nodiscard]] Supply supply(
-        const Report& report, Inventory inventory, const pretok::Pattern& pattern, std::string_view input);
+[[nodiscard]] Supply supply(const Report& report, Inventory inventory, std::string_view input);
 
 struct Merge_window
 {
@@ -584,16 +590,18 @@ carries the right context its inventory needs, decided on the split verifier (se
 window whose origin lands on the same symbol, since every cut of one that does is a cut of the shorter one; to width
 four, for GPT-2 that is 87 and 540 windows of 18,357 and 32,218, for cl100k 112 and 678 of 30,576 and 58,580. The report
 carries `boundary_gap()` of the split verifier, which is unbounded for every pattern in scope, since a run of letters of
-any length is one piece, of lower case letters under o200k. A definition without a pre-tokenizer goes to
-`validate_merges()` instead, which builds `munch::verifier::token_automaton()` once and decides each candidate window by
-`miscovering()` on it, the lazy certification. Its candidates are given by the caller; the command line draws them from
-an input, every byte and the most frequent byte pairs and triples, since all byte windows of width three are too many to
-decide at full scale.
+any length is one piece, of lower case letters under o200k. It also holds a copy of the pattern it was decided of, and
+its constructor is private with `validate()` its friend, as munch's `Lexer` exists only over what its `Builder`
+compiled, so that the encoder and `supply()` read the pattern from the report and no window table reaches them beside a
+pattern it was not decided of. A definition without a pre-tokenizer goes to `validate_merges()` instead, which builds
+`munch::verifier::token_automaton()` once and decides each candidate window by `miscovering()` on it, the lazy
+certification. Its candidates are given by the caller; the command line draws them from an input, every byte and the
+most frequent byte pairs and triples, since all byte windows of width three are too many to decide at full scale.
 
 `supply()` measures one inventory's anchors on an input, the interior positions where an occurrence of a certified
-window places its origin, counted at the byte offsets of their code points. It takes the pattern the report was decided
-of, since the report holds no alphabet to class the input with and no segmenter for its pre-token boundaries. `Anchors`
-and `Gaps` are munch-audit's, duplicated rather than linked (count, per kibibyte, median, ninetieth and ninety-ninth
+window places its origin, counted at the byte offsets of their code points. It classes the input with the alphabet of
+the pattern the report holds and segments it with that pattern's segmenter for its pre-token boundaries. `Anchors` and
+`Gaps` are munch-audit's, duplicated rather than linked (count, per kibibyte, median, ninetieth and ninety-ninth
 percentile, longest): the gaps are the distances between consecutive anchors, the runs before the first and after the
 last left out, and a percentile is the order statistic at floor(q n) of the n gaps ascending. The report on
 pre-tokenizer certification measures its gaps otherwise, the two ends of the corpus counted as cuts, the percentiles at
@@ -682,10 +690,16 @@ inline constexpr std::size_t piece_cache_capacity{16384};
 
 inline constexpr std::size_t longest_cached_piece{255};
 
+class Encoder;
+
 class Piece_cache
 {
 public:
-    explicit Piece_cache(std::size_t capacity);
+    Piece_cache(const Encoder& encoder, std::size_t capacity);
+
+    Piece_cache(const Encoder&& encoder, std::size_t capacity) = delete;
+
+    [[nodiscard]] bool serves(const Encoder& encoder) const noexcept;
 
     [[nodiscard]] std::optional<std::span<const load::Token_id_t>> find(std::string_view piece) const;
 
@@ -724,7 +738,7 @@ class Encoder
 {
 public:
     Encoder(load::Definition definition, const validate::Report& report, validate::Inventory inventory,
-            const pretok::Pattern& pattern, std::span<const std::string> allowed);
+            std::span<const std::string> allowed);
 
     [[nodiscard]] std::vector<load::Token_id_t> encode(std::string_view text) const;
 
@@ -792,13 +806,13 @@ public:
 The names follow `core::Lexer`'s `tokenize_all()`, `chunk_boundaries()` and `tokenize_all_parallel()`. The constructor
 takes the report `validate()` decided of the pattern, as `supply()` takes it, and keeps the inventory's window table and
 right context, so that a pattern is validated once however many encoders are built, a fuzz harness's and the
-thread-sanitizer job's among them; it takes a pattern, so a definition without a pre-tokenizer has no encoder in the
-first version, and it refuses an `allowed` spelling that is not one of the definition's special tokens. `encode()` is
-the sequential encoding: the text is split at every occurrence of an allowed special token, the earliest first and the
-longest of those that begin at one byte, which emits its id, and each stretch between them is segmented by the
-`Segmenter` as a complete input, every piece then looked up whole where the definition's whole-piece lookup says so and
-otherwise merged alone by its merge rule, the pair rule or tiktoken's rank merge. Special tokens not allowed are
-ordinary text, which is tiktoken's `encode()` with that `allowed_special` and an empty `disallowed_special`,
+thread-sanitizer job's among them; it segments by the pattern the report holds, so a definition without a pre-tokenizer
+has no encoder in the first version, and it refuses an `allowed` spelling that is not one of the definition's special
+tokens. `encode()` is the sequential encoding: the text is split at every occurrence of an allowed special token, the
+earliest first and the longest of those that begin at one byte, which emits its id, and each stretch between them is
+segmented by the `Segmenter` as a complete input, every piece then looked up whole where the definition's whole-piece
+lookup says so and otherwise merged alone by its merge rule, the pair rule or tiktoken's rank merge. Special tokens not
+allowed are ordinary text, which is tiktoken's `encode()` with that `allowed_special` and an empty `disallowed_special`,
 encoder.py's behavior when none is allowed; tiktoken leaves the choice between allowed spellings that begin at one byte
 to the order of its table, and no allowed spelling begins another on any definition in scope. `decode()` spells each
 ordinary id's bytes and each special id's spelling as raw bytes, not checked to be UTF-8, since a run of ids cut inside
@@ -931,18 +945,19 @@ it, storing its ids. The ids of a piece are a function of its bytes and the defi
 parts afresh for every piece, so a cache keyed by the whole of a piece's bytes and filled under one definition never
 changes an id. A cache serves one caller and has no lock: `encode(text)` makes one for the call, `encode(text, cache)`
 reads and fills one the caller keeps across its calls, one per thread, and every worker of `encode_parallel()` makes its
-own; it holds 16,384 pieces of up to 255 bytes and then stops filling, with no eviction, as Hugging Face's BPE model's
-cache stops. The cache is a flat table with open addressing over the bytes and the ids of its pieces, each kept once in
-a string and a vector of its own: a slot holds a piece's hash, where its bytes and ids stand and their lengths, the
-slots a power of two in number from 64 on, doubled when the pieces fill half of them, so that a call that stores nothing
-takes no memory and a lookup hashes the piece once and compares its bytes only in a slot of the same hash and length; a
-piece's ids are valid until the next store. On the three corpora of the test strategy GPT-2's pattern makes 3,684 to
-14,032 distinct pieces and cl100k's leaves 1,527 to 9,218 distinct pieces that are not looked up whole, so the bound
-holds every piece the merge makes on them. The tests hold `encode()` to the known answers and to every piece looked up
-or merged with no cache, on seeded random texts and on a text whose distinct pieces fill the cache past its bound,
-encoded twice more with one kept cache, and `decode()` of `encode()` to the text, special tokens allowed and not; and
-they hold `encode()` with a cache kept across 500 seeded texts, and on four threads each keeping a cache of its own, to
-`encode()` with a cache of its own.
+own. A cache is made for the encoder it serves, which it borrows, and `encode(text, cache)` refuses one made for another
+encoder with `std::invalid_argument`, since its ids would be another definition's; it holds 16,384 pieces of up to 255
+bytes and then stops filling, with no eviction, as Hugging Face's BPE model's cache stops. The cache is a flat table
+with open addressing over the bytes and the ids of its pieces, each kept once in a string and a vector of its own: a
+slot holds a piece's hash, where its bytes and ids stand and their lengths, the slots a power of two in number from 64
+on, doubled when the pieces fill half of them, so that a call that stores nothing takes no memory and a lookup hashes
+the piece once and compares its bytes only in a slot of the same hash and length; a piece's ids are valid until the next
+store. On the three corpora of the test strategy GPT-2's pattern makes 3,684 to 14,032 distinct pieces and cl100k's
+leaves 1,527 to 9,218 distinct pieces that are not looked up whole, so the bound holds every piece the merge makes on
+them. The tests hold `encode()` to the known answers and to every piece looked up or merged with no cache, on seeded
+random texts and on a text whose distinct pieces fill the cache past its bound, encoded twice more with one kept cache,
+and `decode()` of `encode()` to the text, special tokens allowed and not; and they hold `encode()` with a cache kept
+across 500 seeded texts, and on four threads each keeping a cache of its own, to `encode()` with a cache of its own.
 
 The encoder claims one thing. For every text the definition accepts, `encode_parallel()` returns the ids `encode()`
 returns, at every chunk count. That is the splice theorem with the proposition that the cut transfers and the decided

@@ -668,7 +668,7 @@ void check_generated(const Tokenizer& tokenizer, const matisse::validate::Report
 
     for (const auto inventory : {Inventory::factorization, Inventory::policy})
     {
-        const Encoder encoder{definition, report, inventory, pattern, {}};
+        const Encoder encoder{definition, report, inventory, {}};
 
         const auto& table{inventory == Inventory::factorization ? report.factorization : report.policy};
 
@@ -786,7 +786,7 @@ void check_corpus(
 {
     const auto& [tokenizer_name, pattern, width, definition]{tokenizer};
 
-    const Encoder factorization{definition, report, Inventory::factorization, pattern, {}};
+    const Encoder factorization{definition, report, Inventory::factorization, {}};
 
     const auto ids{factorization.encode(text)};
 
@@ -843,13 +843,13 @@ void check_corpus(
 
     check_inventory(Inventory::factorization, factorization);
 
-    const Encoder policy{definition, report, Inventory::policy, pattern, {}};
+    const Encoder policy{definition, report, Inventory::policy, {}};
 
     check_inventory(Inventory::policy, policy);
 
-    const auto factorization_supply{matisse::validate::supply(report, Inventory::factorization, pattern, text)};
+    const auto factorization_supply{matisse::validate::supply(report, Inventory::factorization, text)};
 
-    const auto policy_supply{matisse::validate::supply(report, Inventory::policy, pattern, text)};
+    const auto policy_supply{matisse::validate::supply(report, Inventory::policy, text)};
 
     const auto section{matisse::validate::supply_section(factorization_supply, policy_supply, name)};
 

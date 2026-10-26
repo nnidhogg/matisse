@@ -28,10 +28,13 @@
  * piece's bytes and ids stand in a string and a vector of their own; no slot is ever emptied and growth places every
  * piece again, so a lookup meets the piece before a free slot and stops at a free slot for any other piece; the slots
  * start at 64 on the first store and double whenever the pieces fill half of them, so a cache that stores nothing takes
- * no memory.
+ * no memory. A cache is made for the encoder it serves, which it borrows, and the encoder refuses a cache made for
+ * another, whose ids would be another definition's.
  */
 namespace matisse::encode
 {
+class Encoder;
+
 /**
  * @brief The number of pieces an encoder's cache holds before it stops filling.
  */
@@ -50,10 +53,24 @@ class Piece_cache
 {
 public:
     /**
-     * @brief Makes an empty cache, which takes no memory until it stores a piece.
+     * @brief Makes an empty cache for an encoder, which takes no memory until it stores a piece; the cache borrows the
+     *        encoder, which must outlive it and must not be moved while the cache is in use.
+     * @param encoder The encoder the cache serves.
      * @param capacity The number of pieces it holds before it stops filling.
      */
-    explicit Piece_cache(std::size_t capacity);
+    Piece_cache(const Encoder& encoder, std::size_t capacity);
+
+    /**
+     * @brief A cache is not made for a temporary encoder, which would not outlive it.
+     */
+    Piece_cache(const Encoder&& encoder, std::size_t capacity) = delete;
+
+    /**
+     * @brief Returns whether the cache was made for an encoder.
+     * @param encoder The encoder.
+     * @return True when it is the encoder the cache serves.
+     */
+    [[nodiscard]] bool serves(const Encoder& encoder) const noexcept;
 
     /**
      * @brief Returns the ids stored for a piece.
@@ -125,6 +142,11 @@ private:
      * @brief Doubles the slots, placing every stored piece again at the first free slot from its home.
      */
     void grow();
+
+    /**
+     * @brief The encoder the cache serves.
+     */
+    const Encoder& encoder_;
 
     /**
      * @brief The number of pieces held before the cache stops filling.

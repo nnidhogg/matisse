@@ -11,8 +11,13 @@
 
 namespace matisse::encode
 {
-Piece_cache::Piece_cache(const std::size_t capacity) : capacity_{capacity}
+Piece_cache::Piece_cache(const Encoder& encoder, const std::size_t capacity) : encoder_{encoder}, capacity_{capacity}
 {}
+
+bool Piece_cache::serves(const Encoder& encoder) const noexcept
+{
+    return &encoder_ == &encoder;
+}
 
 std::optional<std::span<const load::Token_id_t>> Piece_cache::find(const std::string_view piece) const
 {

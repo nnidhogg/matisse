@@ -35,7 +35,7 @@ TEST(Supply_test, The_published_llama3_example_is_cut_at_each_of_its_boundaries)
     for (const auto inventory : {Inventory::factorization, Inventory::policy})
     {
         const auto [bytes, anchors, boundary_share, longest_piece]{
-                supply(report, inventory, matisse::llama3::pattern(), "This is a test sentence.")};
+                supply(report, inventory, "This is a test sentence.")};
 
         EXPECT_EQ(bytes, 24U);
         EXPECT_EQ(anchors.count, 5U);
@@ -59,8 +59,7 @@ TEST(Supply_test, A_window_certified_at_its_first_symbol_places_no_anchor_at_the
     ASSERT_NE(opening, report.policy.windows.end());
     EXPECT_EQ(opening->origin, 0U);
 
-    const auto [bytes, anchors, boundary_share, longest_piece]{
-            supply(report, Inventory::policy, matisse::llama3::pattern(), " world")};
+    const auto [bytes, anchors, boundary_share, longest_piece]{supply(report, Inventory::policy, " world")};
 
     EXPECT_EQ(anchors.count, 0U);
     EXPECT_DOUBLE_EQ(boundary_share, 0.0);

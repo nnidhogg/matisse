@@ -107,7 +107,10 @@ struct Window_table
 
 /**
  * @brief What validate() decides of a pattern: its window table under each certificate and the boundary gap of its
- *        split verifier.
+ *        split verifier, with the pattern they were decided of.
+ *
+ * validate() is the only construction path, so a report holds its window tables only beside their own pattern, and an
+ * encoder or a supply built from it reads that pattern and no other.
  */
 struct Report
 {
@@ -126,6 +129,25 @@ struct Report
      *        makes it unbounded.
      */
     munch::verifier::Boundary_gap gap{};
+
+    /**
+     * @brief The pattern the tables were decided of.
+     */
+    pretok::Pattern pattern{};
+
+private:
+    // validate() is the only construction path: a report exists exclusively with the pattern its tables were decided
+    // of, so the constructor below stays private and the friendship is the whole public door.
+    friend Report validate(const pretok::Pattern& pattern, std::size_t width);
+
+    /**
+     * @brief Constructs a report of a pattern from what was decided of it.
+     * @param factorization The windows the factorization certificate certifies.
+     * @param policy The windows the policy certificate certifies.
+     * @param gap The boundary gap of the split verifier.
+     * @param pattern The pattern.
+     */
+    Report(Window_table factorization, Window_table policy, munch::verifier::Boundary_gap gap, pretok::Pattern pattern);
 };
 
 /**
@@ -144,7 +166,7 @@ struct Report
  * under the factorization certificate and two under the policy certificate.
  * @param pattern The pattern.
  * @param width The widest window decided, default_width unless told, at least one.
- * @return The report.
+ * @return The report, holding a copy of the pattern.
  * @throws std::invalid_argument If the width is zero, the pattern is not total, as split_verifier() refuses it, the
  *         right context of a certified window is unbounded, or a factorization window is not certified by the split
  *         verifier.

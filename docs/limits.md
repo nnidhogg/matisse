@@ -47,8 +47,8 @@ That model excludes, some of it permanently and some only in the first version:
   cl100k, o200k and llama3 libraries, which lookup finds by name. A further tokenizer comes as a library of its own
   under `libs/`, named in the lookup's list, with no change to the stage libraries, once its pattern has a description
   that meets the class theorem's conditions; until then it has no encoder.
-- **Definitions without a pre-tokenizer.** The `Encoder` takes a pattern, so a definition without one has no encoder in
-  the first version.
+- **Definitions without a pre-tokenizer.** The `Encoder` takes a report, which holds a pattern, so a definition without
+  one has no encoder in the first version.
 
 Special tokens follow the same rule. The spellings the caller allows are cut out of the text, the earliest first and the
 longest among those that begin at one byte, each emitting its id, and the constructor refuses an allowed spelling that
@@ -226,14 +226,15 @@ id. Moving the pin is open choice 6 of [design.md](design.md).
   one encoder, each keeping a cache of its own, and the thread sanitizer runs in CI.
 - A `Piece_cache` has no lock and serves one thread at a time. `encode(text)` makes one for the call, and `encode(text,
   cache)` reads and fills one the caller keeps across its calls, one per thread. A cache holds the ids of one
-  definition, so a cache filled by one encoder is not passed to another, and the ids `find()` returns are valid until
-  the next store.
+  definition, so it is made for the encoder it serves, which must outlive it, and `encode(text, cache)` refuses a cache
+  made for another encoder with `std::invalid_argument`; the ids `find()` returns are valid until the next store.
 - `encode_parallel()` gives every worker a piece cache of its own and joins every worker before returning. An exception
   a worker throws is kept, and the first one is rethrown on the calling thread once every worker has joined.
-- The encoder takes the definition by value and keeps its own copies of what it reads from the report and the pattern,
-  the window table and its right context, the class table and the segmentation's automaton, so neither has to outlive
-  it. The report must be the one `validate()` decided of the same pattern, which the encoder does not check. The
-  tokenizer libraries' patterns point their views and spans into constants of their sources.
+- The encoder takes the definition by value and keeps its own copies of what it reads from the report and the pattern it
+  holds, the window table and its right context, the class table and the segmentation's automaton, so the report does
+  not have to outlive it. Only `validate()` makes a report, holding the pattern it was decided of, so an encoder cannot
+  be given a report beside another pattern. The tokenizer libraries' patterns point their views and spans into constants
+  of their sources.
 - The text is read during the call only, and the ids are returned by value.
 - A `Stream_encoder` reads one text at a time and serves one thread at a time; the encoder it is made from must outlive
   it and serves any number of streams on as many threads, each stream keeping its runs, its held bytes and its piece

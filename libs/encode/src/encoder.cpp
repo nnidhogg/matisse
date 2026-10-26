@@ -162,15 +162,15 @@ private:
 
 Encoder::Encoder(
         load::Definition definition, const validate::Report& report, const validate::Inventory inventory,
-        const pretok::Pattern& pattern, const std::span<const std::string> allowed)
+        const std::span<const std::string> allowed)
     : definition_{std::move(definition)}
     , merger_{definition_}
-    , segmenter_{pattern}
+    , segmenter_{report.pattern}
     , allowed_{allowed_of(definition_.specials, allowed)}
-    , windows_{table_of(report, inventory), pattern.alphabet}
+    , windows_{table_of(report, inventory), report.pattern.alphabet}
     , right_context_{table_of(report, inventory).right_context}
-    , class_table_{pattern.alphabet}
-    , verifier_{pretok::split_verifier(pattern), pattern.alphabet}
+    , class_table_{report.pattern.alphabet}
+    , verifier_{pretok::split_verifier(report.pattern), report.pattern.alphabet}
     , spellings_sorted_{sorted_of(definition_.spellings)}
     , unformed_sorted_{unformed_of(definition_, merger_, spellings_sorted_)}
 {}
@@ -245,13 +245,18 @@ std::vector<load::Token_id_t> Encoder::unformed_of(
 
 std::vector<load::Token_id_t> Encoder::encode(const std::string_view text) const
 {
-    Piece_cache cache{piece_cache_capacity};
+    Piece_cache cache{*this, piece_cache_capacity};
 
     return encode(text, cache);
 }
 
 std::vector<load::Token_id_t> Encoder::encode(const std::string_view text, Piece_cache& cache) const
 {
+    if (!cache.serves(*this))
+    {
+        throw std::invalid_argument{"Encoder: the piece cache was made for another encoder"};
+    }
+
     const auto found{occurrences(text)};
 
     return encode_chunk(text, found, 0, text.size(), cache);
@@ -511,7 +516,7 @@ std::vector<load::Token_id_t> Encoder::encode_parallel(const std::string_view te
     const auto encode_one{[&](const std::size_t chunk) {
         try
         {
-            Piece_cache cache{piece_cache_capacity};
+            Piece_cache cache{*this, piece_cache_capacity};
 
             encoded[chunk] = encode_chunk(text, found, boundaries[chunk], boundaries[chunk + 1], cache);
         }

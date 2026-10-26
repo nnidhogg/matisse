@@ -469,7 +469,7 @@ TEST(Report_test, The_right_contexts_are_one_more_than_the_largest_context_brute
 
 TEST(Report_test, A_pattern_of_one_symbol_pieces_certifies_every_window_at_its_last_symbol_with_no_right_context)
 {
-    const auto [factorization, policy, gap]{validate(single)};
+    const auto [factorization, policy, gap, pattern]{validate(single)};
 
     EXPECT_EQ(factorization.windows.size(), 4U + 8U + 16U + 32U);
     EXPECT_EQ(policy.windows.size(), 4U + 8U + 16U + 32U);

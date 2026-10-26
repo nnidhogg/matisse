@@ -284,23 +284,21 @@ void write_refused(std::ostream& out, const Options& options, const std::string_
 /**
  * @brief Measures the certified-anchor supply of both inventories of a report on the input.
  * @param report The report.
- * @param pattern The pattern the report was decided of.
  * @param input The input's text.
  * @param path The input's path, as given.
  * @return The supply of each inventory.
  * @throws std::runtime_error If the input is not well-formed UTF-8, the message naming the input and the byte offset.
  */
 [[nodiscard]] Measured measured(
-        const matisse::validate::Report& report, const matisse::pretok::Pattern& pattern, const std::string_view input,
-        const std::string_view path)
+        const matisse::validate::Report& report, const std::string_view input, const std::string_view path)
 {
     using matisse::validate::Inventory;
 
     try
     {
-        auto factorization{matisse::validate::supply(report, Inventory::factorization, pattern, input)};
+        auto factorization{matisse::validate::supply(report, Inventory::factorization, input)};
 
-        auto policy{matisse::validate::supply(report, Inventory::policy, pattern, input)};
+        auto policy{matisse::validate::supply(report, Inventory::policy, input)};
 
         return Measured{.factorization = std::move(factorization), .policy = std::move(policy)};
     }
@@ -424,7 +422,7 @@ void write_text(
 
     if (input)
     {
-        supplies = measured(report, pattern, *input, options.input);
+        supplies = measured(report, *input, options.input);
     }
 
     if (options.json)

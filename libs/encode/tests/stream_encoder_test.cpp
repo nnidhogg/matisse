@@ -166,7 +166,7 @@ Encoder encoder_of(const std::vector<std::string>& allowed)
 {
     const auto report{matisse::validate::validate(pattern)};
 
-    return {test_definition(), report, matisse::validate::Inventory::factorization, pattern, allowed};
+    return {test_definition(), report, matisse::validate::Inventory::factorization, allowed};
 }
 
 /**
@@ -425,7 +425,7 @@ void expect_brute_force(const std::vector<std::string>& allowed, const unsigned 
 
     const matisse::pretok::Segmenter segmenter{pattern};
 
-    Piece_cache cache{piece_cache_capacity};
+    Piece_cache cache{encoder, piece_cache_capacity};
 
     std::mt19937 random{seed};
 

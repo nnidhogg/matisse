@@ -556,7 +556,7 @@ TEST(Report_test, Cl100k_s_report_holds_the_windows_and_right_context_fixtures_a
         }
     }
 
-    const auto& [factorization, policy, gap]{check.report};
+    const auto& [factorization, policy, gap, pattern]{check.report};
 
     EXPECT_EQ(check.counts.universes, 2U);
     EXPECT_EQ(check.counts.certified["factorization"], factorization.windows.size());

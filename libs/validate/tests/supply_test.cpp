@@ -81,7 +81,7 @@ TEST(Supply_test, Every_interior_code_point_of_one_symbol_pieces_is_an_anchor_at
 
     for (const auto inventory : {Inventory::factorization, Inventory::policy})
     {
-        const auto [bytes, anchors, boundary_share, longest_piece]{supply(report, inventory, single, "a\u00E9 b")};
+        const auto [bytes, anchors, boundary_share, longest_piece]{supply(report, inventory, "a\u00E9 b")};
 
         EXPECT_EQ(bytes, 5U);
         EXPECT_EQ(anchors.count, 3U);
@@ -102,7 +102,7 @@ TEST(Supply_test, Percentiles_are_the_order_statistic_at_the_floor_of_q_n)
     // bytes 1, 3, 6 and 10, so the three gaps ascending are 2, 3 and 4. floor(0.5 * 3) = 1 gives 3, floor(0.9 * 3) = 2
     // gives 4, floor(0.99 * 3) = 2 gives 4, the maximum 4; the longest piece is the four-byte code point.
     const auto [bytes, anchors, boundary_share, longest_piece]{
-            supply(validate(single), Inventory::policy, single, "a\u00E9\u65E5\U0001F600a")};
+            supply(validate(single), Inventory::policy, "a\u00E9\u65E5\U0001F600a")};
 
     EXPECT_EQ(bytes, 11U);
     EXPECT_EQ(anchors.count, 4U);
@@ -123,7 +123,7 @@ TEST(Supply_test, A_boundary_no_window_certifies_is_counted_in_the_share_and_not
 
     for (const auto inventory : {Inventory::factorization, Inventory::policy})
     {
-        const auto [bytes, anchors, boundary_share, longest_piece]{supply(report, inventory, gated, "aab")};
+        const auto [bytes, anchors, boundary_share, longest_piece]{supply(report, inventory, "aab")};
 
         EXPECT_EQ(bytes, 3U);
         EXPECT_EQ(anchors.count, 1U);
@@ -134,7 +134,7 @@ TEST(Supply_test, A_boundary_no_window_certifies_is_counted_in_the_share_and_not
     }
 
     // A run of a ending the text is one piece, so it has neither a boundary nor an anchor.
-    const auto [bytes, anchors, boundary_share, longest_piece]{supply(report, Inventory::policy, gated, "aaaa")};
+    const auto [bytes, anchors, boundary_share, longest_piece]{supply(report, Inventory::policy, "aaaa")};
 
     EXPECT_EQ(anchors.count, 0U);
     EXPECT_DOUBLE_EQ(boundary_share, 0.0);
@@ -145,8 +145,7 @@ TEST(Supply_test, The_ends_of_the_input_are_no_anchors_and_an_input_without_boun
 {
     const auto report{validate(single)};
 
-    const auto [empty_bytes, empty_anchors, empty_share, empty_piece]{
-            supply(report, Inventory::factorization, single, "")};
+    const auto [empty_bytes, empty_anchors, empty_share, empty_piece]{supply(report, Inventory::factorization, "")};
 
     EXPECT_EQ(empty_bytes, 0U);
     EXPECT_EQ(empty_anchors.count, 0U);
@@ -156,8 +155,7 @@ TEST(Supply_test, The_ends_of_the_input_are_no_anchors_and_an_input_without_boun
     EXPECT_EQ(empty_piece, 0U);
 
     // One code point is one piece, with no interior position to cut at.
-    const auto [one_bytes, one_anchors, one_share, one_piece]{
-            supply(report, Inventory::factorization, single, "\u00E9")};
+    const auto [one_bytes, one_anchors, one_share, one_piece]{supply(report, Inventory::factorization, "\u00E9")};
 
     EXPECT_EQ(one_bytes, 2U);
     EXPECT_EQ(one_anchors.count, 0U);
@@ -204,5 +202,5 @@ TEST(Supply_test, An_input_that_is_not_utf8_is_refused_as_classes_of_refuses_it)
 {
     const auto report{validate(single)};
 
-    EXPECT_THROW(std::ignore = supply(report, Inventory::policy, single, "a\xFF"), std::invalid_argument);
+    EXPECT_THROW(std::ignore = supply(report, Inventory::policy, "a\xFF"), std::invalid_argument);
 }

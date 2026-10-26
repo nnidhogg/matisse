@@ -218,9 +218,10 @@ namespace
 
 } // namespace
 
-Supply supply(
-        const Report& report, const Inventory inventory, const pretok::Pattern& pattern, const std::string_view input)
+Supply supply(const Report& report, const Inventory inventory, const std::string_view input)
 {
+    const auto& pattern{report.pattern};
+
     const pretok::Class_table classes{pattern.alphabet};
 
     const auto symbols{classes.symbols(input)};

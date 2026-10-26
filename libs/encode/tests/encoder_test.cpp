@@ -10,11 +10,13 @@
 #include <random>
 #include <ranges>
 #include <set>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
 #include <thread>
 #include <tuple>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -185,7 +187,7 @@ Encoder encoder_of(
 {
     const auto report{matisse::validate::validate(pattern)};
 
-    return {std::move(definition), report, inventory, pattern, allowed};
+    return {std::move(definition), report, inventory, allowed};
 }
 
 /**
@@ -732,7 +734,7 @@ TEST(Encoder_test, The_ids_are_those_of_no_cache_on_a_text_whose_distinct_pieces
     EXPECT_EQ(encoder.encode(text), expected);
 
     // A kept cache, full after the first call, gives the same ids on the second.
-    Piece_cache cache{piece_cache_capacity};
+    Piece_cache cache{encoder, piece_cache_capacity};
 
     EXPECT_EQ(encoder.encode(text, cache), expected);
     EXPECT_EQ(encoder.encode(text, cache), expected);
@@ -744,7 +746,7 @@ TEST(Encoder_test, A_cache_kept_across_calls_gives_encode_s_ids_on_texts_whose_p
 
     std::mt19937 random{11};
 
-    Piece_cache cache{piece_cache_capacity};
+    Piece_cache cache{encoder, piece_cache_capacity};
 
     for (std::size_t count{0}; count < 500; ++count)
     {
@@ -774,7 +776,7 @@ TEST(Encoder_test, Threads_that_each_keep_a_cache_of_their_own_give_encode_s_ids
     // Each thread takes every fourth document and writes its own slots, so the threads share only the encoder and the
     // documents, both read.
     const auto work{[&](const std::size_t first) {
-        Piece_cache cache{piece_cache_capacity};
+        Piece_cache cache{encoder, piece_cache_capacity};
 
         for (auto index{first}; index < documents.size(); index += threads)
         {
@@ -834,7 +836,7 @@ TEST(Encoder_test, Chunk_boundaries_cuts_as_brute_force_over_every_certified_cut
 
         for (const auto& allowed : allowed_lists)
         {
-            const Encoder encoder{definition, report, inventory, pattern, allowed};
+            const Encoder encoder{definition, report, inventory, allowed};
 
             std::mt19937 random{17};
 
@@ -872,7 +874,7 @@ TEST(Encoder_test, Encode_parallel_gives_the_ids_of_encode_at_every_chunk_count_
     {
         for (const auto& allowed : allowed_lists)
         {
-            const Encoder encoder{definition, report, inventory, pattern, allowed};
+            const Encoder encoder{definition, report, inventory, allowed};
 
             std::mt19937 random{19};
 
@@ -953,7 +955,7 @@ TEST(Encoder_test, A_cut_in_white_space_holds_with_the_right_context_the_policy_
 
     const auto report{matisse::validate::validate(pattern)};
 
-    const Encoder encoder{definition, report, Inventory::policy, pattern, {}};
+    const Encoder encoder{definition, report, Inventory::policy, {}};
 
     // The report's counterexample: a worker reading one code point less past the cut between the spaces reads them as
     // one piece.
@@ -976,7 +978,7 @@ TEST(Encoder_test, Windows_wider_than_the_block_the_walk_classes_cut_at_their_sp
 {
     const auto report{matisse::validate::validate(single, 257)};
 
-    const Encoder encoder{test_definition(), report, Inventory::factorization, single, {}};
+    const Encoder encoder{test_definition(), report, Inventory::factorization, {}};
 
     const std::string text(1000, 'a');
 
@@ -984,4 +986,58 @@ TEST(Encoder_test, Windows_wider_than_the_block_the_walk_classes_cut_at_their_sp
     // time, so the walk reads on past the block it starts in.
     EXPECT_EQ(encoder.chunk_boundaries(text, 4), (std::vector<std::size_t>{0, 256, 512, 768, 1000}));
     EXPECT_EQ(encoder.encode_parallel(text, 4), encoder.encode(text));
+}
+
+TEST(Encoder_test, An_encoder_segments_by_the_pattern_its_report_was_decided_of_and_takes_no_other)
+{
+    using matisse::validate::Report;
+
+    // A report is made by validate() alone, and an encoder takes the pattern from it, so no report reaches an encoder
+    // beside a pattern it was not decided of.
+    static_assert(!std::is_constructible_v<Report, Window_table, Window_table, munch::verifier::Boundary_gap, Pattern>);
+    static_assert(!std::is_constructible_v<
+                  Encoder, Definition, const Report&, Inventory, const Pattern&, std::span<const std::string>>);
+
+    const auto words{encoder_of(test_definition())};
+
+    const Encoder points{test_definition(), matisse::validate::validate(single, 2), Inventory::factorization, {}};
+
+    // The test pattern takes the letters as one piece, a token whole, and the single-symbol pattern each letter alone.
+    EXPECT_EQ(words.encode("abc").size(), 1U);
+    EXPECT_EQ(points.encode("abc"), (std::vector<Token_id_t>{'a', 'b', 'c'}));
+
+    const std::string text{"abc ab!a ba  cab!!a"};
+
+    for (std::size_t chunks{1}; chunks <= 8; ++chunks)
+    {
+        EXPECT_EQ(words.encode_parallel(text, chunks), words.encode(text)) << chunks;
+        EXPECT_EQ(points.encode_parallel(text, chunks), points.encode(text)) << chunks;
+    }
+}
+
+TEST(Encoder_test, A_cache_made_for_another_encoder_is_refused)
+{
+    // A cache borrows the encoder it is made for, so a temporary one is no encoder to make it for.
+    static_assert(!std::is_constructible_v<Piece_cache, Encoder, std::size_t>);
+
+    const auto encoder{encoder_of(test_definition())};
+
+    const auto other{encoder_of(test_definition())};
+
+    Piece_cache cache{other, piece_cache_capacity};
+
+    try
+    {
+        std::ignore = encoder.encode("abc", cache);
+
+        ADD_FAILURE() << "encode() took a cache made for another encoder";
+    }
+    catch (const std::invalid_argument& refusal)
+    {
+        const std::string_view message{refusal.what()};
+
+        EXPECT_TRUE(message.contains("the piece cache was made for another encoder")) << message;
+    }
+
+    EXPECT_EQ(other.encode("abc", cache), other.encode("abc"));
 }
