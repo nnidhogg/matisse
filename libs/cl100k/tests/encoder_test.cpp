@@ -8,6 +8,7 @@
 #include <fstream>
 #include <gtest/gtest.h>
 #include <iterator>
+#include <map>
 #include <optional>
 #include <random>
 #include <ranges>
@@ -78,6 +79,72 @@ struct Fixture_check
      * @brief The lines checked so far, by kind.
      */
     Fixture_counts counts{};
+};
+
+/**
+ * @brief A corpus the vendor fixture names: its file name in the corpus directory, its bytes, its documents, the parts
+ *        its NUL bytes separate, and the SHA-256 of its bytes.
+ */
+struct Vendor_corpus
+{
+    /**
+     * @brief The file name.
+     */
+    std::string name{};
+
+    /**
+     * @brief The bytes.
+     */
+    std::size_t bytes{};
+
+    /**
+     * @brief The documents.
+     */
+    std::size_t documents{};
+
+    /**
+     * @brief The SHA-256 of the bytes.
+     */
+    std::string digest{};
+};
+
+/**
+ * @brief The vendors' ids of a corpus under cl100k's definition: their count and their SHA-256 as little-endian 32-bit
+ *        words, the documents' ids concatenated.
+ */
+struct Vendor_ids
+{
+    /**
+     * @brief The count of the ids.
+     */
+    std::size_t count{};
+
+    /**
+     * @brief The SHA-256 of the ids.
+     */
+    std::string digest{};
+};
+
+/**
+ * @brief The vendor fixture as the tests of cl100k read it: its universe lines naming cl100k, every corpus, and the
+ *        vendors' ids of each under cl100k's definition, by the corpus's file name.
+ */
+struct Vendor_fixture
+{
+    /**
+     * @brief The universe lines naming cl100k.
+     */
+    std::size_t universes{0};
+
+    /**
+     * @brief The corpora, in the fixture's order.
+     */
+    std::vector<Vendor_corpus> corpora{};
+
+    /**
+     * @brief The vendors' ids, by the corpus's file name.
+     */
+    std::map<std::string, Vendor_ids> ids{};
 };
 
 /**
@@ -317,6 +384,117 @@ void expect_fixture_line(Fixture_check& check, const Encoder& encoder, const std
     else
     {
         ADD_FAILURE() << "unknown fixture line: " << line;
+    }
+}
+
+/**
+ * @brief Returns the vendor fixture read for cl100k: the corpus lines before the first universe line, and the ids lines
+ *        of cl100k's universe, a line of another universe skipped and a line of another kind a failure.
+ * @return The fixture.
+ */
+Vendor_fixture vendor_fixture()
+{
+    std::ifstream file{std::string{SOURCE_DIR} + "/libs/load/tests/data/vendors_reference.txt"};
+
+    EXPECT_TRUE(file.is_open());
+
+    Vendor_fixture fixture{};
+
+    std::string universe{};
+
+    for (std::string line{}; std::getline(file, line);)
+    {
+        std::istringstream fields{line};
+
+        std::string kind{};
+
+        if (!(fields >> kind) || kind.starts_with('#'))
+        {
+            continue;
+        }
+
+        if (kind == "universe")
+        {
+            fields >> universe;
+
+            if (universe == "cl100k")
+            {
+                ++fixture.universes;
+            }
+
+            continue;
+        }
+
+        std::string name{};
+
+        if (kind == "corpus" && universe.empty())
+        {
+            std::size_t bytes{};
+            std::size_t documents{};
+            std::string digest{};
+
+            fields >> name >> bytes >> documents >> digest;
+
+            fixture.corpora.push_back(
+                    Vendor_corpus{.name = name, .bytes = bytes, .documents = documents, .digest = digest});
+
+            continue;
+        }
+
+        if (universe != "cl100k")
+        {
+            continue;
+        }
+
+        if (kind != "ids")
+        {
+            ADD_FAILURE() << "unknown fixture line: " << line;
+
+            continue;
+        }
+
+        std::size_t count{};
+        std::string digest{};
+
+        fields >> name >> count >> digest;
+
+        fixture.ids[name] = Vendor_ids{.count = count, .digest = digest};
+    }
+
+    return fixture;
+}
+
+/**
+ * @brief Returns the path of a corpus in the directory MATISSE_CORPUS_DIR names.
+ * @param name The corpus's file name.
+ * @return The path, std::nullopt when no directory is named or it does not hold the corpus.
+ */
+std::optional<std::filesystem::path> corpus_path(const std::string_view name)
+{
+    const std::filesystem::path directory{CORPUS_DIR};
+
+    if (directory.empty() || !std::filesystem::exists(directory / name))
+    {
+        return std::nullopt;
+    }
+
+    return directory / name;
+}
+
+/**
+ * @brief Adds a run of ids to a digest as little-endian 32-bit words, the fixtures' digest of ids.
+ * @param hash The digest.
+ * @param ids The ids.
+ */
+void add_ids(matisse::common::Sha256& hash, const std::span<const Token_id_t> ids)
+{
+    for (const auto id : ids)
+    {
+        const std::array word{
+                static_cast<char>(id & 0xFFU), static_cast<char>((id >> 8U) & 0xFFU),
+                static_cast<char>((id >> 16U) & 0xFFU), static_cast<char>(id >> 24U)};
+
+        hash.add({word.data(), word.size()});
     }
 }
 
@@ -576,6 +754,90 @@ TEST(Encoder_test, Every_known_answer_of_the_fixture_is_the_encoding_of_its_text
     EXPECT_EQ(check.counts.universes, 1U);
     EXPECT_EQ(check.counts.encodings, 15U);
     EXPECT_EQ(check.counts.corpora, 3U);
+}
+
+TEST(Encoder_test, Every_corpus_of_the_vendor_fixture_the_corpus_directory_holds_encodes_to_the_vendors_ids)
+{
+    auto definition{pinned_cl100k()};
+
+    if (!definition)
+    {
+        GTEST_SKIP() << "MATISSE_VOCAB_DIR names no directory holding cl100k_base.tiktoken";
+    }
+
+    const auto [universes, corpora, vendor_ids]{vendor_fixture()};
+
+    EXPECT_EQ(universes, 1U);
+    EXPECT_EQ(corpora.size(), 14U);
+    EXPECT_EQ(vendor_ids.size(), 14U);
+
+    const auto encoder{cl100k_encoder(std::move(*definition))};
+
+    std::string absent{};
+
+    for (const auto& [name, bytes, documents, digest] : corpora)
+    {
+        const auto path{corpus_path(name)};
+
+        if (!path)
+        {
+            absent += absent.empty() ? name : ", " + name;
+
+            continue;
+        }
+
+        const auto text{contents(*path)};
+
+        EXPECT_EQ(text.size(), bytes) << name;
+        EXPECT_EQ(matisse::common::sha256(text), digest) << name;
+
+        matisse::common::Sha256 hash{};
+
+        std::size_t count{0};
+        std::size_t parts{0};
+
+        // Each document is pushed to the stream in parts of a mebibyte, so that a corpus of any size encodes in bounded
+        // memory, and finish() ends it, the ids returned since the last finish() being encode()'s of the document.
+        constexpr std::size_t push_bytes{1UZ << 20U};
+
+        Stream_encoder stream{encoder};
+
+        for (const auto part : std::views::split(text, '\0'))
+        {
+            const std::string_view document{part.begin(), part.end()};
+
+            for (std::size_t at{0}; at < document.size(); at += push_bytes)
+            {
+                const auto ids{stream.push(document.substr(at, push_bytes))};
+
+                add_ids(hash, ids);
+
+                count += ids.size();
+            }
+
+            const auto rest{stream.finish()};
+
+            add_ids(hash, rest);
+
+            count += rest.size();
+            ++parts;
+        }
+
+        const auto vendor{vendor_ids.find(name)};
+
+        ASSERT_NE(vendor, vendor_ids.end()) << name;
+
+        const auto& [vendor_count, vendor_digest]{vendor->second};
+
+        EXPECT_EQ(parts, documents) << name;
+        EXPECT_EQ(count, vendor_count) << name;
+        EXPECT_EQ(hash.digest(), vendor_digest) << name;
+    }
+
+    if (!absent.empty())
+    {
+        GTEST_SKIP() << "MATISSE_CORPUS_DIR names no directory holding " << absent;
+    }
 }
 
 TEST(Encoder_test, An_allowed_special_token_is_its_id_and_one_not_allowed_is_ordinary_text)

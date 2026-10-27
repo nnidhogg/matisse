@@ -1,6 +1,7 @@
 #ifndef MATISSE_LIBS_COMMON_INCLUDE_MATISSE_COMMON_SHA256_HPP
 #define MATISSE_LIBS_COMMON_INCLUDE_MATISSE_COMMON_SHA256_HPP
 
+#include <algorithm>
 #include <array>
 #include <bit>
 #include <cstddef>
@@ -11,9 +12,9 @@
 
 /**
  * @file
- * @brief SHA-256, sha256(), the digest the tests hold the pinned vocabularies and the generated class tables to, and
- *        the probes the corpora and their ids, in its three steps: the padding, one block's message schedule and its
- *        compression.
+ * @brief SHA-256, the digest the tests hold the pinned vocabularies, the generated class tables and the corpora's ids
+ *        to, and the probes the corpora and their ids, in its three steps, the padding, one block's message schedule
+ *        and its compression: Sha256 takes it over a message given in parts, and sha256() over one byte string.
  *
  * The tests and the probes share it through matisse_common, a target in the build tree only, neither installed nor
  * exported, so that checking a digest needs no hashing library.
@@ -21,13 +22,15 @@
 namespace matisse::common
 {
 /**
- * @brief Returns a message padded as SHA-256 pads it: a one bit, zeros to 56 mod 64, and the bit length big-endian.
- * @param text The message.
- * @return The padded message, a whole number of 64-byte blocks.
+ * @brief Returns the end of a message padded as SHA-256 pads it: the bytes past its last whole block, a one bit, zeros
+ *        to 56 mod 64, and the message's bit length big-endian.
+ * @param tail The bytes past the message's last whole block, fewer than 64.
+ * @param length The message's length in bytes.
+ * @return The padded end, one or two 64-byte blocks.
  */
-inline std::string padded_message(const std::string_view text)
+inline std::string padded_tail(const std::string_view tail, const std::uint64_t length)
 {
-    std::string padded{text};
+    std::string padded{tail};
 
     padded.push_back(static_cast<char>(0x80));
 
@@ -36,7 +39,7 @@ inline std::string padded_message(const std::string_view text)
         padded.push_back('\0');
     }
 
-    const auto bit_length{static_cast<std::uint64_t>(text.size()) * 8};
+    const auto bit_length{length * 8};
 
     for (int shift{56}; shift >= 0; shift -= 8)
     {
@@ -136,16 +139,88 @@ inline std::array<std::uint32_t, 8> compressed(
 }
 
 /**
- * @brief Returns the SHA-256 of a byte string, as hexadecimal, the digest each pinned file and table is named by.
- * @param text The bytes.
- * @return The 64 hexadecimal digits.
+ * @brief SHA-256 over a message given in parts: each whole 64-byte block is compressed as it arrives and only the bytes
+ *        past the last one are held, so that a message too long to copy, such as a corpus's ids written as words, is
+ *        hashed as it is produced.
  */
-inline std::string sha256(const std::string_view text)
+class Sha256
 {
-    std::array<std::uint32_t, 8> state{0x6A09E667, 0xBB67AE85, 0x3C6EF372, 0xA54FF53A,
-                                       0x510E527F, 0x9B05688C, 0x1F83D9AB, 0x5BE0CD19};
+public:
+    /**
+     * @brief Starts the digest of an empty message.
+     */
+    Sha256();
 
-    const auto padded{padded_message(text)};
+    /**
+     * @brief Hashes the next part of the message.
+     * @param part The part's bytes.
+     */
+    void add(std::string_view part);
+
+    /**
+     * @brief Returns the SHA-256 of the parts added, as hexadecimal.
+     * @return The 64 hexadecimal digits.
+     */
+    [[nodiscard]] std::string digest() const;
+
+private:
+    /**
+     * @brief The hash state after the whole blocks added.
+     */
+    std::array<std::uint32_t, 8> state_;
+
+    /**
+     * @brief The bytes added past the last whole block, fewer than 64.
+     */
+    std::string held_;
+
+    /**
+     * @brief The bytes added.
+     */
+    std::uint64_t length_;
+};
+
+inline Sha256::Sha256()
+    : state_{0x6A09E667, 0xBB67AE85, 0x3C6EF372, 0xA54FF53A, 0x510E527F, 0x9B05688C, 0x1F83D9AB, 0x5BE0CD19}
+    , held_{}
+    , length_{0}
+{}
+
+inline void Sha256::add(const std::string_view part)
+{
+    length_ += part.size();
+
+    // Held bytes are completed to a block first; with none held, the part's whole blocks are compressed in place.
+    const auto filling{held_.empty() ? 0UZ : std::min(part.size(), 64 - held_.size())};
+
+    held_ += part.substr(0, filling);
+
+    auto rest{part.substr(filling)};
+
+    if (held_.size() == 64)
+    {
+        const auto schedule{schedule_of(held_)};
+
+        state_ = compressed(state_, schedule);
+
+        held_.clear();
+    }
+
+    for (; rest.size() >= 64; rest.remove_prefix(64))
+    {
+        const auto schedule{schedule_of(rest.substr(0, 64))};
+
+        state_ = compressed(state_, schedule);
+    }
+
+    held_ += rest;
+}
+
+inline std::string Sha256::digest() const
+{
+    auto state{state_};
+
+    const auto padded{padded_tail(held_, length_)};
 
     for (std::size_t block{0}; block < padded.size(); block += 64)
     {
@@ -162,6 +237,20 @@ inline std::string sha256(const std::string_view text)
     }
 
     return hex;
+}
+
+/**
+ * @brief Returns the SHA-256 of a byte string, as hexadecimal, the digest each pinned file and table is named by.
+ * @param text The bytes.
+ * @return The 64 hexadecimal digits.
+ */
+inline std::string sha256(const std::string_view text)
+{
+    Sha256 hash{};
+
+    hash.add(text);
+
+    return hash.digest();
 }
 
 } // namespace matisse::common

@@ -47,11 +47,12 @@ if (MATISSE_BUILD_TESTS)
 
     add_test(NAME ${PROJECT_NAME}_tests COMMAND ${PROJECT_NAME}_tests)
 
-    # The fixtures are shared, every tokenizer's universe in one file per subject, and the pinned vocabularies are read
-    # from outside the tree; the tests that need them skip when none is named.
+    # The fixtures are shared, every tokenizer's universe in one file per subject, and the pinned vocabularies and the
+    # corpora are read from outside the tree; the tests that need them skip when none is named.
     target_compile_definitions(${PROJECT_NAME}_tests
             PRIVATE
             SOURCE_DIR="${MATISSE_SOURCE_DIR}"
             VOCAB_DIR="${MATISSE_VOCAB_DIR}"
+            CORPUS_DIR="${MATISSE_CORPUS_DIR}"
     )
 endif ()

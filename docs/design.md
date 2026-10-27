@@ -3,18 +3,19 @@
 The decisions behind matisse, in the order a reader meets them: what the library is and is not, the repository and its
 build, the libraries' interfaces, how the vendor verifiers move from their Python reference into C++, how the result is
 tested against the real tokenizers, what matisse needs from munch, the choices still open, and the order of work. Steps
-1 to 13 of the order of work are built, `read_tokenizer_json()` waiting on open choice 5: load reads GPT-2's files and
-tiktoken rank files, pretok classes and segments a text and builds a pattern's split verifier and factorization lexer,
-validate decides a pattern's window tables under both certificates with their right contexts, measures their anchor
-supply on an input and renders the report as text and as JSON, the gpt2, cl100k, o200k and llama3 libraries describe
-their patterns, lookup finds them, `matisse-validate` reports a rank file read under a pattern, and encode encodes a
-text and decodes its ids under both merge rules, with the whole-piece lookup, the special-token cuts, the fast merge,
-its backtracking and the piece cache, encodes it in parallel, cut only at the certified cuts of either inventory, and
-streams it, every id returned as soon as no continuation of the text can change it, while `validate_merges()` is still
-to be written; on the fourteen corpora of [benchmarks.md](benchmarks.md) matisse's ids equal tiktoken's, Hugging Face
-tokenizers' and the bpe crate's by digest wherever each of them ran, and the page holds what the corpus probe, the bench
-and the other encoders' harnesses measured. The sketches below give names and types, and they change as the code is
-written.
+1 to 13 and 15 of the order of work are built, `read_tokenizer_json()` waiting on open choice 5: load reads GPT-2's
+files and tiktoken rank files, pretok classes and segments a text and builds a pattern's split verifier and
+factorization lexer, validate decides a pattern's window tables under both certificates with their right contexts,
+measures their anchor supply on an input and renders the report as text and as JSON, the gpt2, cl100k, o200k and llama3
+libraries describe their patterns, lookup finds them, `matisse-validate` reports a rank file read under a pattern, and
+encode encodes a text and decodes its ids under both merge rules, with the whole-piece lookup, the special-token cuts,
+the fast merge, its backtracking and the piece cache, encodes it in parallel, cut only at the certified cuts of either
+inventory, and streams it, every id returned as soon as no continuation of the text can change it, while
+`validate_merges()` is still to be written; on the fourteen corpora of [benchmarks.md](benchmarks.md) matisse's ids
+equal tiktoken's, Hugging Face tokenizers' and the bpe crate's by digest wherever each of them ran, the vendor fixture
+records their digests and each tokenizer's tests hold matisse's ids to them, and the page holds what the corpus probe,
+the bench and the other encoders' harnesses measured. The sketches below give names and types, and they change as the
+code is written.
 
 ## **What matisse is and is not**
 
@@ -1110,6 +1111,11 @@ checked by its tokenizer's tests. The fixtures, one per subject:
   more of OpenAI's examples, from its openai-cookbook's How_to_count_tokens_with_tiktoken.ipynb at db31449, and Meta's
   `"This is a test sentence."`, 2028 374 264 1296 11914 13 for Llama 3, from meta-llama/llama3's llama/test_tokenizer.py
   at a0940f9, less the beginning and end of text ids it adds.
+- **Vendors**: the fourteen corpora of [benchmarks.md](benchmarks.md) by file name, each with its bytes, the documents
+  its NUL bytes separate and its SHA-256, held to the corpus directory's manifest, and under each tokenizer the count
+  and digest of the ids tiktoken, Hugging Face tokenizers and the bpe crate gave on each corpus, its documents' ids
+  concatenated, with the vendors that ran on it, read from the ids lines of the sessions the page's exactness table
+  comes from, the vendors agreeing on every corpus and, on the three corpora of the test strategy, with the reference.
 - **Lazy certification**: the verdicts and refutations of the lazy certification's validation set at the depths it
   records.
 
@@ -1162,12 +1168,15 @@ Three layers, each against something independent of the code under test:
 
 The reference ids in the fixtures are the Python references, encoder.py's loop and tiktoken's rank merge restated over
 Python's engine with Unicode 15.0, which are held to the published known answers and not run against the vendors' code
-on the corpora. One step of the order of work closes that: tiktoken and Hugging Face tokenizers are run on the three
-corpora outside the tree, and the fixture script records their id digests beside the restated references', so the probe
-holds matisse to the vendors themselves. A difference there would be the Unicode version or a vendor's engine, and it
-would name the codepoint. On the three corpora and the eleven of [benchmarks.md](benchmarks.md) there is none:
-tiktoken's, Hugging Face's and the bpe crate's ids are matisse's by digest on every corpus each of them ran on, and
-recording them into the fixture is step 15.
+on the corpora. Step 15 of the order of work closes that: tiktoken, Hugging Face tokenizers and the bpe crate were run
+on the fourteen corpora of [benchmarks.md](benchmarks.md) outside the tree, and the fixture script records the digests
+of their ids in the vendor fixture beside the known-answer fixture, holding them to the restated references' on the
+three corpora of the test strategy, so that matisse is held to the vendors themselves. Given the corpus directory with
+`-DMATISSE_CORPUS_DIR`, each tokenizer's tests encode every corpus of the fixture the directory holds, each document
+pushed to a stream in parts of a mebibyte, whose ids between two `finish()` calls are `encode()`'s of the bytes pushed
+between them, so that a corpus of any size encodes in bounded memory, and hold the corpus to its digest and the ids to
+the vendors'; a corpus the directory lacks is skipped by name, and every one is skipped when no directory is named. A
+difference would be the Unicode version or a vendor's engine; on every corpus each vendor ran on there is none.
 
 The fuzz harnesses are step 16 of the order of work and not written yet. They are to live in tools/fuzz and follow
 hopper's contract (a refusal is the answer to bad input, a crash, a sanitizer report or a hang is a finding): one is to
@@ -1250,9 +1259,10 @@ matisse's by the division.
    a one-line change in hopper's next release, which has to build against munch 3.0.0 anyway (as 1.0.1 lifted hopper to
    2.1.0). A third JSON parser in the family would duplicate a tested one.
 6. **The Unicode version of the class tables.** The fixtures come from Python 3.12, Unicode 15.0.0; tiktoken's and
-   Hugging Face's engines carry their own versions. Recommendation: 15.0.0 for the first version so that the fixtures
-   replay, then the version of the engine the vendor cross-check (layer 3) shows to matter, regenerating the fixtures
-   with it.
+   Hugging Face's engines carry their own versions. Settled: 15.0.0, so that the fixtures replay, since the vendor
+   cross-check (layer 3) shows no version to matter: on every corpus of the vendor fixture each vendor's ids are
+   matisse's. Moving the pin changes the ids of a text holding a code point whose class moved, so it is a major release,
+   as the README's Versioning and Stability section says, with the fixtures regenerated under the new version.
 7. **Where the DFA kit lives.** The construction of M needs product, complement and concatenation of DFAs, which munch
    does not offer publicly. By the division test a DFA kit is general and belongs in munch; by the rule of duplicating
    rather than sharing unless really needed it stays with the one construction that uses it. Settled: in matisse's
@@ -1316,6 +1326,12 @@ Each step lands green on its own, its tests first where a fixture exists.
 14. validate: `validate_merges()`, the lazy route for byte-level tables without a pre-tokenizer, held to the lazy
     fixture.
 15. The vendor cross-check (tiktoken, Hugging Face tokenizers), its digests into the fixture, the Unicode version
-    settled (choice 6).
+    settled (choice 6). Built: the fixture script reads the ids lines of tiktoken, Hugging Face tokenizers and the bpe
+    crate from the sessions of [benchmarks.md](benchmarks.md) into the vendor fixture,
+    libs/load/tests/data/vendors_reference.txt, the fourteen corpora with their digests and the 56 counts and digests of
+    ids under the four tokenizers, every one the page's, and each tokenizer's tests hold matisse's ids to them on the
+    corpora `-DMATISSE_CORPUS_DIR` holds. On all fourteen, 4.14 GB, every digest holds, in 228 seconds under GPT-2, 235
+    under cl100k, 243 under o200k and 254 under Llama 3, each test within 2.2 GB resident. The pin stays at Unicode
+    15.0.0.
 16. The fuzz harnesses and their CI job; the README's Versioning and Stability section naming the stable surface; then
     the first release.

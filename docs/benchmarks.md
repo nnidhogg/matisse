@@ -36,7 +36,8 @@ gives the result every timed pass must reproduce; that pass is held to `encode()
 no cache, of the prompts with a kept cache, of `encode_parallel()` and of the batch, and every mode prints the ids line
 of `encode()`, so no figure is taken of an encoding other than the one whose ids are compared. Both programs run as
 CTest entries when `-DMATISSE_VOCAB_DIR` names the vocabulary directory, the bench for one pass of the single mode's
-rows on the validator's sample, and `-DMATISSE_CORPUS_DIR` adds the probe on the three corpora of the test strategy.
+rows on the validator's sample, and `-DMATISSE_CORPUS_DIR` adds the probe on the three corpora of the test strategy and
+the tokenizers' tests of the vendors' ids on every corpus the directory holds.
 
 The other encoders run from harnesses kept beside the corpora outside the repository, so that nothing a vendor ships
 enters it, and print rows and ids lines in the same format:
@@ -127,12 +128,14 @@ file; the digests pin the snapshot, and the corpus directory lists the revision 
 
 Every encoder's ids were compared by digest on every corpus it ran on, and none differs; the ids on the prompts, the
 mixed file and the pages, and matisse's on the three corpora of the test strategy, come from the ids lines of the timed
-runs. matisse's ids on the three corpora of the test strategy are the known-answer fixture's. Hugging Face could not
-encode enwik9 whole, its process killed with 46 GiB resident while it built the `Encoding`, and was not run on the mixed
-file, twice that size; its ids of enwik9's pages, concatenated, have enwik9's digest, so every page begins at a piece
-boundary of every pattern, and the batch covers enwik9. Under o200k and Llama 3 matisse's ids equal every other
-encoder's on every corpus as well. Each engine carries Unicode tables of its own and matisse pins Unicode 15.0.0, and on
-these corpora the difference changes no id.
+runs. matisse's ids on the three corpora of the test strategy are the known-answer fixture's, and the vendor fixture,
+libs/load/tests/data/vendors_reference.txt, records every count and digest of the table with the encoders other than
+matisse that gave it, which each tokenizer's tests hold matisse's ids to on every corpus a directory named with
+`-DMATISSE_CORPUS_DIR` holds. Hugging Face could not encode enwik9 whole, its process killed with 46 GiB resident while
+it built the `Encoding`, and was not run on the mixed file, twice that size; its ids of enwik9's pages, concatenated,
+have enwik9's digest, so every page begins at a piece boundary of every pattern, and the batch covers enwik9. Under
+o200k and Llama 3 matisse's ids equal every other encoder's on every corpus as well. Each engine carries Unicode tables
+of its own and matisse pins Unicode 15.0.0, and on these corpora the difference changes no id.
 
 | Corpus | Tokenizer | Ids | SHA-256 of the ids | Agreeing |
 |---|---|---:|---|---|

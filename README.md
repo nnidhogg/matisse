@@ -181,9 +181,11 @@ with `-DMATISSE_VOCAB_DIR=DIR`, each file is held to the SHA-256 docs/design.md 
 when no directory is named; nothing is fetched at test time.
 
 The corpus probe and the bench in `tools/probes` register with CTest when the vocabulary directory is named, the probe
-on generated texts and the bench for one pass on a sample, and `-DMATISSE_CORPUS_DIR=DIR` adds the probe on the three
-corpora of the test strategy, which are not in the tree either; [docs/benchmarks.md](docs/benchmarks.md) says how they
-are built.
+on generated texts and the bench for one pass on a sample. `-DMATISSE_CORPUS_DIR=DIR` names a directory of the corpora
+of [docs/benchmarks.md](docs/benchmarks.md), which are not in the tree either and which the page says how to build: it
+adds the probe on the three corpora of the test strategy, and each tokenizer's tests hold matisse's ids of every corpus
+the directory holds to the vendors', whose digests libs/load/tests/data/vendors_reference.txt records, skipping by name
+the corpora the directory lacks.
 
 ## **Versioning and Stability**
 

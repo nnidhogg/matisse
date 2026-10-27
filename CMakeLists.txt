@@ -46,10 +46,11 @@ endif ()
 # tests read them from this directory, each held to its digest, and skip when it is not given.
 set(MATISSE_VOCAB_DIR "" CACHE PATH "A directory holding the pinned vocabulary files the tests read")
 
-# The three corpora of the test strategy are not in the tree either: a directory holding twitter.json,
-# munch-python@15b2863c.txt and munch-cpp@15b2863c.txt, built as docs/benchmarks.md says, which the corpus probe holds
-# to the fixtures' digests when it is given beside the vocabulary directory.
-set(MATISSE_CORPUS_DIR "" CACHE PATH "A directory holding the three corpora of the test strategy")
+# The corpora of docs/benchmarks.md are not in the tree either: a directory holding them, built as the page says, the
+# three of the test strategy, twitter.json, munch-python@15b2863c.txt and munch-cpp@15b2863c.txt, among them. Given
+# beside the vocabulary directory, the corpus probe holds those three to the fixtures' digests, and each tokenizer's
+# tests hold its ids of every corpus the directory holds to the vendors' digests, skipping by name the corpora it lacks.
+set(MATISSE_CORPUS_DIR "" CACHE PATH "A directory holding the corpora of docs/benchmarks.md")
 
 include(GNUInstallDirs)
 
