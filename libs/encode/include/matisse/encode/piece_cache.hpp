@@ -48,6 +48,9 @@ inline constexpr std::size_t longest_cached_piece{255};
 
 /**
  * @brief A bounded map from the bytes of a merged piece to its ids, filled until it holds its bound.
+ *
+ * A cache has no lock and is used by one thread at a time, each thread of a pool holding its own, and any number of
+ * caches may serve one encoder at once.
  */
 class Piece_cache
 {
@@ -67,6 +70,8 @@ public:
 
     /**
      * @brief Returns whether the cache was made for an encoder.
+     *
+     * It serves the encoder and is not part of matisse's stable surface.
      * @param encoder The encoder.
      * @return True when it is the encoder the cache serves.
      */
@@ -74,6 +79,8 @@ public:
 
     /**
      * @brief Returns the ids stored for a piece.
+     *
+     * It serves the encoder and the streaming encoder and is not part of matisse's stable surface.
      * @param piece The piece's bytes, compared whole.
      * @return The ids, valid until the next call of store(); std::nullopt when the piece is not stored.
      */
@@ -82,6 +89,8 @@ public:
     /**
      * @brief Stores the ids of a piece not stored yet, unless the cache holds its bound or the piece is longer than
      *        longest_cached_piece.
+     *
+     * It serves the encoder and the streaming encoder and is not part of matisse's stable surface.
      * @param piece The piece's bytes.
      * @param ids The piece's ids, as the merge gives them.
      */

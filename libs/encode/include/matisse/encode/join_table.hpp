@@ -22,7 +22,9 @@
  * twice the joins, the home the key's hash by Boost's hash_combine taken modulo their number, and the walk the next
  * slot after each, linear probing; a free slot is marked by the key of two ids of all ones, which no pair of a
  * definition's ids is, a definition holding fewer than 2^32 tokens. On cl100k's file the table holds 233,378 pairs in
- * 524,288 slots.
+ * 524,288 slots. Join_table is the merge's own and is not part of matisse's stable surface. The header is installed
+ * only because every header of the library lives under include, as munch keeps none under src, and it may change in
+ * minor releases.
  */
 namespace matisse::encode
 {

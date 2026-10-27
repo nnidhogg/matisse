@@ -26,7 +26,9 @@
  * stable when every run says the same of a piece ending after it: a run marked there says it ends, one unmarked in a
  * state that does not accept says it does not, one unmarked in an accepting state says both unless the state is a dead
  * end, where it ends. That is the stable marking, the longest prefix of markings every continuation's segmentation
- * shares, as the design of the streaming encoder proves.
+ * shares, as the design of the streaming encoder proves. Live_runs is the streaming encoder's own and is not part of
+ * matisse's stable surface. The header is installed only because every header of the library lives under include, as
+ * munch keeps none under src, and it may change in minor releases.
  */
 namespace matisse::encode
 {

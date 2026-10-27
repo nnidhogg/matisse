@@ -34,7 +34,9 @@
  * bytes, filled from the join table at construction, and look later pairs up in the join table. On a definition whose
  * every token that encodes to itself is joined last from two tokens of lower order, decided at construction, a piece
  * longer than 128 bytes, or one of whose bytes at least half lie outside ASCII, is merged by backtracking instead, a
- * Backtracker in backtracker.hpp, which gives the same ids.
+ * Backtracker in backtracker.hpp, which gives the same ids. Merger is the encoder's own and is not part of matisse's
+ * stable surface. The header is installed only because every header of the library lives under include, as munch keeps
+ * none under src, and it may change in minor releases.
  */
 namespace matisse::encode
 {

@@ -109,8 +109,8 @@ struct Window_table
  * @brief What validate() decides of a pattern: its window table under each certificate and the boundary gap of its
  *        split verifier, with the pattern they were decided of.
  *
- * validate() is the only construction path, so a report holds its window tables only beside their own pattern, and an
- * encoder or a supply built from it reads that pattern and no other.
+ * validate() is the only construction path, so a report as validate() returns it holds the pattern its window tables
+ * were decided of, and an encoder or a supply built from it reads that pattern.
  */
 struct Report
 {
@@ -200,6 +200,8 @@ private:
  * @brief Returns text as a JSON string, the quote, the backslash and the controls escaped; a byte beyond ASCII stands
  *        as it is where it is part of a well-formed UTF-8 sequence, the text being UTF-8, and is escaped as the code
  *        point of its value where it is not, so that the document is JSON whatever bytes a path holds.
+ *
+ * It serves the renderings of the report, the supply and matisse-validate, and is not part of matisse's stable surface.
  * @param text The text.
  * @return The JSON text, quotes included.
  */
@@ -207,6 +209,8 @@ private:
 
 /**
  * @brief Returns the ending a noun takes for a count.
+ *
+ * It serves the renderings of the report, the supply and matisse-validate, and is not part of matisse's stable surface.
  * @param count The count.
  * @return Nothing for one, `s` for any other.
  */

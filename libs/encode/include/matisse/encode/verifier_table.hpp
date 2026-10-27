@@ -19,7 +19,9 @@
  * munch's Verifier keeps M's transitions in a hash map keyed by a state and a marked symbol. The table holds the same
  * transitions in one array indexed by the state, the class and the mark, so that a step is one load, and the streaming
  * encoder steps every live run of M twice on every code point it reads. M has 21 states for GPT-2, 32 for cl100k, 46
- * for o200k and 33 for Llama 3, so the table is at most 46 states by 30 classes by two marks.
+ * for o200k and 33 for Llama 3, so the table is at most 46 states by 30 classes by two marks. Verifier_table is the
+ * streaming encoder's own and is not part of matisse's stable surface. The header is installed only because every
+ * header of the library lives under include, as munch keeps none under src, and it may change in minor releases.
  */
 namespace matisse::encode
 {

@@ -21,7 +21,9 @@
  * An anchor is a position t + o of a stretch's class string for an occurrence at t of a window the table certifies at
  * origin o, and the cut there is a pre-token boundary of every text the stretch stands in, whatever comes before it or
  * after it. The index classes a stretch in blocks of block_bytes from the byte asked for, so that a walk ending at an
- * anchor near it reads the text near it and no more.
+ * anchor near it reads the text near it and no more. Window_index is the encoder's own and is not part of matisse's
+ * stable surface. The header is installed only because every header of the library lives under include, as munch keeps
+ * none under src, and it may change in minor releases.
  */
 namespace matisse::encode
 {

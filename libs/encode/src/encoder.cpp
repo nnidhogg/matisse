@@ -254,7 +254,7 @@ std::vector<load::Token_id_t> Encoder::encode(const std::string_view text, Piece
 {
     if (!cache.serves(*this))
     {
-        throw std::invalid_argument{"Encoder: the piece cache was made for another encoder"};
+        throw std::invalid_argument{"Encoder::encode: the piece cache was made for another encoder"};
     }
 
     const auto found{occurrences(text)};
@@ -585,9 +585,10 @@ std::string Encoder::decode(const std::span<const load::Token_id_t> ids) const
 
         if (special == specials.end())
         {
-            throw std::invalid_argument{std::format(
-                    "Encoder: the id {} at index {} is neither an ordinary nor a special token of the definition", id,
-                    index)};
+            throw std::out_of_range{std::format(
+                    "Encoder::decode: the id {} at index {} is neither an ordinary nor a special token of the "
+                    "definition",
+                    id, index)};
         }
 
         text += special->spelling;

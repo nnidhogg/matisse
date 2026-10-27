@@ -33,7 +33,9 @@
  * position are the merge of the bytes before it, one sequence however the search reaches it, so a position from which
  * no token fits once fits never. The method is GitHub's bpe crate's, the Corollaries III and IIIa of its README and its
  * backtracking encoder; deciding the condition once, which the crate's README assumes of every table and its
- * constructor does not check, and reading every split from the token's own merge are matisse's.
+ * constructor does not check, and reading every split from the token's own merge are matisse's. Backtracker is the
+ * merge's own and is not part of matisse's stable surface. The header is installed only because every header of the
+ * library lives under include, as munch keeps none under src, and it may change in minor releases.
  */
 namespace matisse::encode
 {

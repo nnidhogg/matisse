@@ -76,7 +76,8 @@ public:
      * @param bytes The next bytes of the text, well-formed UTF-8 once the sequence a push ends inside is completed.
      * @return The ids newly final, in order.
      * @throws std::invalid_argument If the bytes read are not well-formed UTF-8, as classes_of() refuses them, the byte
-     *         offset counted from the first byte the stream had not classed; the stream is then not read again.
+     *         offset counted from the first byte the stream had not classed; a stream that has refused is not pushed to
+     *         or finished again, and a new Stream_encoder over the same encoder reads the next text.
      * @throws std::length_error If a piece is 2^32 bytes or longer, as encode() refuses it.
      */
     [[nodiscard]] std::vector<load::Token_id_t> push(std::string_view bytes);

@@ -46,7 +46,8 @@ Four stage libraries hold nothing of a specific tokenizer and take its descripti
   verifier for munch.
 - **validate** decides which class windows certify a cut, at which origin and with which right context, and measures how
   many anchors they supply on an input.
-- **encode** is the runtime, a sequential and a parallel encoder whose ids are identical at every chunk count.
+- **encode** is the runtime, a sequential, a parallel and a streaming encoder, the parallel one's ids identical at every
+  chunk count, and the piece cache a caller keeps across its calls.
 
 Each tokenizer is a small library of its own beside them, holding its pattern description, its Unicode class tables, the
 vendor's special tokens and its tests, and a consumer that encodes under one tokenizer links its library, which brings
@@ -183,6 +184,47 @@ The corpus probe and the bench in `tools/probes` register with CTest when the vo
 on generated texts and the bench for one pass on a sample, and `-DMATISSE_CORPUS_DIR=DIR` adds the probe on the three
 corpora of the test strategy, which are not in the tree either; [docs/benchmarks.md](docs/benchmarks.md) says how they
 are built.
+
+## **Versioning and Stability**
+
+matisse follows semantic versioning from 1.0.0 on, munch's rule: a minor release adds and never removes or renames on
+the stable surface, and a major release is the only place a name disappears. The stable surface is the following, under
+the contracts their headers and [docs/limits.md](docs/limits.md) state. It holds load's `Token_id_t`, `Merge_rule`,
+`Special_token`, `Definition`, `read_gpt2()` and `read_tiktoken()`; pretok's `Code_point_set`, `Alphabet`,
+`Alternative`, `Pattern`, `Class_t`, `Class_table` with its constructor, `symbols()` and `classes()`, `classes_of()`,
+`Segmenter` with its constructor and `boundaries()`, `split_verifier()` and `factorization_lexer()`; validate's
+`Inventory`, `default_width`, `Certified_window`, `Window_table`, `Report`, `validate()`, `render()`, `json()`, `Gaps`,
+`Anchors`, `Supply`, `supply()`, `supply_json()` and `supply_section()`; encode's `Encoder` with its constructor, both
+`encode()`, `chunk_boundaries()`, `encode_parallel()`, `decode()`, `definition()` and `allowed()`, `Piece_cache` with
+its constructor, the bounds `piece_cache_capacity` and `longest_cached_piece`, and `Stream_encoder` with its
+constructor, `push()` and `finish()`; each tokenizer library's `pattern()` and `specials()`; lookup's `Tokenizer`,
+`tokenizers()` and `tokenizer()`; and the `matisse-validate` command line with its JSON document, as munch puts
+`munch-audit` on its surface. The class tables are pinned to Unicode 15.0.0, as [docs/limits.md](docs/limits.md)
+describes, and moving the pin changes the ids of some texts, those holding a code point whose class differs between the
+two versions, so the pin moves only in a major release.
+
+The classes the encoders are built from, `Merger`, `Backtracker`, `Join_table`, `Spelling_table`, `Token_trie`,
+`Window_index`, `Verifier_table` and `Live_runs`, and pretok's `automata` kit, which builds the verifier, are installed
+only because every header of a library lives under include, as munch keeps none under src; they serve the pipeline and
+may change in minor releases. So may the five accessors through which an `Encoder` serves the streaming encoder,
+`merger()`, `class_table()`, `verifier()`, `spellings_sorted()` and `unformed_sorted()`, the `serves()`, `find()` and
+`store()` through which a `Piece_cache` serves the encoders, and validate's `json_string()` and `plural()`, which serve
+the renderings. The corpus probe and the bench under `tools/probes` and the prose in `docs/` carry no compatibility
+promise, and performance numbers are measurements, not contracts.
+
+**Errors.** A function refuses content it cannot take with `std::invalid_argument`, the message naming what it refuses,
+among them ill-formed UTF-8 at its byte offset, a definition the merge cannot take, a special token the definition does
+not hold, a pattern that is not total and a piece cache made for another encoder. `decode()` refuses an id that names no
+token with `std::out_of_range`, naming the id and its index, as munch's `Mode_lexer` refuses an index that names no
+mode. A file that cannot be read is refused with `std::runtime_error`, and a piece of 2^32 bytes or longer with
+`std::length_error` naming its length. Nothing is repaired or guessed, as [docs/limits.md](docs/limits.md) describes.
+
+**Platforms.** The promise is munch's: 64-bit Linux with GCC 13 or later and Clang 19 or later, source compatibility
+within a major version and no ABI promise. CI builds and tests on x86-64 and ARM64 and runs the address,
+undefined-behavior and thread sanitizers on x86-64. The munch submodule is pinned to a release, 3.0.0 at this version,
+and a matisse release names the munch release it was built and tested against; the `Segmenter` runs a
+`munch::dfa::Simulator`, from the layer munch keeps outside its stable surface, so matisse's promise holds with the
+munch release it names.
 
 ## **License**
 

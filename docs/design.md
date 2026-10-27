@@ -116,8 +116,9 @@ do.
 Every declaration gets munch's full doc block when written. Aggregates are built with designated initializers, results
 are returned rather than written through out-parameters, and there are no raw pointers. Refusals follow munch. Content a
 function cannot take throws `std::invalid_argument` with a message naming the item and where it is, as `merge_tower()`
-names a merge and its rank, and a file that cannot be read throws `std::runtime_error{"cannot read <path>"}`, as
-munch-audit's main does.
+names a merge and its rank, an id that names no token throws `std::out_of_range`, as `Mode_lexer` refuses an index that
+names no mode, and a file that cannot be read throws `std::runtime_error{"cannot read <path>"}`, as munch-audit's main
+does.
 
 ### **Loaders, matisse::load**
 
@@ -592,11 +593,12 @@ four, for GPT-2 that is 87 and 540 windows of 18,357 and 32,218, for cl100k 112 
 carries `boundary_gap()` of the split verifier, which is unbounded for every pattern in scope, since a run of letters of
 any length is one piece, of lower case letters under o200k. It also holds a copy of the pattern it was decided of, and
 its constructor is private with `validate()` its friend, as munch's `Lexer` exists only over what its `Builder`
-compiled, so that the encoder and `supply()` read the pattern from the report and no window table reaches them beside a
-pattern it was not decided of. A definition without a pre-tokenizer goes to `validate_merges()` instead, which builds
-`munch::verifier::token_automaton()` once and decides each candidate window by `miscovering()` on it, the lazy
-certification. Its candidates are given by the caller; the command line draws them from an input, every byte and the
-most frequent byte pairs and triples, since all byte windows of width three are too many to decide at full scale.
+compiled, so that a report as `validate()` returns it holds its window tables beside the pattern they were decided of,
+and the encoder and `supply()` read the pattern from the report. A definition without a pre-tokenizer goes to
+`validate_merges()` instead, which builds `munch::verifier::token_automaton()` once and decides each candidate window by
+`miscovering()` on it, the lazy certification. Its candidates are given by the caller; the command line draws them from
+an input, every byte and the most frequent byte pairs and triples, since all byte windows of width three are too many to
+decide at full scale.
 
 `supply()` measures one inventory's anchors on an input, the interior positions where an occurrence of a certified
 window places its origin, counted at the byte offsets of their code points. It classes the input with the alphabet of
@@ -816,23 +818,23 @@ allowed are ordinary text, which is tiktoken's `encode()` with that `allowed_spe
 encoder.py's behavior when none is allowed; tiktoken leaves the choice between allowed spellings that begin at one byte
 to the order of its table, and no allowed spelling begins another on any definition in scope. `decode()` spells each
 ordinary id's bytes and each special id's spelling as raw bytes, not checked to be UTF-8, since a run of ids cut inside
-a code point spells bytes that are not, and refuses an id that is neither, naming it and its index. `chunk_boundaries()`
-aims for `chunks` pieces of equal size, as `core::Lexer`'s does: each interior boundary is the first cut at or after the
-later of its equal-division target and one past the previous boundary, and a target with no cut after it ends the walk.
-A cut is an anchor, a position `t + o` for an occurrence at `t` inside one stretch of a window the table certifies at
-origin `o`, at least the width less one codepoints after the previous boundary, so that the occurrence certifying it
-begins in the chunk the cut ends, as the splice needs, and as far after the stretch's start, as the Python reference
-spaces its first cut from the text's start; or it is where an allowed special token begins or ends, a cut of its own.
-The spacing is the Python reference's, and it leaves out an anchor that stands closer than that to the previous boundary
-even when its occurrence begins after it. `Window_index` holds the table's windows by their class strings and finds the
-least anchor of a stretch at or after a byte, classing the text in blocks of 256 bytes from there, so that a walk reads
-the text near its target and no more. `encode_parallel()` finds the allowed special tokens once and gives each chunk to
-a worker, one `std::jthread` per chunk beyond the last, which runs on the calling thread, as `tokenize_all_parallel()`
-does (open choice 4). A worker segments its chunk's stretches as `encode()` does, the last one followed by
-`right_context` further codepoints of the real text, read as a complete input there unless a special token or the text's
-end comes first, keeps the pieces that end at or before its cut, and merges them with a piece cache of its own. The ids
-of the chunks, concatenated, are the result, and an exception a worker throws is rethrown on the calling thread once
-every worker has joined.
+a code point spells bytes that are not, and refuses an id that is neither with `std::out_of_range`, naming it and its
+index. `chunk_boundaries()` aims for `chunks` pieces of equal size, as `core::Lexer`'s does: each interior boundary is
+the first cut at or after the later of its equal-division target and one past the previous boundary, and a target with
+no cut after it ends the walk. A cut is an anchor, a position `t + o` for an occurrence at `t` inside one stretch of a
+window the table certifies at origin `o`, at least the width less one codepoints after the previous boundary, so that
+the occurrence certifying it begins in the chunk the cut ends, as the splice needs, and as far after the stretch's
+start, as the Python reference spaces its first cut from the text's start; or it is where an allowed special token
+begins or ends, a cut of its own. The spacing is the Python reference's, and it leaves out an anchor that stands closer
+than that to the previous boundary even when its occurrence begins after it. `Window_index` holds the table's windows by
+their class strings and finds the least anchor of a stretch at or after a byte, classing the text in blocks of 256 bytes
+from there, so that a walk reads the text near its target and no more. `encode_parallel()` finds the allowed special
+tokens once and gives each chunk to a worker, one `std::jthread` per chunk beyond the last, which runs on the calling
+thread, as `tokenize_all_parallel()` does (open choice 4). A worker segments its chunk's stretches as `encode()` does,
+the last one followed by `right_context` further codepoints of the real text, read as a complete input there unless a
+special token or the text's end comes first, keeps the pieces that end at or before its cut, and merges them with a
+piece cache of its own. The ids of the chunks, concatenated, are the result, and an exception a worker throws is
+rethrown on the calling thread once every worker has joined.
 
 `Merger` holds a definition's whole-piece lookup and its merge, built once: the id of every spelling and of every byte,
 and the rank and product of every pair of parts the merge may join, keyed by the ids of the parts: under the rank rule
@@ -1256,7 +1258,7 @@ matisse's by the division.
    pretok, as automata.hpp and its source, because nothing in munch calls it and a munch addition would wait for a munch
    release; the header is installed, as munch keeps no private headers under src, and the kit moves if a second user
    appears. So automata.hpp is not part of the stable surface. Its file comment says so, and the README's Versioning and
-   Stability section names it outside the surface when it is written at step 16.
+   Stability section names it outside the surface.
 8. **Vocabulary files in the tree.** CTest without network needs the pinned files on disk: about 1.5 MB for GPT-2's pair
    and 1.7 MB for cl100k, plus the two tokenizer.json files. hopper vendors the JSONTestSuite cases with their licence
    and provenance. The vocabulary files' own terms need checking first. As far as is known, GPT-2's are published with

@@ -41,6 +41,9 @@ namespace matisse::encode
 {
 /**
  * @brief The encoder of a definition under its pattern: the ids of a text, with the special tokens it allows cut out.
+ *
+ * No call changes an encoder, so one encoder serves any number of threads at once with no lock, each thread holding its
+ * own piece caches and streams.
  */
 class Encoder
 {
@@ -136,7 +139,7 @@ public:
      * UTF-8, while decode() of the ids encode() returns is the text.
      * @param ids The ids.
      * @return The bytes.
-     * @throws std::invalid_argument If an id is neither an ordinary nor a special token of the definition; the message
+     * @throws std::out_of_range If an id is neither an ordinary nor a special token of the definition; the message
      *         names the id and its index.
      */
     [[nodiscard]] std::string decode(std::span<const load::Token_id_t> ids) const;
@@ -149,6 +152,8 @@ public:
 
     /**
      * @brief Returns the definition's whole-piece lookup and merge, which a stream merges its pieces by.
+     *
+     * It serves the streaming encoder and is not part of matisse's stable surface.
      * @return The merger.
      */
     [[nodiscard]] const Merger& merger() const noexcept;
@@ -161,12 +166,16 @@ public:
 
     /**
      * @brief Returns the class table of the pattern's alphabet, which a stream classes its code points by.
+     *
+     * It serves the streaming encoder and is not part of matisse's stable surface.
      * @return The class table.
      */
     [[nodiscard]] const pretok::Class_table& class_table() const noexcept;
 
     /**
      * @brief Returns the pattern's split verifier M in a flat table, which a stream steps its live runs by.
+     *
+     * It serves the streaming encoder and is not part of matisse's stable surface.
      * @return The verifier's table.
      */
     [[nodiscard]] const Verifier_table& verifier() const noexcept;
@@ -174,6 +183,8 @@ public:
     /**
      * @brief Returns the ids of the ordinary tokens in the order of their spellings, bytewise ascending, which a stream
      *        finds the tokens that begin with a string in.
+     *
+     * It serves the streaming encoder and is not part of matisse's stable surface.
      * @return The ids.
      */
     [[nodiscard]] std::span<const load::Token_id_t> spellings_sorted() const noexcept;
@@ -182,6 +193,8 @@ public:
      * @brief Returns the ids of the ordinary tokens of two or more bytes that the merge does not form from their own
      *        bytes, which only the whole-piece lookup gives, in the order of their spellings; none when the definition
      *        does not look pieces up whole.
+     *
+     * It serves the streaming encoder and is not part of matisse's stable surface.
      * @return The ids.
      */
     [[nodiscard]] std::span<const load::Token_id_t> unformed_sorted() const noexcept;

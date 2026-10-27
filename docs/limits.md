@@ -30,7 +30,8 @@ That model excludes, some of it permanently and some only in the first version:
 - **Approximate tokenization.** There is no mode that is merely close, no fallback when a piece cannot be merged and no
   token count estimated from bytes. Content a loader cannot take exactly is refused with `std::invalid_argument` naming
   the item and where it is, a definition the merge cannot run on is refused when the encoder is built, and `decode()`
-  refuses an id that is neither an ordinary nor a special token, naming it and its index. This one is permanent.
+  refuses an id that is neither an ordinary nor a special token with `std::out_of_range`, naming it and its index. This
+  one is permanent.
 - **Guessed cuts.** The parallel encoder cuts only where a window table certifies a cut, as the section on parallel
   encoding below describes, never at white space or at a fixed size with a repair afterwards. There is nothing to
   repair. This one is permanent too.
@@ -171,7 +172,8 @@ memory whole, and the pieces it closes are merged as `encode()` merges them, wit
 point costs a class lookup and at most two steps of the verifier's table per live run, at most one run per state of the
 verifier; each push costs, for every live run, the merge of what its open piece has left after the ids returned and the
 tests of its boundaries from the right. Ill-formed UTF-8 is refused with `std::invalid_argument` by the push that
-classes it, and a text that ends inside a sequence by `finish()`; a stream that has refused is not read again.
+classes it, and a text that ends inside a sequence by `finish()`; a stream that has refused is not pushed to or finished
+again, and a new `Stream_encoder` over the same encoder reads the next text.
 
 ## **Unicode: Tables Pinned to 15.0.0**
 
@@ -226,19 +228,23 @@ id. Moving the pin is open choice 6 of [design.md](design.md).
   one encoder, each keeping a cache of its own, and the thread sanitizer runs in CI.
 - A `Piece_cache` has no lock and serves one thread at a time. `encode(text)` makes one for the call, and `encode(text,
   cache)` reads and fills one the caller keeps across its calls, one per thread. A cache holds the ids of one
-  definition, so it is made for the encoder it serves, which must outlive it, and `encode(text, cache)` refuses a cache
-  made for another encoder with `std::invalid_argument`; the ids `find()` returns are valid until the next store.
+  definition, so it is made for the encoder it serves, which must outlive it and must not be moved while the cache is in
+  use, and `encode(text, cache)` refuses a cache made for another encoder with `std::invalid_argument`; the ids `find()`
+  returns are valid until the next store.
 - `encode_parallel()` gives every worker a piece cache of its own and joins every worker before returning. An exception
   a worker throws is kept, and the first one is rethrown on the calling thread once every worker has joined.
 - The encoder takes the definition by value and keeps its own copies of what it reads from the report and the pattern it
   holds, the window table and its right context, the class table and the segmentation's automaton, so the report does
-  not have to outlive it. Only `validate()` makes a report, holding the pattern it was decided of, so an encoder cannot
-  be given a report beside another pattern. The tokenizer libraries' patterns point their views and spans into constants
-  of their sources.
+  not have to outlive it. Only `validate()` makes a report, holding the pattern its window tables were decided of, and
+  an encoder reads the pattern from the report it is given. The tokenizer libraries' patterns point their views and
+  spans into constants of their sources.
 - The text is read during the call only, and the ids are returned by value.
 - A `Stream_encoder` reads one text at a time and serves one thread at a time; the encoder it is made from must outlive
-  it and serves any number of streams on as many threads, each stream keeping its runs, its held bytes and its piece
-  cache to itself with no lock. The tests run four streams on four threads over one encoder.
+  it and must not be moved while the stream reads it, and it serves any number of streams on as many threads, each
+  stream keeping its runs, its held bytes and its piece cache to itself with no lock. The tests run four streams on four
+  threads over one encoder.
+- A copy of an `Encoder` encodes as the original does and is an encoder of its own, so `encode(text, cache)` on the copy
+  refuses a cache made for the original.
 
 ## **Construction Cost**
 

@@ -22,7 +22,9 @@
  * of it. A node's base is the least at which every child's slot is free when the nodes are placed in breadth-first
  * order, so a walk from the root reads one slot a byte, and the slots run 256 past the greatest base so that no child's
  * slot falls outside them. The tokens that are proper prefixes of a token, longest first, are the token's shorter
- * token, its shorter token's, and so on, each read from a table by id.
+ * token, its shorter token's, and so on, each read from a table by id. Token_trie is the backtracking merge's own and
+ * is not part of matisse's stable surface. The header is installed only because every header of the library lives under
+ * include, as munch keeps none under src, and it may change in minor releases.
  */
 namespace matisse::encode
 {

@@ -721,8 +721,8 @@ std::vector<load::Token_id_t> Merger::merged(const std::string_view piece) const
 {
     if (piece.size() > std::numeric_limits<Offset_t>::max())
     {
-        throw std::length_error{
-                std::format("Merger: a piece of {} bytes is longer than the merge's 32-bit offsets", piece.size())};
+        throw std::length_error{std::format(
+                "Merger::merged: a piece of {} bytes is longer than the merge's 32-bit offsets", piece.size())};
     }
 
     const auto scanned{piece.size() <= longest_scanned_piece};

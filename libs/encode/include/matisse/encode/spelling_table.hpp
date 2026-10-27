@@ -23,7 +23,9 @@
  * placement passed over were full then and no slot is ever emptied, so a lookup meets every spelling the table holds
  * before a free slot and stops at a free slot for any other, and it compares bytes only in a slot of the same hash and
  * length. A spelling met twice keeps its first id. The slots are the least power of two at least twice the spellings,
- * 262,144 on cl100k's file.
+ * 262,144 on cl100k's file. Spelling_table is the merge's own and is not part of matisse's stable surface. The header
+ * is installed only because every header of the library lives under include, as munch keeps none under src, and it may
+ * change in minor releases.
  */
 namespace matisse::encode
 {

@@ -664,7 +664,7 @@ TEST(Encoder_test, Decode_refuses_an_id_that_is_neither_an_ordinary_nor_a_specia
 
         ADD_FAILURE() << "decode() took an id beyond the definition";
     }
-    catch (const std::invalid_argument& refusal)
+    catch (const std::out_of_range& refusal)
     {
         const std::string_view message{refusal.what()};
 
