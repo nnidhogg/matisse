@@ -43,7 +43,8 @@ namespace matisse::encode
  * @brief The encoder of a definition under its pattern: the ids of a text, with the special tokens it allows cut out.
  *
  * No call changes an encoder, so one encoder serves any number of threads at once with no lock, each thread holding its
- * own piece caches and streams.
+ * own piece caches and streams. An encoder is copied and moved, but not assigned to, since nothing changes it after
+ * construction.
  */
 class Encoder
 {
@@ -60,6 +61,30 @@ public:
      */
     Encoder(load::Definition definition, const validate::Report& report, validate::Inventory inventory,
             std::span<const std::string> allowed);
+
+    /**
+     * @brief Copies an encoder: the copy encodes as the original does and is an encoder of its own, so it refuses a
+     *        piece cache made for the original.
+     * @param other The encoder to copy.
+     */
+    Encoder(const Encoder& other) = default;
+
+    /**
+     * @brief Takes another encoder over, which no piece cache or stream may be reading then.
+     * @param other The encoder to move from.
+     */
+    Encoder(Encoder&& other) = default;
+
+    /**
+     * @brief An encoder is not assigned to: it never changes after construction, and a piece cache or a stream knows
+     *        the encoder it borrows by its address alone.
+     */
+    Encoder& operator=(const Encoder& other) = delete;
+
+    /**
+     * @brief An encoder is not assigned to, as for the copy assignment.
+     */
+    Encoder& operator=(Encoder&& other) = delete;
 
     /**
      * @brief Returns the ids of a text, as the definition's tokenizer encodes it with the allowed special tokens.
@@ -326,7 +351,8 @@ private:
     std::size_t right_context_;
 
     /**
-     * @brief The class table of the pattern's alphabet, which a stream classes its code points by.
+     * @brief The class table of the pattern's alphabet, which the window index classes a stretch by and a stream its
+     *        code points.
      */
     pretok::Class_table class_table_;
 

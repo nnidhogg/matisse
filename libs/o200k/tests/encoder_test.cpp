@@ -26,6 +26,7 @@
 #include "matisse/encode/stream_encoder.hpp"
 #include "matisse/encode/window_index.hpp"
 #include "matisse/o200k/tokenizer.hpp"
+#include "matisse/pretok/classes.hpp"
 #include "matisse/pretok/segmenter.hpp"
 #include "matisse/validate/report.hpp"
 
@@ -463,11 +464,13 @@ std::vector<std::size_t> chunk_counts(const std::string_view text)
 /**
  * @brief Expects every anchor of a text, read as one stretch, to be a boundary of the pattern's segmentation of it.
  * @param index The window index of an inventory.
+ * @param class_table The class table of the pattern's alphabet.
  * @param segmenter The pattern's segmenter.
  * @param text The text, well-formed UTF-8.
  */
 void expect_anchors_are_boundaries(
-        const Window_index& index, const matisse::pretok::Segmenter& segmenter, const std::string_view text)
+        const Window_index& index, const matisse::pretok::Class_table& class_table,
+        const matisse::pretok::Segmenter& segmenter, const std::string_view text)
 {
     const auto pieces{segmenter.boundaries(text)};
 
@@ -475,7 +478,7 @@ void expect_anchors_are_boundaries(
     {
         const auto begins_code_point{(static_cast<unsigned char>(text[at]) & 0xC0U) != 0x80U};
 
-        if (begins_code_point && index.first_anchor(text, at) == at)
+        if (begins_code_point && index.first_anchor(class_table, text, at) == at)
         {
             EXPECT_TRUE(std::ranges::contains(pieces, at)) << text << " anchor " << at;
         }
@@ -701,14 +704,15 @@ TEST(Encoder_test, Encode_parallel_gives_encode_s_ids_under_both_inventories_and
 
     const matisse::pretok::Segmenter segmenter{pattern};
 
+    const matisse::pretok::Class_table class_table{pattern.alphabet};
+
     for (const auto inventory : {Inventory::factorization, Inventory::policy})
     {
         for (const auto& allowed : {std::vector<std::string>{}, special_spellings()})
         {
             const Encoder encoder{*definition, report, inventory, allowed};
 
-            const Window_index index{
-                    inventory == Inventory::factorization ? report.factorization : report.policy, pattern.alphabet};
+            const Window_index index{inventory == Inventory::factorization ? report.factorization : report.policy};
 
             std::mt19937 random{23};
 
@@ -723,7 +727,7 @@ TEST(Encoder_test, Encode_parallel_gives_encode_s_ids_under_both_inventories_and
                     EXPECT_EQ(encoder.encode_parallel(text, chunks), ids) << text << " in " << chunks;
                 }
 
-                expect_anchors_are_boundaries(index, segmenter, text);
+                expect_anchors_are_boundaries(index, class_table, segmenter, text);
             }
         }
     }

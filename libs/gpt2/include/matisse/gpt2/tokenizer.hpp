@@ -24,7 +24,7 @@ namespace matisse::gpt2
  * `v`, each its own and case sensitive, then the rest of the white space, of the letters and of the numbers, and
  * everything else, with the symbols `\t !'0Adelmrstv`, read from tables pinned to Unicode 15.0.0, the version of the
  * Python reference the fixtures are written by.
- * @return The pattern, its languages built with munch's combinators and its views and spans static.
+ * @return The pattern, its languages built with munch's combinators.
  */
 [[nodiscard]] pretok::Pattern pattern();
 

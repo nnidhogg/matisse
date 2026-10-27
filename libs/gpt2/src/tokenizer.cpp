@@ -1,6 +1,7 @@
 #include "matisse/gpt2/tokenizer.hpp"
 
 #include <array>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -85,35 +86,42 @@ constexpr std::array<Code_point_range, 1> t_points{{{.first = U't', .last = U't'
 constexpr std::array<Code_point_range, 1> v_points{{{.first = U'v', .last = U'v'}}};
 
 /**
- * @brief The sets the classes read, in the order a code point is classed by them: the literals, the white space, the
- *        letters and the numbers.
+ * @brief Returns the sets the classes read, in the order a code point is classed by them: the literals, the white
+ *        space, the letters and the numbers.
+ * @return The sets.
  */
-constexpr std::array<pretok::Code_point_set, 13> sets{{
-        {.symbol = ' ', .ranges = space_points},
-        {.symbol = '\'', .ranges = apostrophe_points},
-        {.symbol = 'd', .ranges = d_points},
-        {.symbol = 'e', .ranges = e_points},
-        {.symbol = 'l', .ranges = l_points},
-        {.symbol = 'm', .ranges = m_points},
-        {.symbol = 'r', .ranges = r_points},
-        {.symbol = 's', .ranges = s_points},
-        {.symbol = 't', .ranges = t_points},
-        {.symbol = 'v', .ranges = v_points},
-        {.symbol = '\t', .ranges = white_space_ranges},
-        {.symbol = 'A', .ranges = letter_ranges},
-        {.symbol = '0', .ranges = number_ranges},
-}};
+[[nodiscard]] std::vector<pretok::Code_point_set> sets()
+{
+    return {
+            {.symbol = ' ', .ranges = {space_points.begin(), space_points.end()}},
+            {.symbol = '\'', .ranges = {apostrophe_points.begin(), apostrophe_points.end()}},
+            {.symbol = 'd', .ranges = {d_points.begin(), d_points.end()}},
+            {.symbol = 'e', .ranges = {e_points.begin(), e_points.end()}},
+            {.symbol = 'l', .ranges = {l_points.begin(), l_points.end()}},
+            {.symbol = 'm', .ranges = {m_points.begin(), m_points.end()}},
+            {.symbol = 'r', .ranges = {r_points.begin(), r_points.end()}},
+            {.symbol = 's', .ranges = {s_points.begin(), s_points.end()}},
+            {.symbol = 't', .ranges = {t_points.begin(), t_points.end()}},
+            {.symbol = 'v', .ranges = {v_points.begin(), v_points.end()}},
+            {.symbol = '\t', .ranges = {white_space_ranges.begin(), white_space_ranges.end()}},
+            {.symbol = 'A', .ranges = {letter_ranges.begin(), letter_ranges.end()}},
+            {.symbol = '0', .ranges = {number_ranges.begin(), number_ranges.end()}},
+    };
+}
 
 /**
- * @brief GPT-2's alphabet: the space, the apostrophe and the contraction letters of `'s|'t|'re|'ve|'m|'ll|'d` are
- *        literals, case sensitive, each a class of its one code point, and the rest of the code points are classed by
- *        the Unicode sets or are `!`.
+ * @brief Returns GPT-2's alphabet: the space, the apostrophe and the contraction letters of `'s|'t|'re|'ve|'m|'ll|'d`
+ *        are literals, case sensitive, each a class of its one code point, and the rest of the code points are classed
+ *        by the Unicode sets or are `!`.
+ * @return The alphabet.
  */
-constexpr pretok::Alphabet alphabet{
-        .symbols = symbols,
-        .sets = sets,
-        .other = '!',
-        .unicode_version = class_unicode_version};
+[[nodiscard]] pretok::Alphabet alphabet()
+{
+    return {.symbols = std::string{symbols},
+            .sets = sets(),
+            .other = '!',
+            .unicode_version = std::string{class_unicode_version}};
+}
 
 /**
  * @brief Returns the space, a literal, as the one class symbol it is.
@@ -171,29 +179,29 @@ constexpr pretok::Alphabet alphabet{
 {
     return {
             // `'s`
-            {.language = text("'s"), .gate = symbols},
+            {.language = text("'s"), .gate = std::string{symbols}},
             // `'t`
-            {.language = text("'t"), .gate = symbols},
+            {.language = text("'t"), .gate = std::string{symbols}},
             // `'re`
-            {.language = text("'re"), .gate = symbols},
+            {.language = text("'re"), .gate = std::string{symbols}},
             // `'ve`
-            {.language = text("'ve"), .gate = symbols},
+            {.language = text("'ve"), .gate = std::string{symbols}},
             // `'m`
-            {.language = text("'m"), .gate = symbols},
+            {.language = text("'m"), .gate = std::string{symbols}},
             // `'ll`
-            {.language = text("'ll"), .gate = symbols},
+            {.language = text("'ll"), .gate = std::string{symbols}},
             // `'d`
-            {.language = text("'d"), .gate = symbols},
+            {.language = text("'d"), .gate = std::string{symbols}},
             // ` ?\p{L}+`
-            {.language = concat(optional(space()), plus(letter())), .gate = symbols},
+            {.language = concat(optional(space()), plus(letter())), .gate = std::string{symbols}},
             // ` ?\p{N}+`
-            {.language = concat(optional(space()), plus(number())), .gate = symbols},
+            {.language = concat(optional(space()), plus(number())), .gate = std::string{symbols}},
             // ` ?[^\s\p{L}\p{N}]+`
-            {.language = concat(optional(space()), plus(other())), .gate = symbols},
+            {.language = concat(optional(space()), plus(other())), .gate = std::string{symbols}},
             // `\s+(?!\S)`
-            {.language = plus(white_space()), .gate = white_space_symbols},
+            {.language = plus(white_space()), .gate = std::string{white_space_symbols}},
             // `\s+`
-            {.language = plus(white_space()), .gate = symbols},
+            {.language = plus(white_space()), .gate = std::string{symbols}},
     };
 }
 
@@ -201,7 +209,7 @@ constexpr pretok::Alphabet alphabet{
 
 pretok::Pattern pattern()
 {
-    return {.alphabet = alphabet, .alternatives = alternatives()};
+    return {.alphabet = alphabet(), .alternatives = alternatives()};
 }
 
 std::vector<load::Special_token> specials()

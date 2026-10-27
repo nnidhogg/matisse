@@ -24,7 +24,7 @@ namespace matisse::llama3
  * symbols `\t\n\r !'0Adelmrstv`, read from tables pinned to Unicode 15.0.0, the version of the Python reference the
  * fixtures are written by; it has no alternative anchored at the end of the input, so white space after a line break at
  * the end of a text is a piece of its own.
- * @return The pattern, its languages built with munch's combinators and its views and spans static.
+ * @return The pattern, its languages built with munch's combinators.
  */
 [[nodiscard]] pretok::Pattern pattern();
 

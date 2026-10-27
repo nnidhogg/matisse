@@ -1,6 +1,7 @@
 #include "matisse/o200k/tokenizer.hpp"
 
 #include <array>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -148,52 +149,59 @@ constexpr std::array<Code_point_range, 1> t_points{{{.first = U't', .last = U't'
 constexpr std::array<Code_point_range, 1> v_points{{{.first = U'v', .last = U'v'}}};
 
 /**
- * @brief The sets the classes read, in the order a code point is classed by them: the literals, the white space, the
- *        letters by their general category, the marks and the numbers.
+ * @brief Returns the sets the classes read, in the order a code point is classed by them: the literals, the white
+ *        space, the letters by their general category, the marks and the numbers.
+ * @return The sets.
  */
-constexpr std::array<pretok::Code_point_set, 29> sets{{
-        {.symbol = '\n', .ranges = line_feed_points},
-        {.symbol = '\r', .ranges = carriage_return_points},
-        {.symbol = ' ', .ranges = space_points},
-        {.symbol = '\'', .ranges = apostrophe_points},
-        {.symbol = '/', .ranges = slash_points},
-        {.symbol = 'D', .ranges = upper_d_points},
-        {.symbol = 'E', .ranges = upper_e_points},
-        {.symbol = 'L', .ranges = upper_l_points},
-        {.symbol = 'M', .ranges = upper_m_points},
-        {.symbol = 'R', .ranges = upper_r_points},
-        {.symbol = 'S', .ranges = upper_s_points},
-        {.symbol = 'T', .ranges = upper_t_points},
-        {.symbol = 'V', .ranges = upper_v_points},
-        {.symbol = 'd', .ranges = d_points},
-        {.symbol = 'e', .ranges = e_points},
-        {.symbol = 'l', .ranges = l_points},
-        {.symbol = 'm', .ranges = m_points},
-        {.symbol = 'r', .ranges = r_points},
-        {.symbol = 's', .ranges = s_points},
-        {.symbol = 't', .ranges = t_points},
-        {.symbol = 'v', .ranges = v_points},
-        {.symbol = '\t', .ranges = white_space_ranges},
-        {.symbol = 'A', .ranges = upper_ranges},
-        {.symbol = 'a', .ranges = lower_ranges},
-        {.symbol = '#', .ranges = other_letter_ranges},
-        {.symbol = '$', .ranges = title_ranges},
-        {.symbol = '%', .ranges = modifier_ranges},
-        {.symbol = '&', .ranges = mark_ranges},
-        {.symbol = '0', .ranges = number_ranges},
-}};
+[[nodiscard]] std::vector<pretok::Code_point_set> sets()
+{
+    return {
+            {.symbol = '\n', .ranges = {line_feed_points.begin(), line_feed_points.end()}},
+            {.symbol = '\r', .ranges = {carriage_return_points.begin(), carriage_return_points.end()}},
+            {.symbol = ' ', .ranges = {space_points.begin(), space_points.end()}},
+            {.symbol = '\'', .ranges = {apostrophe_points.begin(), apostrophe_points.end()}},
+            {.symbol = '/', .ranges = {slash_points.begin(), slash_points.end()}},
+            {.symbol = 'D', .ranges = {upper_d_points.begin(), upper_d_points.end()}},
+            {.symbol = 'E', .ranges = {upper_e_points.begin(), upper_e_points.end()}},
+            {.symbol = 'L', .ranges = {upper_l_points.begin(), upper_l_points.end()}},
+            {.symbol = 'M', .ranges = {upper_m_points.begin(), upper_m_points.end()}},
+            {.symbol = 'R', .ranges = {upper_r_points.begin(), upper_r_points.end()}},
+            {.symbol = 'S', .ranges = {upper_s_points.begin(), upper_s_points.end()}},
+            {.symbol = 'T', .ranges = {upper_t_points.begin(), upper_t_points.end()}},
+            {.symbol = 'V', .ranges = {upper_v_points.begin(), upper_v_points.end()}},
+            {.symbol = 'd', .ranges = {d_points.begin(), d_points.end()}},
+            {.symbol = 'e', .ranges = {e_points.begin(), e_points.end()}},
+            {.symbol = 'l', .ranges = {l_points.begin(), l_points.end()}},
+            {.symbol = 'm', .ranges = {m_points.begin(), m_points.end()}},
+            {.symbol = 'r', .ranges = {r_points.begin(), r_points.end()}},
+            {.symbol = 's', .ranges = {s_points.begin(), s_points.end()}},
+            {.symbol = 't', .ranges = {t_points.begin(), t_points.end()}},
+            {.symbol = 'v', .ranges = {v_points.begin(), v_points.end()}},
+            {.symbol = '\t', .ranges = {white_space_ranges.begin(), white_space_ranges.end()}},
+            {.symbol = 'A', .ranges = {upper_ranges.begin(), upper_ranges.end()}},
+            {.symbol = 'a', .ranges = {lower_ranges.begin(), lower_ranges.end()}},
+            {.symbol = '#', .ranges = {other_letter_ranges.begin(), other_letter_ranges.end()}},
+            {.symbol = '$', .ranges = {title_ranges.begin(), title_ranges.end()}},
+            {.symbol = '%', .ranges = {modifier_ranges.begin(), modifier_ranges.end()}},
+            {.symbol = '&', .ranges = {mark_ranges.begin(), mark_ranges.end()}},
+            {.symbol = '0', .ranges = {number_ranges.begin(), number_ranges.end()}},
+    };
+}
 
 /**
- * @brief o200k's alphabet: the carriage return, the line feed, the space, the apostrophe, the slash and the contraction
- *        letters of `(?i:'s|'t|'re|'ve|'m|'ll|'d)` are literals, each letter's case partners split by the general
- *        category the pattern reads them by, and the rest of the code points are classed by the Unicode sets or are
- *        `!`.
+ * @brief Returns o200k's alphabet: the carriage return, the line feed, the space, the apostrophe, the slash and the
+ *        contraction letters of `(?i:'s|'t|'re|'ve|'m|'ll|'d)` are literals, each letter's case partners split by the
+ *        general category the pattern reads them by, and the rest of the code points are classed by the Unicode sets or
+ *        are `!`.
+ * @return The alphabet.
  */
-constexpr pretok::Alphabet alphabet{
-        .symbols = symbols,
-        .sets = sets,
-        .other = '!',
-        .unicode_version = class_unicode_version};
+[[nodiscard]] pretok::Alphabet alphabet()
+{
+    return {.symbols = std::string{symbols},
+            .sets = sets(),
+            .other = '!',
+            .unicode_version = std::string{class_unicode_version}};
+}
 
 /**
  * @brief Returns one symbol of `[^\r\n\p{L}\p{N}]`, which may lead a run of letters: `\t`, the space, `!`, the marks
@@ -317,21 +325,22 @@ constexpr pretok::Alphabet alphabet{
             // `[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]*[\p{Ll}\p{Lm}\p{Lo}\p{M}]+`
             // `(?i:'s|'t|'re|'ve|'m|'ll|'d)?`
             {.language = concat(optional(lead()), kleene(upper()), plus(lower()), optional(contraction())),
-             .gate = symbols},
+             .gate = std::string{symbols}},
             // `[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]+[\p{Ll}\p{Lm}\p{Lo}\p{M}]*`
             // `(?i:'s|'t|'re|'ve|'m|'ll|'d)?`
             {.language = concat(optional(lead()), plus(upper()), kleene(lower()), optional(contraction())),
-             .gate = symbols},
+             .gate = std::string{symbols}},
             // `\p{N}{1,3}`
-            {.language = range(number(), 1, 3), .gate = symbols},
+            {.language = range(number(), 1, 3), .gate = std::string{symbols}},
             // ` ?[^\s\p{L}\p{N}]+[\r\n/]*`
-            {.language = concat(optional(space()), plus(other()), kleene(line_break_or_slash())), .gate = symbols},
+            {.language = concat(optional(space()), plus(other()), kleene(line_break_or_slash())),
+             .gate = std::string{symbols}},
             // `\s*[\r\n]+`
-            {.language = concat(kleene(white_space()), plus(line_break())), .gate = symbols},
+            {.language = concat(kleene(white_space()), plus(line_break())), .gate = std::string{symbols}},
             // `\s+(?!\S)`
-            {.language = plus(white_space()), .gate = white_space_symbols},
+            {.language = plus(white_space()), .gate = std::string{white_space_symbols}},
             // `\s+`
-            {.language = plus(white_space()), .gate = symbols},
+            {.language = plus(white_space()), .gate = std::string{symbols}},
     };
 }
 
@@ -339,7 +348,7 @@ constexpr pretok::Alphabet alphabet{
 
 pretok::Pattern pattern()
 {
-    return {.alphabet = alphabet, .alternatives = alternatives()};
+    return {.alphabet = alphabet(), .alternatives = alternatives()};
 }
 
 std::vector<load::Special_token> specials()

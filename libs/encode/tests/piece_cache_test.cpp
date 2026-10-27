@@ -28,7 +28,7 @@ namespace
 /**
  * @brief An alphabet of one class, every code point in it.
  */
-constexpr Alphabet one_symbol{.symbols = "a", .sets = {}, .other = 'a'};
+const Alphabet one_symbol{.symbols = "a", .sets = {}, .other = 'a'};
 
 /**
  * @brief A pattern over the one class whose every piece is one code point.

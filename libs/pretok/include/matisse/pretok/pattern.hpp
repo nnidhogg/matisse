@@ -1,8 +1,7 @@
 #ifndef MATISSE_LIBS_PRETOK_INCLUDE_MATISSE_PRETOK_PATTERN_HPP
 #define MATISSE_LIBS_PRETOK_INCLUDE_MATISSE_PRETOK_PATTERN_HPP
 
-#include <span>
-#include <string_view>
+#include <string>
 #include <vector>
 
 #include <munch/regex/regex.hpp>
@@ -20,7 +19,9 @@
  * description when no alternative reads left of where its match begins, each alternative matches the longest
  * gate-passing prefix of its language and fails only where there is none, the pattern is total, and the engine reads
  * code points only through the classes. Each tokenizer library gives its own description, its languages built with
- * munch's combinators as values; the stages read it and name no tokenizer.
+ * munch's combinators as values; the stages read it and name no tokenizer. A pattern holds everything it describes by
+ * value, its class symbols, sets, ranges, gates and languages, so a copy of it, such as the one a report keeps, stands
+ * apart from the strings and tables it was built from.
  */
 namespace matisse::pretok
 {
@@ -38,7 +39,7 @@ struct Code_point_set
     /**
      * @brief The set's code points, ranges ascending and apart.
      */
-    std::span<const munch::regex::utf8::Code_point_range> ranges{};
+    std::vector<munch::regex::utf8::Code_point_range> ranges{};
 };
 
 /**
@@ -57,12 +58,12 @@ struct Alphabet
     /**
      * @brief The symbol of every class, ascending, so a class is its symbol's place among them.
      */
-    std::string_view symbols{};
+    std::string symbols{};
 
     /**
      * @brief The sets the alphabet reads, in the order a code point is classed by them, the literals' first.
      */
-    std::span<const Code_point_set> sets{};
+    std::vector<Code_point_set> sets{};
 
     /**
      * @brief The symbol of every code point in no set.
@@ -72,7 +73,7 @@ struct Alphabet
     /**
      * @brief The Unicode version the sets' tables were generated from.
      */
-    std::string_view unicode_version{};
+    std::string unicode_version{};
 };
 
 /**
@@ -91,7 +92,7 @@ struct Alternative
      * @brief The class symbols that may follow an accept, the end of the input always passing: every symbol for an
      *        ungated alternative, the white space for `(?!\S)`, and none for an alternative anchored at the end.
      */
-    std::string_view gate{};
+    std::string gate{};
 };
 
 /**

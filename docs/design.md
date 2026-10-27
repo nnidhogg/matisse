@@ -296,25 +296,25 @@ struct Code_point_set
 {
     char symbol{};
 
-    std::span<const munch::regex::utf8::Code_point_range> ranges{};
+    std::vector<munch::regex::utf8::Code_point_range> ranges{};
 };
 
 struct Alphabet
 {
-    std::string_view symbols{};
+    std::string symbols{};
 
-    std::span<const Code_point_set> sets{};
+    std::vector<Code_point_set> sets{};
 
     char other{};
 
-    std::string_view unicode_version{};
+    std::string unicode_version{};
 };
 
 struct Alternative
 {
     munch::regex::Regex language{};
 
-    std::string_view gate{};
+    std::string gate{};
 };
 
 struct Pattern
@@ -377,10 +377,11 @@ replaced by its class's least code point, U+00AA, U+01C5, U+02B0 and U+0300. An 
 class symbols, a value of munch's regex nodes built with munch's combinators, and its gate as a string of class symbols:
 every symbol for an ungated alternative, the white space for `(?!\S)`, and none for an alternative anchored at the end
 of the input. A spelling of the language over the class symbols in munch's pattern syntax, as a vendor's published
-alternative reads over the classes, is read into the same nodes by `munch::pattern::parse()`. The pattern holds its
-alternatives by value, its gates' and its alphabet's views and spans pointing into the tokenizer library's constants.
-Everything the verifier construction reads, the alphabet, the languages and the gates, is in the description, so
-split_verifier() and factorization_lexer() take the pattern and nothing else.
+alternative reads over the classes, is read into the same nodes by `munch::pattern::parse()`. The pattern holds all of
+it by value, the alphabet with its sets and ranges, the languages and the gates, so a copy of it, such as the one a
+report keeps, stands apart from the strings and tables it was built from. Everything the verifier construction reads,
+the alphabet, the languages and the gates, is in the description, so split_verifier() and factorization_lexer() take the
+pattern and nothing else.
 
 `classes_of()` decodes UTF-8 and maps every codepoint to its class under an alphabet, numbered from zero, read from the
 Unicode tables the tokenizer library pins (open choice 6). Malformed UTF-8 is refused with its byte offset, since the
@@ -389,29 +390,28 @@ under an alphabet, built once from its sets: a table of the ASCII bytes and a ta
 distinct block kept once and every block's index among them, so that a codepoint's symbol is two loads and an ASCII
 byte's one; GPT-2's, cl100k's and Llama 3's alphabets have 127, 128 and 128 distinct blocks, 37 KB a table, and o200k's
 135, 39 KB. Its `symbols()` is a text's class string and its `classes()` the classes, and `classes_of()` is `classes()`
-on a table built for the one text; the `Segmenter`, the encoder's `Window_index` and `supply()` each build a table of
-their own. The tokenizer libraries' tests hold the table to the first set holding every one of the 1,112,064 scalar
-values. `Segmenter` is the runtime pre-tokenizer, the gated commitment order of the gate-sufficiency proposition read
-over codepoints. At each boundary it commits the longest gate-passing accept of the first alternative that has one, an
-accept passing when the class symbol after it is in its gate or the input ends there. A gate reads one class symbol, so
-each alternative is compiled as the DFA of its language followed by one symbol of its gate or a sentinel byte, 0xFF,
-which no class symbol is and which `boundaries()` appends to the class string; munch's longest-match `run()` of that DFA
-at a boundary, less the one symbol, is the alternative's longest gate-passing accept, the end of the input passing
-through the sentinel. The alternatives' DFAs are walked at once as one automaton, their product, whose state is each
-alternative's state and the first alternative that has accepted so far, every later alternative stopped, and which
-accepts where that alternative accepts; the first that has accepted when the walk stops is the first alternative with an
-accept anywhere, and from that alternative's first accept on the product accepts exactly where it does, every accept
-before it being shorter, so the product's longest accept is that alternative's longest, and one `run()` at each boundary
-commits it. The product has 36 states for GPT-2's twelve alternatives and 33 for cl100k's eight. `boundaries()` returns
-the piece ends as byte offsets. `split_verifier()` is the verifier M built from the one-step relation Q of each pattern,
-minimized, and handed to munch as a `Verifier` table over the class symbols; the table munch's constructor makes of M
-has 21 states for GPT-2, 32 for cl100k, 46 for o200k and 33 for Llama 3, 22, 33, 47 and 34 counting the dead state. As
-it builds Q it decides that the pattern is total, every nonempty residual matched by some alternative, which is the
-verifier fixture's `covered` decision, and refuses a pattern that is not, naming a shortest residual no alternative
-matches; the `Segmenter` takes a total pattern and does not check it, so the check runs once, where the validator builds
-the verifier, and never in the segmenter's loop. `factorization_lexer()` compiles the gate-erased union U of the
-alternatives over the class symbols as a munch token set, on which `is_split_window()` decides the factorization
-certificate.
+on a table built for the one text; the `Segmenter`, the encoder and `supply()` each build a table of their own. The
+tokenizer libraries' tests hold the table to the first set holding every one of the 1,112,064 scalar values. `Segmenter`
+is the runtime pre-tokenizer, the gated commitment order of the gate-sufficiency proposition read over codepoints. At
+each boundary it commits the longest gate-passing accept of the first alternative that has one, an accept passing when
+the class symbol after it is in its gate or the input ends there. A gate reads one class symbol, so each alternative is
+compiled as the DFA of its language followed by one symbol of its gate or a sentinel byte, 0xFF, which no class symbol
+is and which `boundaries()` appends to the class string; munch's longest-match `run()` of that DFA at a boundary, less
+the one symbol, is the alternative's longest gate-passing accept, the end of the input passing through the sentinel. The
+alternatives' DFAs are walked at once as one automaton, their product, whose state is each alternative's state and the
+first alternative that has accepted so far, every later alternative stopped, and which accepts where that alternative
+accepts; the first that has accepted when the walk stops is the first alternative with an accept anywhere, and from that
+alternative's first accept on the product accepts exactly where it does, every accept before it being shorter, so the
+product's longest accept is that alternative's longest, and one `run()` at each boundary commits it. The product has 36
+states for GPT-2's twelve alternatives and 33 for cl100k's eight. `boundaries()` returns the piece ends as byte offsets.
+`split_verifier()` is the verifier M built from the one-step relation Q of each pattern, minimized, and handed to munch
+as a `Verifier` table over the class symbols; the table munch's constructor makes of M has 21 states for GPT-2, 32 for
+cl100k, 46 for o200k and 33 for Llama 3, 22, 33, 47 and 34 counting the dead state. As it builds Q it decides that the
+pattern is total, every nonempty residual matched by some alternative, which is the verifier fixture's `covered`
+decision, and refuses a pattern that is not, naming a shortest residual no alternative matches; the `Segmenter` takes a
+total pattern and does not check it, so the check runs once, where the validator builds the verifier, and never in the
+segmenter's loop. `factorization_lexer()` compiles the gate-erased union U of the alternatives over the class symbols as
+a munch token set, on which `is_split_window()` decides the factorization certificate.
 
 The construction behind these, the gate-sufficiency proposition, the transfer of a cut from class strings to text and
 the splice theorem the encoder rests on are the results of a report on pre-tokenizer certification that is not yet
@@ -451,10 +451,10 @@ matisse::cl100k does. `pattern()` is the description of the published pattern ov
 cl100k and Llama 3 and 30 for o200k: each alternative is built with munch's combinators, below a comment quoting the
 vendor's alternative it describes, from small documented pieces of the library's source, each one symbol of a set or
 literal the pattern names, such as `letter()` for `\p{L}` and `white_space()` for `\s`, or the contractions, so that
-what the alternatives share is written once; its views and spans point into constants of the library's source, among
-them the Unicode tables generated into the library's src/class_ranges.inc. `specials()` is the vendor's special tokens
-of a rank file read under the pattern, which `read_tiktoken()` takes. A file format of its own would be a reader binding
-in the library beside them; GPT-2's encoder.json and vocab.bpe are read by `read_gpt2()`, which needs nothing from the
+what the alternatives share is written once; its sets are copied from constants of the library's source, among them the
+Unicode tables generated into the library's src/class_ranges.inc. `specials()` is the vendor's special tokens of a rank
+file read under the pattern, which `read_tiktoken()` takes. A file format of its own would be a reader binding in the
+library beside them; GPT-2's encoder.json and vocab.bpe are read by `read_gpt2()`, which needs nothing from the
 description. The library's tests hold the description to the classes, segmentation and known-answer fixtures, each
 alternative's combinators to its spelling over the class symbols in munch's pattern syntax, both compiled to the same
 minimal DFA state for state, the pinned vocabulary to its digest, and the vendor's special tokens to their quoted
@@ -516,13 +516,13 @@ struct Window_table
 
 struct Report
 {
-    Window_table factorization{};
+    const Window_table factorization{};
 
-    Window_table policy{};
+    const Window_table policy{};
 
-    munch::verifier::Boundary_gap gap{};
+    const munch::verifier::Boundary_gap gap{};
 
-    pretok::Pattern pattern{};
+    const pretok::Pattern pattern{};
 
 private:
     friend Report validate(const pretok::Pattern& pattern, std::size_t width);
@@ -593,12 +593,12 @@ four, for GPT-2 that is 87 and 540 windows of 18,357 and 32,218, for cl100k 112 
 carries `boundary_gap()` of the split verifier, which is unbounded for every pattern in scope, since a run of letters of
 any length is one piece, of lower case letters under o200k. It also holds a copy of the pattern it was decided of, and
 its constructor is private with `validate()` its friend, as munch's `Lexer` exists only over what its `Builder`
-compiled, so that a report as `validate()` returns it holds its window tables beside the pattern they were decided of,
-and the encoder and `supply()` read the pattern from the report. A definition without a pre-tokenizer goes to
-`validate_merges()` instead, which builds `munch::verifier::token_automaton()` once and decides each candidate window by
-`miscovering()` on it, the lazy certification. Its candidates are given by the caller; the command line draws them from
-an input, every byte and the most frequent byte pairs and triples, since all byte windows of width three are too many to
-decide at full scale.
+compiled, and its members are `const`, so that a report holds its window tables beside the pattern they were decided of
+for as long as it lives, copied and moved whole and never assigned to, and the encoder and `supply()` read the pattern
+from the report. A definition without a pre-tokenizer goes to `validate_merges()` instead, which builds
+`munch::verifier::token_automaton()` once and decides each candidate window by `miscovering()` on it, the lazy
+certification. Its candidates are given by the caller; the command line draws them from an input, every byte and the
+most frequent byte pairs and triples, since all byte windows of width three are too many to decide at full scale.
 
 `supply()` measures one inventory's anchors on an input, the interior positions where an occurrence of a certified
 window places its origin, counted at the byte offsets of their code points. It classes the input with the alphabet of
@@ -711,11 +711,12 @@ public:
 class Window_index
 {
 public:
-    Window_index(const validate::Window_table& table, const pretok::Alphabet& alphabet);
+    explicit Window_index(const validate::Window_table& table);
 
     [[nodiscard]] std::size_t width() const noexcept;
 
-    [[nodiscard]] std::optional<std::size_t> first_anchor(std::string_view stretch, std::size_t from) const;
+    [[nodiscard]] std::optional<std::size_t> first_anchor(
+            const pretok::Class_table& class_table, std::string_view stretch, std::size_t from) const;
 };
 
 class Verifier_table

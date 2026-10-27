@@ -40,12 +40,12 @@ constexpr std::array<Code_point_range, 1> a_points{{{.first = U'a', .last = U'a'
 /**
  * @brief The set of the literal `a`, the one set the two classes read.
  */
-constexpr std::array<Code_point_set, 1> a_set{{{.symbol = 'a', .ranges = a_points}}};
+const std::vector<Code_point_set> a_set{{.symbol = 'a', .ranges = {a_points.begin(), a_points.end()}}};
 
 /**
  * @brief An alphabet of two classes, `a` a literal and `b` everything else.
  */
-constexpr Alphabet two_symbols{.symbols = "ab", .sets = a_set, .other = 'b'};
+const Alphabet two_symbols{.symbols = "ab", .sets = a_set, .other = 'b'};
 
 /**
  * @brief A pattern whose first alternative passes only before another `a`, as `\s+(?!\S)` passes only before white

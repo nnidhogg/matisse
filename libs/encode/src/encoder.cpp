@@ -167,7 +167,7 @@ Encoder::Encoder(
     , merger_{definition_}
     , segmenter_{report.pattern}
     , allowed_{allowed_of(definition_.specials, allowed)}
-    , windows_{table_of(report, inventory), report.pattern.alphabet}
+    , windows_{table_of(report, inventory)}
     , right_context_{table_of(report, inventory).right_context}
     , class_table_{report.pattern.alphabet}
     , verifier_{pretok::split_verifier(report.pattern), report.pattern.alphabet}
@@ -491,7 +491,7 @@ std::optional<std::size_t> Encoder::next_cut(
 
     const auto stretch{text.substr(stretch_begin, stretch_end - stretch_begin)};
 
-    if (const auto anchor{windows_.first_anchor(stretch, from - stretch_begin)})
+    if (const auto anchor{windows_.first_anchor(class_table_, stretch, from - stretch_begin)})
     {
         return stretch_begin + *anchor;
     }

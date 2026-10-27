@@ -236,15 +236,16 @@ id. Moving the pin is open choice 6 of [design.md](design.md).
 - The encoder takes the definition by value and keeps its own copies of what it reads from the report and the pattern it
   holds, the window table and its right context, the class table and the segmentation's automaton, so the report does
   not have to outlive it. Only `validate()` makes a report, holding the pattern its window tables were decided of, and
-  an encoder reads the pattern from the report it is given. The tokenizer libraries' patterns point their views and
-  spans into constants of their sources.
+  an encoder reads the pattern from the report it is given. A pattern holds its alphabet, its languages and its gates by
+  value, so a report stays usable after every string and table its pattern was built from is gone.
 - The text is read during the call only, and the ids are returned by value.
 - A `Stream_encoder` reads one text at a time and serves one thread at a time; the encoder it is made from must outlive
   it and must not be moved while the stream reads it, and it serves any number of streams on as many threads, each
   stream keeping its runs, its held bytes and its piece cache to itself with no lock. The tests run four streams on four
   threads over one encoder.
 - A copy of an `Encoder` encodes as the original does and is an encoder of its own, so `encode(text, cache)` on the copy
-  refuses a cache made for the original.
+  refuses a cache made for the original, and an encoder is never assigned to, both assignments deleted, so a cache made
+  for it never meets another definition at its address.
 
 ## **Construction Cost**
 

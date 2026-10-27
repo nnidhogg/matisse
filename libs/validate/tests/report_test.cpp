@@ -12,6 +12,7 @@
 #include <string>
 #include <string_view>
 #include <tuple>
+#include <type_traits>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -58,12 +59,12 @@ constexpr std::array<Code_point_range, 1> a_points{{{.first = U'a', .last = U'a'
 /**
  * @brief The set of the literal `a`, the one set the two classes read.
  */
-constexpr std::array<Code_point_set, 1> a_set{{{.symbol = 'a', .ranges = a_points}}};
+const std::vector<Code_point_set> a_set{{.symbol = 'a', .ranges = {a_points.begin(), a_points.end()}}};
 
 /**
  * @brief An alphabet of two classes, `a` a literal and `b` everything else.
  */
-constexpr Alphabet two_symbols{.symbols = "ab", .sets = a_set, .other = 'b'};
+const Alphabet two_symbols{.symbols = "ab", .sets = a_set, .other = 'b'};
 
 /**
  * @brief A pattern whose first alternative passes only before another `a`, as `\s+(?!\S)` passes only before white
@@ -505,6 +506,55 @@ TEST(Report_test, The_tables_carry_their_inventory_and_width)
 
     // A run of a has no bound.
     EXPECT_TRUE(std::holds_alternative<munch::verifier::Lasso>(report.gap));
+}
+
+TEST(Report_test, A_report_holds_its_pattern_apart_from_the_strings_and_tables_the_pattern_was_built_from)
+{
+    // The pattern is built from strings and ranges that die with the lambda, so the report reads only its own copy.
+    const auto report{[] {
+        const std::string symbols{"ab"};
+
+        const std::vector<Code_point_range> points{{.first = U'a', .last = U'a'}};
+
+        const std::string gate{"ab"};
+
+        const Pattern built{
+                .alphabet = {.symbols = symbols, .sets = {{.symbol = 'a', .ranges = points}}, .other = 'b'},
+                .alternatives = {{.language = text("a"), .gate = gate}, {.language = text("b"), .gate = gate}}};
+
+        return validate(built, 2);
+    }()};
+
+    const auto& [alphabet, alternatives]{report.pattern};
+
+    EXPECT_EQ(alphabet.symbols, "ab");
+    ASSERT_EQ(alphabet.sets.size(), 1U);
+    EXPECT_EQ(alphabet.sets.front().ranges.front().first, U'a');
+    ASSERT_EQ(alternatives.size(), 2U);
+    EXPECT_EQ(alternatives.back().gate, "ab");
+
+    const matisse::pretok::Segmenter segmenter{report.pattern};
+
+    EXPECT_EQ(segmenter.boundaries("abba"), matisse::pretok::Segmenter{single}.boundaries("abba"));
+}
+
+TEST(Report_test, No_member_of_a_report_is_assigned_so_its_pattern_stays_the_one_its_tables_were_decided_of)
+{
+    const auto report{validate(single, 2)};
+
+    // Neither `report.pattern = gated` nor any other assignment to a report or a member of one compiles.
+    static_assert(!std::is_assignable_v<decltype((report.pattern)), const Pattern&>);
+    static_assert(!std::is_assignable_v<decltype((report.policy)), const Window_table&>);
+    static_assert(!std::is_copy_assignable_v<Report>);
+    static_assert(!std::is_move_assignable_v<Report>);
+
+    const auto copied{report};
+
+    const auto& [factorization, policy, gap, pattern]{copied};
+
+    EXPECT_EQ(json(copied), json(report));
+    EXPECT_EQ(pattern.alphabet.symbols, single.alphabet.symbols);
+    EXPECT_EQ(policy.windows.size(), report.policy.windows.size());
 }
 
 TEST(Report_test, A_width_of_zero_is_refused)

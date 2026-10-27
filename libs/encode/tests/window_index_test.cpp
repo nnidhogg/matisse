@@ -21,6 +21,7 @@
 using namespace matisse::encode;
 using matisse::pretok::Alphabet;
 using matisse::pretok::Alternative;
+using matisse::pretok::Class_table;
 using matisse::pretok::Code_point_set;
 using matisse::pretok::Pattern;
 using matisse::validate::Inventory;
@@ -56,15 +57,15 @@ constexpr std::array<Code_point_range, 7> letter_points{{
 /**
  * @brief The sets the test alphabet reads, the space and the letters.
  */
-constexpr std::array<Code_point_set, 2> sets{{
-        {.symbol = ' ', .ranges = space_points},
-        {.symbol = 'a', .ranges = letter_points},
-}};
+const std::vector<Code_point_set> sets{
+        {.symbol = ' ', .ranges = {space_points.begin(), space_points.end()}},
+        {.symbol = 'a', .ranges = {letter_points.begin(), letter_points.end()}},
+};
 
 /**
  * @brief An alphabet of three classes: the space, the letters, and everything else.
  */
-constexpr Alphabet alphabet{.symbols = " !a", .sets = sets, .other = '!'};
+const Alphabet alphabet{.symbols = " !a", .sets = sets, .other = '!'};
 
 /**
  * @brief A pattern in GPT-2's shape over the three classes: a letter run or a run of everything else, each after an
@@ -196,10 +197,13 @@ std::string random_text(std::mt19937& random, const std::size_t fragments)
  * @brief Expects first_anchor() of a text at every code point, and at its end, to be the least anchor brute force finds
  *        at or after it.
  * @param index The index.
+ * @param class_table The class table of the test alphabet.
  * @param table The table the index was built of.
  * @param text The text, well-formed UTF-8.
  */
-void expect_brute_force(const Window_index& index, const Window_table& table, const std::string_view text)
+void expect_brute_force(
+        const Window_index& index, const Class_table& class_table, const Window_table& table,
+        const std::string_view text)
 {
     const auto anchors{anchors_of(table, text)};
 
@@ -210,7 +214,8 @@ void expect_brute_force(const Window_index& index, const Window_table& table, co
             continue;
         }
 
-        EXPECT_EQ(index.first_anchor(text, from), least_at_or_after(anchors, from)) << text << " from " << from;
+        EXPECT_EQ(index.first_anchor(class_table, text, from), least_at_or_after(anchors, from))
+                << text << " from " << from;
     }
 }
 
@@ -222,13 +227,15 @@ TEST(Window_index_test, The_first_anchor_is_the_least_anchor_brute_force_finds_a
     {
         const auto table{table_of(inventory)};
 
-        const Window_index index{table, alphabet};
+        const Window_index index{table};
+
+        const Class_table class_table{alphabet};
 
         std::mt19937 random{13};
 
         for (std::size_t count{0}; count < 100; ++count)
         {
-            expect_brute_force(index, table, random_text(random, 120));
+            expect_brute_force(index, class_table, table, random_text(random, 120));
         }
     }
 }
@@ -237,7 +244,9 @@ TEST(Window_index_test, An_anchor_whose_window_crosses_the_edge_of_a_block_is_fo
 {
     const auto table{table_of(Inventory::factorization)};
 
-    const Window_index index{table, alphabet};
+    const Window_index index{table};
+
+    const Class_table class_table{alphabet};
 
     // The one anchor stands where the letters meet the punctuation, its window read around the first block's edge at
     // byte 256 or far beyond it; after the leading a, every two-byte letter begins at an odd byte, so the edge falls
@@ -258,36 +267,40 @@ TEST(Window_index_test, An_anchor_whose_window_crosses_the_edge_of_a_block_is_fo
             const auto anchors{anchors_of(table, text)};
 
             ASSERT_EQ(anchors.size(), 1U) << letters;
-            EXPECT_EQ(index.first_anchor(text, 0), *anchors.begin()) << letters;
-            EXPECT_EQ(index.first_anchor(text, *anchors.begin()), *anchors.begin()) << letters;
+            EXPECT_EQ(index.first_anchor(class_table, text, 0), *anchors.begin()) << letters;
+            EXPECT_EQ(index.first_anchor(class_table, text, *anchors.begin()), *anchors.begin()) << letters;
         }
     }
 
     const auto far{std::string(5000, 'a') + "!!"};
 
-    EXPECT_EQ(index.first_anchor(far, 0), 5000U);
+    EXPECT_EQ(index.first_anchor(class_table, far, 0), 5000U);
 }
 
 TEST(Window_index_test, A_stretch_that_holds_no_certified_window_has_no_anchor)
 {
     const auto table{table_of(Inventory::factorization)};
 
-    const Window_index index{table, alphabet};
+    const Window_index index{table};
+
+    const Class_table class_table{alphabet};
 
     const std::string letters(10000, 'a');
 
-    EXPECT_FALSE(index.first_anchor(letters, 0).has_value());
-    EXPECT_FALSE(index.first_anchor("", 0).has_value());
-    EXPECT_FALSE(index.first_anchor("a!", 2).has_value());
+    EXPECT_FALSE(index.first_anchor(class_table, letters, 0).has_value());
+    EXPECT_FALSE(index.first_anchor(class_table, "", 0).has_value());
+    EXPECT_FALSE(index.first_anchor(class_table, "a!", 2).has_value());
 }
 
 TEST(Window_index_test, The_start_of_a_stretch_is_no_anchor_and_the_width_is_the_table_s)
 {
     const auto table{table_of(Inventory::factorization)};
 
-    const Window_index index{table, alphabet};
+    const Window_index index{table};
 
-    EXPECT_EQ(index.first_anchor("a!", 0), 1U);
-    EXPECT_EQ(index.first_anchor("!a", 0), 1U);
+    const Class_table class_table{alphabet};
+
+    EXPECT_EQ(index.first_anchor(class_table, "a!", 0), 1U);
+    EXPECT_EQ(index.first_anchor(class_table, "!a", 0), 1U);
     EXPECT_EQ(index.width(), table.width);
 }

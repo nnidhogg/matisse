@@ -93,8 +93,7 @@ namespace
 
 } // namespace
 
-Window_index::Window_index(const validate::Window_table& table, const pretok::Alphabet& alphabet)
-    : width_{table.width}, classes_{alphabet}
+Window_index::Window_index(const validate::Window_table& table) : width_{table.width}
 {
     std::set<std::size_t> widths{};
 
@@ -113,7 +112,8 @@ std::size_t Window_index::width() const noexcept
     return width_;
 }
 
-std::optional<std::size_t> Window_index::first_anchor(const std::string_view stretch, const std::size_t from) const
+std::optional<std::size_t> Window_index::first_anchor(
+        const pretok::Class_table& class_table, const std::string_view stretch, const std::size_t from) const
 {
     // The stretch's start is no anchor; an anchor stands at a code point, so one at or after the byte after it is one
     // after it.
@@ -126,7 +126,7 @@ std::optional<std::size_t> Window_index::first_anchor(const std::string_view str
 
     while (true)
     {
-        if (const auto anchor{block_anchor(stretch, begin, end, floor)})
+        if (const auto anchor{block_anchor(class_table, stretch, begin, end, floor)})
         {
             return anchor;
         }
@@ -145,11 +145,12 @@ std::optional<std::size_t> Window_index::first_anchor(const std::string_view str
 }
 
 std::optional<std::size_t> Window_index::block_anchor(
-        const std::string_view stretch, const std::size_t begin, const std::size_t end, const std::size_t floor) const
+        const pretok::Class_table& class_table, const std::string_view stretch, const std::size_t begin,
+        const std::size_t end, const std::size_t floor) const
 {
     const auto block{stretch.substr(begin, end - begin)};
 
-    const auto symbols{classes_.symbols(block)};
+    const auto symbols{class_table.symbols(block)};
 
     const std::string_view classes{symbols};
 

@@ -109,31 +109,32 @@ struct Window_table
  * @brief What validate() decides of a pattern: its window table under each certificate and the boundary gap of its
  *        split verifier, with the pattern they were decided of.
  *
- * validate() is the only construction path, so a report as validate() returns it holds the pattern its window tables
- * were decided of, and an encoder or a supply built from it reads that pattern.
+ * validate() is the only construction path and every member is const, so a report holds the pattern its window tables
+ * were decided of for as long as it lives, and an encoder or a supply built from it reads that pattern. A report is
+ * copied and moved whole, a move copying its members, and is never assigned to.
  */
 struct Report
 {
     /**
      * @brief The windows the factorization certificate certifies.
      */
-    Window_table factorization{};
+    const Window_table factorization{};
 
     /**
      * @brief The windows the policy certificate certifies.
      */
-    Window_table policy{};
+    const Window_table policy{};
 
     /**
      * @brief The supremum of the distance between consecutive boundaries of the split verifier, or the lasso that
      *        makes it unbounded.
      */
-    munch::verifier::Boundary_gap gap{};
+    const munch::verifier::Boundary_gap gap{};
 
     /**
      * @brief The pattern the tables were decided of.
      */
-    pretok::Pattern pattern{};
+    const pretok::Pattern pattern{};
 
 private:
     // validate() is the only construction path: a report exists exclusively with the pattern its tables were decided

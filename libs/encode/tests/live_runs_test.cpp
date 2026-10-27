@@ -53,15 +53,15 @@ constexpr std::array<Code_point_range, 2> letter_points{{
 /**
  * @brief The sets the test alphabet reads, the space and the letters.
  */
-constexpr std::array<Code_point_set, 2> sets{{
-        {.symbol = ' ', .ranges = space_points},
-        {.symbol = 'a', .ranges = letter_points},
-}};
+const std::vector<Code_point_set> sets{
+        {.symbol = ' ', .ranges = {space_points.begin(), space_points.end()}},
+        {.symbol = 'a', .ranges = {letter_points.begin(), letter_points.end()}},
+};
 
 /**
  * @brief An alphabet of three classes: the space, the letters, and everything else.
  */
-constexpr Alphabet alphabet{.symbols = " !a", .sets = sets, .other = '!'};
+const Alphabet alphabet{.symbols = " !a", .sets = sets, .other = '!'};
 
 /**
  * @brief A pattern in GPT-2's shape over the three classes, whose white space runs hold their last space for what

@@ -72,15 +72,15 @@ constexpr std::array<Code_point_range, 7> letter_points{{
 /**
  * @brief The sets the test alphabet reads, the space and the letters.
  */
-constexpr std::array<Code_point_set, 2> sets{{
-        {.symbol = ' ', .ranges = space_points},
-        {.symbol = 'a', .ranges = letter_points},
-}};
+const std::vector<Code_point_set> sets{
+        {.symbol = ' ', .ranges = {space_points.begin(), space_points.end()}},
+        {.symbol = 'a', .ranges = {letter_points.begin(), letter_points.end()}},
+};
 
 /**
  * @brief An alphabet of three classes: the space, the letters, and everything else.
  */
-constexpr Alphabet alphabet{.symbols = " !a", .sets = sets, .other = '!'};
+const Alphabet alphabet{.symbols = " !a", .sets = sets, .other = '!'};
 
 /**
  * @brief A pattern in GPT-2's shape over the three classes: a letter run or a run of everything else, each after an
@@ -102,7 +102,7 @@ const Pattern pattern{.alphabet = alphabet, .alternatives = alternatives};
 /**
  * @brief An alphabet of one class, every code point in it.
  */
-constexpr Alphabet one_symbol{.symbols = "a", .sets = {}, .other = 'a'};
+const Alphabet one_symbol{.symbols = "a", .sets = {}, .other = 'a'};
 
 /**
  * @brief A pattern over the one class whose every piece is one code point, so that a window of any width is certified
@@ -1013,6 +1013,27 @@ TEST(Encoder_test, An_encoder_segments_by_the_pattern_its_report_was_decided_of_
         EXPECT_EQ(words.encode_parallel(text, chunks), words.encode(text)) << chunks;
         EXPECT_EQ(points.encode_parallel(text, chunks), points.encode(text)) << chunks;
     }
+}
+
+TEST(Encoder_test, An_encoder_is_copied_and_moved_but_never_assigned_so_a_cache_serves_one_definition_throughout)
+{
+    // A cache knows its encoder by address, so an assignment would leave it serving another definition's ids; neither
+    // assignment compiles.
+    static_assert(!std::is_copy_assignable_v<Encoder>);
+    static_assert(!std::is_move_assignable_v<Encoder>);
+    static_assert(std::is_copy_constructible_v<Encoder>);
+    static_assert(std::is_move_constructible_v<Encoder>);
+
+    const auto encoder{encoder_of(test_definition())};
+
+    Piece_cache cache{encoder, piece_cache_capacity};
+
+    const auto ids{encoder.encode("abc ab!a", cache)};
+
+    const auto copied{encoder};
+
+    EXPECT_EQ(copied.encode("abc ab!a"), ids);
+    EXPECT_THROW(std::ignore = copied.encode("abc ab!a", cache), std::invalid_argument);
 }
 
 TEST(Encoder_test, A_cache_made_for_another_encoder_is_refused)

@@ -212,6 +212,14 @@ may change in minor releases. So may the five accessors through which an `Encode
 the renderings. The corpus probe and the bench under `tools/probes` and the prose in `docs/` carry no compatibility
 promise, and performance numbers are measurements, not contracts.
 
+**Copies and moves.** An `Encoder` is copied and moved and never assigned to, both assignments deleted, since nothing
+changes it after construction: a copy is an encoder of its own, which refuses a piece cache made for the original. A
+`Report` is copied and moved whole, a move copying its `const` members, and never assigned to, so it keeps the pattern
+its window tables were decided of. A `Piece_cache` and a `Stream_encoder` borrow their encoder, are copied and moved and
+are not assigned to: a copy borrows the same encoder, a copied cache holds the same pieces, and a copied stream reads on
+from where the original stood, apart from it. A cache or a stream reads the encoder object it was made for, so that
+encoder must outlive it and must not be moved while it is in use.
+
 **Errors.** A function refuses content it cannot take with `std::invalid_argument`, the message naming what it refuses,
 among them ill-formed UTF-8 at its byte offset, a definition the merge cannot take, a special token the definition does
 not hold, a pattern that is not total and a piece cache made for another encoder. `decode()` refuses an id that names no

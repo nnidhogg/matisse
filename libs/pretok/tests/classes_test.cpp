@@ -13,7 +13,7 @@ namespace
 /**
  * @brief An alphabet of one class, every code point's, which is all the decoding of a text needs.
  */
-constexpr Alphabet one_class{.symbols = "!", .sets = {}, .other = '!'};
+const Alphabet one_class{.symbols = "!", .sets = {}, .other = '!'};
 
 /**
  * @brief Returns the refusal classes_of() makes of a text, empty when it makes none.
