@@ -9,6 +9,7 @@
 #include <string_view>
 #include <tuple>
 #include <unistd.h>
+#include <utility>
 #include <vector>
 
 using namespace matisse::load;
@@ -45,6 +46,41 @@ std::filesystem::path written(const std::string_view name, const std::string_vie
     std::ofstream{path, std::ios::binary} << text;
 
     return path;
+}
+
+/**
+ * @brief Returns a text with every line feed replaced, for writing a file's line ends another way.
+ * @param text The text, its lines ended by `\n`.
+ * @param line_end What ends each line instead.
+ * @return The text with its line ends replaced.
+ */
+std::string with_line_ends(const std::string_view text, const std::string_view line_end)
+{
+    std::string out{};
+
+    for (const auto byte : text)
+    {
+        out += byte == '\n' ? std::string{line_end} : std::string{byte};
+    }
+
+    return out;
+}
+
+/**
+ * @brief Returns the merges of a definition as pairs of their parts, in rank order.
+ * @param definition The definition.
+ * @return Every merge's left and right part.
+ */
+std::vector<std::pair<std::string, std::string>> parts_of(const Definition& definition)
+{
+    std::vector<std::pair<std::string, std::string>> parts{};
+
+    for (const auto& [left, right] : definition.merges)
+    {
+        parts.emplace_back(left, right);
+    }
+
+    return parts;
 }
 
 /**
@@ -117,6 +153,28 @@ TEST(Definition_test, Read_gpt2_drops_the_text_after_the_last_newline_of_the_mer
     EXPECT_EQ(definition.merges[0].left, "a");
 }
 
+TEST(Definition_test, Read_gpt2_reads_cr_and_crlf_line_ends_as_line_feeds_as_python_s_text_mode_does)
+{
+    // The text after the last line end is dropped in every form, as encoder.py drops it after the last newline.
+    constexpr std::string_view encoder{"{\n \"a\": 0,\n \"b\": 1\n}\n"};
+    constexpr std::string_view vocab{"#version: 0.2\nĠ a\nÃ ©\na b\nb a"};
+
+    const auto lf{read_gpt2(written("encoder.json", encoder), written("vocab.bpe", vocab))};
+
+    ASSERT_EQ(lf.merges.size(), 3U);
+
+    for (const std::string_view line_end : {"\r", "\r\n"})
+    {
+        const auto encoder_path{written("encoder.json", with_line_ends(encoder, line_end))};
+        const auto vocab_path{written("vocab.bpe", with_line_ends(vocab, line_end))};
+
+        const auto read{read_gpt2(encoder_path, vocab_path)};
+
+        EXPECT_EQ(read.spellings, lf.spellings) << line_end.size();
+        EXPECT_EQ(parts_of(read), parts_of(lf)) << line_end.size();
+    }
+}
+
 TEST(Definition_test, Read_gpt2_refuses_ids_that_are_not_dense_from_zero)
 {
     const auto beyond{gpt2_refusal(R"({"a": 0, "b": 2})", "#version: 0.2\n")};
@@ -143,6 +201,25 @@ TEST(Definition_test, Read_gpt2_refuses_a_character_the_byte_map_does_not_carry)
     EXPECT_TRUE(raw.contains("at byte 3 holds U+0020")) << raw;
     EXPECT_TRUE(merged.contains("line 2 of")) << merged;
     EXPECT_TRUE(merged.contains("holds U+0144")) << merged;
+}
+
+TEST(Definition_test, Read_gpt2_refuses_bytes_that_are_not_utf_8_before_undoing_the_byte_map)
+{
+    const auto overlong{gpt2_refusal("{\"\xC1\xA1\":0}", "#version: 0.2\n")};
+    const auto merged{gpt2_refusal(R"({"a": 0})", "#version: 0.2\na \xC5\n")};
+
+    EXPECT_TRUE(overlong.contains("at byte 2 holds bytes that are not UTF-8")) << overlong;
+    EXPECT_TRUE(merged.contains("at byte 16 holds bytes that are not UTF-8")) << merged;
+}
+
+TEST(Definition_test, Read_gpt2_refuses_a_merge_file_not_utf_8_in_its_version_line_or_tail_as_python_s_text_mode_does)
+{
+    const auto header{gpt2_refusal(R"({"a": 0, "b": 1})", "#version: 0.2 \xFF\na b\n")};
+    const auto tail{gpt2_refusal(R"({"a": 0, "b": 1})", "#version: 0.2\na b\ntail \xC5")};
+
+    EXPECT_TRUE(header.contains("at byte 14 holds bytes that are not UTF-8")) << header;
+    EXPECT_TRUE(tail.contains("at byte 23 holds bytes that are not UTF-8")) << tail;
+    EXPECT_TRUE(gpt2_refusal(R"({"a": 0, "b": 1})", "#version: 0.2\na b\ntail").empty());
 }
 
 TEST(Definition_test, Read_gpt2_refuses_a_merge_line_that_is_not_two_parts)
@@ -181,6 +258,14 @@ TEST(Definition_test, Read_gpt2_refuses_a_pair_listed_twice)
     EXPECT_TRUE(refusal.contains("repeats the merge at rank 0")) << refusal;
 }
 
+TEST(Definition_test, Read_gpt2_refuses_a_spelling_listed_twice)
+{
+    const auto refusal{gpt2_refusal(R"({"a": 0, "b": 1, "a": 2})", "#version: 0.2\n")};
+
+    EXPECT_TRUE(refusal.contains("the token at id 2 of")) << refusal;
+    EXPECT_TRUE(refusal.contains("repeats the spelling of the token at id 0")) << refusal;
+}
+
 TEST(Definition_test, Read_gpt2_refuses_an_encoder_that_is_not_one_flat_object_of_spellings_and_ids)
 {
     const auto colon{gpt2_refusal(R"({"a" 0})", "#version: 0.2\n")};
@@ -192,6 +277,15 @@ TEST(Definition_test, Read_gpt2_refuses_an_encoder_that_is_not_one_flat_object_o
     EXPECT_TRUE(id.contains("has no id at byte 6")) << id;
     EXPECT_TRUE(escape.contains("has no JSON escape at byte 3")) << escape;
     EXPECT_TRUE(trailing.contains("has no end of the object at byte 9")) << trailing;
+}
+
+TEST(Definition_test, Read_gpt2_refuses_a_leading_zero_and_white_space_outside_json_s_four_as_python_s_json_does)
+{
+    const auto zero{gpt2_refusal(R"({"a":00})", "#version: 0.2\n")};
+    const auto vertical_tab{gpt2_refusal("{\v\"a\":0}", "#version: 0.2\n")};
+
+    EXPECT_TRUE(zero.contains("has no closing brace at byte 6")) << zero;
+    EXPECT_TRUE(vertical_tab.contains("has no quoted spelling at byte 1")) << vertical_tab;
 }
 
 TEST(Definition_test, Read_gpt2_reads_an_empty_object_and_a_version_line_alone_as_an_empty_definition)
@@ -238,9 +332,30 @@ TEST(Definition_test, Read_tiktoken_reads_the_ranks_as_ids_and_attaches_the_spec
     EXPECT_EQ(specials[1].id, 4U);
 }
 
+TEST(Definition_test, Read_tiktoken_splits_lines_at_cr_and_crlf_as_python_s_bytes_splitlines_does)
+{
+    constexpr std::string_view ranks{"Ig== 1\nIQ== 0\n\nIGE= 2\n"};
+
+    const auto lf{read_tiktoken(written("ranks.tiktoken", ranks), {})};
+
+    ASSERT_EQ(lf.spellings.size(), 3U);
+
+    for (const std::string_view line_end : {"\r", "\r\n"})
+    {
+        const auto read{read_tiktoken(written("ranks.tiktoken", with_line_ends(ranks, line_end)), {})};
+
+        EXPECT_EQ(read.spellings, lf.spellings) << line_end.size();
+
+        const auto refusal{tiktoken_refusal(with_line_ends("Ig== 0\nIQ== 1 2\n", line_end))};
+
+        EXPECT_TRUE(refusal.contains("line 2 of")) << line_end.size() << ": " << refusal;
+    }
+}
+
 TEST(Definition_test, Read_tiktoken_refuses_a_line_that_is_not_a_base64_token_and_a_decimal_rank)
 {
-    for (const std::string_view line : {"IQ=", "I*== 1", "IQ==", "IQ== -1", "IQ== 1x", "IQ== 1 2", "==== 1"})
+    for (const std::string_view line :
+         {"IQ=", "I*== 1", "IQ==", "IQ== -1", "IQ== 1x", "IQ== 1 2", "==== 1", " ", "\t\v\f"})
     {
         const auto refusal{tiktoken_refusal(std::format("Ig== 0\n{}\n", line))};
 
@@ -256,4 +371,12 @@ TEST(Definition_test, Read_tiktoken_refuses_ranks_that_are_not_dense_from_zero)
 
     EXPECT_TRUE(beyond.contains("are not dense from zero: 2 tokens, and the rank 2")) << beyond;
     EXPECT_TRUE(repeated.contains("are not dense from zero: 2 tokens, and the rank 0")) << repeated;
+}
+
+TEST(Definition_test, Read_tiktoken_refuses_a_spelling_listed_twice)
+{
+    const auto refusal{tiktoken_refusal("IQ== 0\nIg== 1\nIQ== 2\n")};
+
+    EXPECT_TRUE(refusal.contains("the token at rank 2 of")) << refusal;
+    EXPECT_TRUE(refusal.contains("repeats the spelling of the token at rank 0")) << refusal;
 }

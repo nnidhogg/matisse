@@ -56,8 +56,11 @@ public:
      * @param report The report validate() decided of the pattern.
      * @param inventory The inventory whose window table and right context the encoder keeps.
      * @param allowed The spellings of the special tokens cut out of a text; every other special token is ordinary text.
-     * @throws std::invalid_argument If an allowed spelling is not one of the definition's special tokens, or the
-     *         definition cannot be merged, as Merger refuses it; the message names the spelling, the byte or the merge.
+     * @throws std::invalid_argument If two of the definition's special tokens share a spelling or an id or one is
+     *         spelled by bytes that are not UTF-8, allowed or not, an allowed spelling is not one of the definition's
+     *         special tokens, is empty or is a special token whose id is an ordinary token's, or the definition cannot
+     *         be merged, as Merger refuses it; the message names the spellings, the special token's ids, the byte or
+     *         the merge.
      */
     Encoder(load::Definition definition, const validate::Report& report, validate::Inventory inventory,
             std::span<const std::string> allowed);
@@ -107,8 +110,8 @@ public:
      * @brief Returns the ids of a text as encode() does, the merged pieces kept in a cache the caller owns across its
      *        calls.
      *
-     * The cache holds the ids of a piece as this encoder's definition merges them, so it is made for this encoder and
-     * a cache made for another is refused; the encoder is not changed by a call and the cache is the only state a call
+     * The cache holds the ids of a piece as this encoder's definition merges them, so it is made for this encoder and a
+     * cache made for another is refused; the encoder is not changed by a call and the cache is the only state a call
      * shares with its caller, so it serves one thread at a time with no lock, each thread of a pool holding its own.
      * @param text The text, well-formed UTF-8.
      * @param cache The cache, made for this encoder.
@@ -243,13 +246,20 @@ private:
 
     /**
      * @brief Returns the special tokens of a definition that are allowed, in the order the spellings are given.
-     * @param specials The definition's special tokens.
+     * @param definition The definition.
      * @param allowed The spellings allowed.
      * @return The allowed special tokens.
-     * @throws std::invalid_argument If an allowed spelling is not one of the special tokens; the message names it.
+     * @throws std::invalid_argument If two of the special tokens share a spelling, allowed or not, which encode() would
+     *         cut out as the first of them, the message naming the spelling and both ids, if two share an id, allowed
+     * or not, which decode() would read as the first of them, the message naming both spellings and the id, if one is
+     * spelled by bytes that are not UTF-8, allowed or not, which no vendor's special token is and which a stream would
+     * hold back from inside a code point's sequence, the message naming the spelling, or if an allowed spelling is not
+     * one of the special tokens, the message naming it, is empty, the message naming the special token's id, or is a
+     * special token whose id is an ordinary token's, which decode() would read as that token, the message naming the
+     * spelling and the id.
      */
     [[nodiscard]] static std::vector<load::Special_token> allowed_of(
-            std::span<const load::Special_token> specials, std::span<const std::string> allowed);
+            const load::Definition& definition, std::span<const std::string> allowed);
 
     /**
      * @brief Returns the ids of a definition's ordinary tokens in the order of their spellings, bytewise ascending.

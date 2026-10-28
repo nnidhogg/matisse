@@ -53,10 +53,14 @@ That model excludes, some of it permanently and some only in the first version:
 
 Special tokens follow the same rule. The spellings the caller allows are cut out of the text, the earliest first and the
 longest among those that begin at one byte, each emitting its id, and the constructor refuses an allowed spelling that
-is not one of the definition's special tokens. Every special token that is not allowed is ordinary text, which is
-tiktoken's `encode()` with that `allowed_special` and an empty `disallowed_special` where no allowed spelling begins
-another, as on every definition in scope, and encoder.py's behavior when none is allowed. There is no form that refuses
-a text for holding one.
+is not one of the definition's special tokens, one that is empty, since an empty spelling would occur at every byte, and
+one whose id is an ordinary token's, which `decode()` would read as that token; it refuses as well two special tokens
+that share a spelling, allowed or not, which `encode()` would cut out as the first of them, two that share an id,
+allowed or not, which `decode()` would read as the first of them, and one whose spelling is not UTF-8, allowed or not,
+which no vendor's special token is and which a stream would hold back from inside a code point's sequence. Every special
+token that is not allowed is ordinary text, which is tiktoken's `encode()` with that `allowed_special` and an empty
+`disallowed_special` where no allowed spelling begins another, as on every definition in scope, and encoder.py's
+behavior when none is allowed. There is no form that refuses a text for holding one.
 
 ## **Merges: Two Rules, Each a Vendor's**
 
@@ -205,7 +209,10 @@ id. Moving the pin is open choice 6 of [design.md](design.md).
 
 - Token ids are `load::Token_id_t`, 32 bits, because ids are what a model reads and every vocabulary in scope fits.
 - The merge holds every offset in 32 bits, so it merges a piece shorter than 2^32 bytes, and `Merger::merged()` refuses
-  a longer one with `std::length_error` naming its length, which `encode()` and `encode_parallel()` pass on.
+  a longer one with `std::length_error` naming its length, which `encode()` and `encode_parallel()` pass on. A
+  `Stream_encoder` merges only the bytes of a piece after the ids it has returned, when the piece closes and at the end
+  of every push before then, so it refuses a piece once 2^32 or more of those bytes are merged at once, and a piece
+  whose ids it returns as it reads them can grow past 2^32 bytes without a refusal.
 - A piece of at most 128 bytes is merged by a scan of its parts held in an array on the stack, a longer one by a binary
   heap, and on a definition that meets the backtracking's condition every piece longer than 128 bytes and every one at
   least half outside ASCII by backtracking. All three give the same ids, so the routing changes the speed and never an

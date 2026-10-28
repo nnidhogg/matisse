@@ -83,7 +83,10 @@ public:
      * @throws std::invalid_argument If the bytes read are not well-formed UTF-8, as classes_of() refuses them, the byte
      *         offset counted from the first byte the stream had not classed; a stream that has refused is not pushed to
      *         or finished again, and a new Stream_encoder over the same encoder reads the next text.
-     * @throws std::length_error If a piece is 2^32 bytes or longer, as encode() refuses it.
+     * @throws std::length_error If 2^32 bytes or more are merged at once, as Merger::merged() refuses them: the stream
+     *         merges only a piece's bytes after the ids returned, when the piece closes and at the end of every push
+     *         before then, the test of a boundary merging them followed by the rest of a token, so a piece whose ids
+     *         are returned as it is read can reach 2^32 bytes without a refusal, where encode() refuses it.
      */
     [[nodiscard]] std::vector<load::Token_id_t> push(std::string_view bytes);
 
@@ -93,7 +96,8 @@ public:
      * @return The remaining ids.
      * @throws std::invalid_argument If the text ends inside a UTF-8 sequence or what the stream held is not well-formed
      *         UTF-8.
-     * @throws std::length_error If a piece is 2^32 bytes or longer, as encode() refuses it.
+     * @throws std::length_error If 2^32 bytes or more are merged at once, a piece's bytes after the ids returned, as
+     *         push() states.
      */
     [[nodiscard]] std::vector<load::Token_id_t> finish();
 

@@ -236,10 +236,12 @@ one is defined.
 
 **Errors.** A function refuses content it cannot take with `std::invalid_argument`, the message naming what it refuses,
 among them ill-formed UTF-8 at its byte offset, a definition the merge cannot take, a special token the definition does
-not hold, a pattern that is not total and a piece cache made for another encoder. `decode()` refuses an id that names no
-token with `std::out_of_range`, naming the id and its index, as munch's `Mode_lexer` refuses an index that names no
-mode. A file that cannot be read is refused with `std::runtime_error`, and a piece of 2^32 bytes or longer with
-`std::length_error` naming its length. Nothing is repaired or guessed, as [docs/limits.md](docs/limits.md) describes.
+not hold, whose spelling is empty or whose id is an ordinary token's, two special tokens that share a spelling or an id,
+a special token whose spelling is not UTF-8, a pattern that is not total and a piece cache made for another encoder.
+`decode()` refuses an id that names no token with `std::out_of_range`, naming the id and its index, as munch's
+`Mode_lexer` refuses an index that names no mode. A file that cannot be read is refused with `std::runtime_error`, and a
+piece of 2^32 bytes or longer with `std::length_error` naming its length, a stream counting only the bytes of a piece
+after the ids it has returned. Nothing is repaired or guessed, as [docs/limits.md](docs/limits.md) describes.
 
 **Platforms.** The promise is munch's: 64-bit Linux with GCC 13 or later and Clang 19 or later, source compatibility
 within a major version and no ABI promise. CI builds and tests on x86-64 and ARM64 and runs the address,

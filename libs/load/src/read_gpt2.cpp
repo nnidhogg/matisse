@@ -38,8 +38,15 @@ constexpr char32_t map_end{0x144};
 using Byte_map_t = std::array<std::optional<unsigned char>, map_end>;
 
 /**
- * @brief The white space read between encoder.json's tokens and between a merge line's two parts, the ASCII white space
- *        Python's str.split() splits at; no character of the byte map is white space.
+ * @brief The white space read between encoder.json's tokens, the four characters JSON allows there, as Python's json
+ *        reads them.
+ */
+constexpr std::string_view json_space{" \t\n\r"};
+
+/**
+ * @brief The white space read between a merge line's two parts, the ASCII white space of C's isspace(); Python's
+ *        str.split() splits at more, U+001C to U+001F among them, none of which the byte map carries, so a part
+ *        holding one is refused.
  */
 constexpr std::string_view separators{" \t\n\v\f\r"};
 
@@ -120,30 +127,96 @@ constexpr Byte_map_t byte_map{byte_map_of()};
 }
 
 /**
- * @brief Returns the code point of the UTF-8 sequence at an index and its length, as its lead byte's high bits give
- *        them; a character outside the byte map is refused by its caller, so no further check is made here.
- * @param text The text.
- * @param at The index of the lead byte, within the text.
- * @return The code point and the number of bytes the sequence takes, at most the bytes left.
+ * @brief Returns whether a byte continues a UTF-8 sequence rather than beginning one.
+ * @param byte The byte.
+ * @return True for a continuation byte, `10xxxxxx`.
  */
-[[nodiscard]] std::pair<char32_t, std::size_t> character_at(const std::string_view text, const std::size_t at) noexcept
+[[nodiscard]] constexpr bool is_continuation(const unsigned char byte) noexcept
+{
+    return (byte & 0xC0U) == 0x80U;
+}
+
+/**
+ * @brief Returns the length of the well-formed UTF-8 sequence at an index, zero when none stands there: an ASCII byte,
+ *        or a lead byte of the shape 110xxxxx, 1110xxxx or 11110xxx followed by as many continuation bytes as its shape
+ *        says, the overlong, surrogate and beyond-U+10FFFF encodings excluded as the standard excludes them, which the
+ *        second byte's narrower range after a lead of E0, ED, F0 or F4 rules out.
+ * @param text The text.
+ * @param at The index, within the text.
+ * @return One to four, or zero.
+ */
+[[nodiscard]] constexpr std::size_t well_formed_length(const std::string_view text, const std::size_t at) noexcept
 {
     const auto lead{static_cast<unsigned char>(text[at])};
 
-    const auto length{lead < 0x80U ? 1UZ : lead >= 0xF0U ? 4UZ : lead >= 0xE0U ? 3UZ : 2UZ};
+    const auto length{
+            lead < 0x80U                  ? 1UZ :
+            lead >= 0xC2U && lead < 0xE0U ? 2UZ :
+            lead >= 0xE0U && lead < 0xF0U ? 3UZ :
+            lead >= 0xF0U && lead < 0xF5U ? 4UZ :
+                                            0UZ};
 
-    const auto available{std::min(length, text.size() - at)};
+    if (length == 0 || at + length > text.size())
+    {
+        return 0;
+    }
+
+    for (std::size_t index{1}; index < length; ++index)
+    {
+        if (!is_continuation(static_cast<unsigned char>(text[at + index])))
+        {
+            return 0;
+        }
+    }
+
+    const auto second{static_cast<unsigned char>(text[at + (length > 1 ? 1 : 0)])};
+
+    const auto malformed{
+            (lead == 0xE0U && second < 0xA0U) || (lead == 0xEDU && second >= 0xA0U) ||
+            (lead == 0xF0U && second < 0x90U) || (lead == 0xF4U && second >= 0x90U)};
+
+    return malformed ? 0 : length;
+}
+
+/**
+ * @brief Returns the code point of the well-formed UTF-8 sequence at an index and its length, as encoder.py's reading
+ *        of the file as UTF-8 text decodes it; a character outside the byte map is refused by its caller.
+ * @param text The text.
+ * @param at The index of the lead byte, within the text.
+ * @return The code point and the number of bytes the sequence takes, std::nullopt when the bytes there are not UTF-8.
+ */
+[[nodiscard]] std::optional<std::pair<char32_t, std::size_t>> character_at(
+        const std::string_view text, const std::size_t at) noexcept
+{
+    const auto length{well_formed_length(text, at)};
+
+    if (length == 0)
+    {
+        return std::nullopt;
+    }
+
+    const auto lead{static_cast<unsigned char>(text[at])};
 
     char32_t character{static_cast<char32_t>(length == 1 ? lead : lead & (0xFFU >> (length + 1)))};
 
-    for (std::size_t index{1}; index < available; ++index)
+    for (std::size_t index{1}; index < length; ++index)
     {
         const auto continuation{static_cast<unsigned char>(text[at + index])};
 
         character = (character << 6U) | static_cast<char32_t>(continuation & 0x3FU);
     }
 
-    return {character, available};
+    return std::pair{character, length};
+}
+
+/**
+ * @brief Returns the refusal of bytes that are not well-formed UTF-8.
+ * @param where Where they stand: the file and the byte offset, or the line.
+ * @return The refusal.
+ */
+[[nodiscard]] std::invalid_argument ill_formed(const std::string_view where)
+{
+    return std::invalid_argument{std::format("read_gpt2: {} holds bytes that are not UTF-8", where)};
 }
 
 /**
@@ -179,7 +252,8 @@ constexpr Byte_map_t byte_map{byte_map_of()};
  *        and each spelling's byte map undone.
  *
  * A refusal names the file and the byte offset where the reading stopped: what the object's syntax expected there, the
- * opening quote of an empty token, or the start of a character the byte map does not carry.
+ * opening quote of an empty token, or the start of bytes that are not UTF-8 or of a character the byte map does not
+ * carry.
  */
 class Encoder_reader
 {
@@ -195,7 +269,7 @@ public:
      * @brief Reads the whole object, its spellings placed by id.
      * @return The bytes of every token, by id.
      * @throws std::invalid_argument If the text is not one object of quoted spellings and decimal ids, a spelling is
-     *         empty or holds a character the byte map does not carry, or the ids are not dense from zero.
+     *         empty, is not UTF-8 or holds a character the byte map does not carry, or the ids are not dense from zero.
      */
     [[nodiscard]] std::vector<std::string> read();
 
@@ -209,7 +283,7 @@ private:
     void expect(char symbol, std::string_view expected);
 
     /**
-     * @brief Skips the white space at the current position.
+     * @brief Skips the white space at the current position, the space, tab, line feed and carriage return JSON allows.
      */
     void skip_space() noexcept;
 
@@ -230,23 +304,23 @@ private:
     /**
      * @brief Reads the object's members up to its closing brace: quoted spellings and their ids, separated by commas.
      * @return Every spelling with its id, in the file's order.
-     * @throws std::invalid_argument If a member is not a quoted spelling, a colon and an id, a spelling is empty or
-     *         holds a character the byte map does not carry, or the members are not closed by a brace.
+     * @throws std::invalid_argument If a member is not a quoted spelling, a colon and an id, a spelling is empty, is
+     *         not UTF-8 or holds a character the byte map does not carry, or the members are not closed by a brace.
      */
     [[nodiscard]] Entries_t members();
 
     /**
      * @brief Reads a quoted spelling, each character's byte map undone.
      * @return The spelling's bytes, at least one.
-     * @throws std::invalid_argument If no quote opens or closes it, an escape is not JSON's, a character is one the
-     *         byte map does not carry, or it is empty.
+     * @throws std::invalid_argument If no quote opens or closes it, an escape is not JSON's, its bytes are not UTF-8,
+     *         a character is one the byte map does not carry, or it is empty.
      */
     [[nodiscard]] std::string spelling();
 
     /**
      * @brief Reads one character of a spelling, raw as UTF-8 or as a JSON escape.
      * @return The character's code point.
-     * @throws std::invalid_argument If an escape is not JSON's.
+     * @throws std::invalid_argument If an escape is not JSON's or the bytes are not UTF-8.
      */
     [[nodiscard]] char32_t character();
 
@@ -265,7 +339,7 @@ private:
     [[nodiscard]] char32_t hex_escape();
 
     /**
-     * @brief Reads a decimal id after white space.
+     * @brief Reads a decimal id after white space, as JSON spells a number, with no leading zero.
      * @return The id.
      * @throws std::invalid_argument If no decimal number stands there or it is beyond the 32 bits of an id.
      */
@@ -329,7 +403,7 @@ void Encoder_reader::expect(const char symbol, const std::string_view expected)
 
 void Encoder_reader::skip_space() noexcept
 {
-    while (at_ < text_.size() && separators.contains(text_[at_]))
+    while (at_ < text_.size() && json_space.contains(text_[at_]))
     {
         ++at_;
     }
@@ -415,7 +489,14 @@ char32_t Encoder_reader::character()
         return escaped();
     }
 
-    const auto [code_point, length]{character_at(text_, at_)};
+    const auto decoded{character_at(text_, at_)};
+
+    if (!decoded)
+    {
+        throw ill_formed(std::format("{} at byte {}", name_, at_));
+    }
+
+    const auto [code_point, length]{*decoded};
 
     at_ += length;
 
@@ -469,9 +550,14 @@ Token_id_t Encoder_reader::id()
 {
     skip_space();
 
+    // A zero is the whole number.
+    const auto zero{at_ < text_.size() && text_[at_] == '0'};
+
+    const auto last{zero ? at_ + 1 : text_.size()};
+
     std::uint64_t value{};
 
-    const auto [end, error]{std::from_chars(text_.data() + at_, text_.data() + text_.size(), value)};
+    const auto [end, error]{std::from_chars(text_.data() + at_, text_.data() + last, value)};
 
     if (error != std::errc{} || value > std::numeric_limits<Token_id_t>::max())
     {
@@ -508,11 +594,35 @@ std::vector<std::string> Encoder_reader::by_id(Entries_t entries) const
 }
 
 /**
+ * @brief Requires the tokens of encoder.json to be spelled apart, since the dictionary json.load() makes of the object
+ *        keeps only the last id of a spelling it reads twice, and the other id is then no token's.
+ * @param spellings The bytes of every token, by id.
+ * @param name The file's path, for the refusal.
+ * @throws std::invalid_argument If two tokens have one spelling; the message names both ids.
+ */
+void require_distinct_spellings(const std::span<const std::string> spellings, const std::string_view name)
+{
+    std::map<std::string_view, std::size_t> ids{};
+
+    for (std::size_t id{0}; id < spellings.size(); ++id)
+    {
+        const auto [listed, inserted]{ids.try_emplace(spellings[id], id)};
+
+        if (!inserted)
+        {
+            throw std::invalid_argument{std::format(
+                    "read_gpt2: the token at id {} of {} repeats the spelling of the token at id {}", id, name,
+                    listed->second)};
+        }
+    }
+}
+
+/**
  * @brief Returns the bytes a part of a merge line stands for, each of its characters' byte map undone.
  * @param part The part.
  * @param where The line and the file, for the refusal.
  * @return The bytes.
- * @throws std::invalid_argument If the part holds a character the byte map does not carry.
+ * @throws std::invalid_argument If the part is not UTF-8 or holds a character the byte map does not carry.
  */
 [[nodiscard]] std::string part_bytes(const std::string_view part, const std::string_view where)
 {
@@ -520,7 +630,14 @@ std::vector<std::string> Encoder_reader::by_id(Entries_t entries) const
 
     for (std::size_t index{0}; index < part.size();)
     {
-        const auto [character, length]{character_at(part, index)};
+        const auto decoded{character_at(part, index)};
+
+        if (!decoded)
+        {
+            throw ill_formed(where);
+        }
+
+        const auto [character, length]{*decoded};
 
         const auto byte{byte_of(character)};
 
@@ -542,7 +659,8 @@ std::vector<std::string> Encoder_reader::by_id(Entries_t entries) const
  * @param line The line, without its line feed.
  * @param where The line and the file, for the refusals.
  * @return The merge, each part's byte map undone.
- * @throws std::invalid_argument If the line is not two parts, or a part holds a character the byte map does not carry.
+ * @throws std::invalid_argument If the line is not two parts, or a part is not UTF-8 or holds a character the byte map
+ *         does not carry.
  */
 [[nodiscard]] munch::verifier::Merge merge_of(const std::string_view line, const std::string_view where)
 {
@@ -569,15 +687,62 @@ std::vector<std::string> Encoder_reader::by_id(Entries_t entries) const
 }
 
 /**
- * @brief Returns the merge table of vocab.bpe, as encoder.py reads it: the lines between the first newline and the
- *        last, each two parts separated by white space, each part's byte map undone.
- * @param text The file's bytes.
+ * @brief Returns a file's text with its line ends read as Python's text mode reads them, universal newlines: every
+ *        `\r\n` and every `\r` alone becomes `\n`.
+ * @param bytes The file's bytes.
+ * @return The text, each of its lines ended by `\n`.
+ */
+[[nodiscard]] std::string universal_newlines(const std::string_view bytes)
+{
+    std::string text{};
+
+    text.reserve(bytes.size());
+
+    char previous{};
+
+    for (const auto byte : bytes)
+    {
+        if (byte != '\n' || previous != '\r')
+        {
+            text += byte == '\r' ? '\n' : byte;
+        }
+
+        previous = byte;
+    }
+
+    return text;
+}
+
+/**
+ * @brief Returns the merge table of vocab.bpe, as encoder.py reads it: the whole file decoded as UTF-8 and its line
+ *        ends read as Python's text mode reads them, `\r\n` and `\r` as `\n`, then the lines between the first newline
+ *        and the last, each two parts separated by white space, each part's byte map undone.
+ * @param bytes The file's bytes.
  * @param name The file's path, for the refusals.
  * @return The merges in rank order.
- * @throws std::invalid_argument If a line is not two parts, or a part holds a character the byte map does not carry.
+ * @throws std::invalid_argument If the file is not UTF-8 throughout, the message naming the byte offset, a line is not
+ *         two parts, or a part holds a character the byte map does not carry.
  */
-[[nodiscard]] std::vector<munch::verifier::Merge> merges_of(const std::string_view text, const std::string_view name)
+[[nodiscard]] std::vector<munch::verifier::Merge> merges_of(const std::string_view bytes, const std::string_view name)
 {
+    // Python's text mode decodes the whole file before encoder.py splits it, so bytes that are not UTF-8 refuse it
+    // wherever they stand, in the version line and after the last newline as well.
+    for (std::size_t at{0}; at < bytes.size();)
+    {
+        const auto length{well_formed_length(bytes, at)};
+
+        if (length == 0)
+        {
+            throw ill_formed(std::format("{} at byte {}", name, at));
+        }
+
+        at += length;
+    }
+
+    const auto translated{universal_newlines(bytes)};
+
+    const std::string_view text{translated};
+
     std::vector<munch::verifier::Merge> merges{};
 
     auto start{text.find('\n')};
@@ -718,6 +883,8 @@ Definition read_gpt2(const std::filesystem::path& encoder, const std::filesystem
     Encoder_reader reader{encoder_text, encoder_name};
 
     auto spellings{reader.read()};
+
+    require_distinct_spellings(spellings, encoder_name);
 
     const auto vocab_name{vocab.string()};
 

@@ -1907,9 +1907,10 @@ known to be empty, does not need.
 ### **How far a stream's ids lag**
 
 The figures are the stream's delay, the bytes it has read and not yet spelled by the ids it has returned, counted after
-every push. They are not the memory a stream keeps: it keeps the stretch's bytes since its last closed piece, as
-[limits.md](limits.md) says, so a newline and 40,000 tabs pushed a byte at a time under cl100k are kept whole while the
-ids lag 16 bytes behind.
+every push. They are not the memory a stream keeps: it keeps the bytes the ids returned do not yet spell and fewer bytes
+before them than the larger of their number and 64, as [limits.md](limits.md) says, and beside them the live runs' tree,
+a layer per code point since the last stable one, so a newline and 40,000 tabs pushed a byte at a time under cl100k keep
+a layer for every tab while the ids lag 16 bytes behind.
 
 Pushes of 64 bytes, the bytes not yet spelled after a push, at the most and on average:
 

@@ -6,6 +6,7 @@
 #include <format>
 #include <fstream>
 #include <iterator>
+#include <map>
 #include <optional>
 #include <span>
 #include <stdexcept>
@@ -26,6 +27,12 @@ namespace
  *        at.
  */
 constexpr std::string_view separators{" \t\n\v\f\r"};
+
+/**
+ * @brief The bytes that end a line of a rank file, the line feed and the carriage return, `\r\n` being one end, as
+ *        Python's bytes.splitlines() splits.
+ */
+constexpr std::string_view line_ends{"\n\r"};
 
 /**
  * @brief The digits of base64, the value of each its index.
@@ -123,21 +130,22 @@ using Entries_t = std::vector<std::pair<std::string, std::size_t>>;
 
 /**
  * @brief Returns the token and the rank of a line of a rank file, its two fields separated by white space.
- * @param line The line, without its line feed.
+ * @param line The line, without its line end.
  * @param number The line's number, from one, for the refusal.
  * @param name The file's path, for the refusal.
- * @return The token's bytes and its rank, std::nullopt for a line of white space alone, which tiktoken skips.
- * @throws std::invalid_argument If the line is not a base64 token and a decimal rank.
+ * @return The token's bytes and its rank, std::nullopt for an empty line, which tiktoken skips.
+ * @throws std::invalid_argument If the line is not a base64 token and a decimal rank, as a line of white space alone
+ *         is not, which tiktoken's split into two fields refuses.
  */
 [[nodiscard]] std::optional<std::pair<std::string, std::size_t>> entry_of(
         const std::string_view line, const std::size_t number, const std::string_view name)
 {
-    const auto token_start{line.find_first_not_of(separators)};
-
-    if (token_start == std::string_view::npos)
+    if (line.empty())
     {
         return std::nullopt;
     }
+
+    const auto token_start{std::min(line.find_first_not_of(separators), line.size())};
 
     const auto token_end{std::min(line.find_first_of(separators, token_start), line.size())};
 
@@ -165,7 +173,8 @@ using Entries_t = std::vector<std::pair<std::string, std::size_t>>;
 }
 
 /**
- * @brief Returns the entries of a rank file, its lines read in order and the lines of white space alone skipped.
+ * @brief Returns the entries of a rank file, its lines read in order as tiktoken reads them, split by Python's
+ *        bytes.splitlines() at `\n`, `\r` and `\r\n`, and the empty lines skipped.
  * @param text The file's bytes.
  * @param name The file's path, for the refusals.
  * @return Every token's bytes with its rank, in the file's order.
@@ -179,11 +188,11 @@ using Entries_t = std::vector<std::pair<std::string, std::size_t>>;
 
     for (std::size_t start{0}; start < text.size();)
     {
-        const auto end{std::min(text.find('\n', start), text.size())};
+        const auto end{std::min(text.find_first_of(line_ends, start), text.size())};
 
         const auto line{text.substr(start, end - start)};
 
-        start = end + 1;
+        start = end + (text.substr(end).starts_with("\r\n") ? 2UZ : 1UZ);
 
         ++number;
 
@@ -231,6 +240,30 @@ using Entries_t = std::vector<std::pair<std::string, std::size_t>>;
     return spellings;
 }
 
+/**
+ * @brief Requires the tokens of a rank file to be spelled apart, since tiktoken's dictionary keeps only the last rank
+ *        of a spelling it reads twice, and the earlier rank is then no token's.
+ * @param spellings The bytes of every token, by id.
+ * @param name The file's path, for the refusal.
+ * @throws std::invalid_argument If two tokens have one spelling; the message names both ranks.
+ */
+void require_distinct_spellings(const std::span<const std::string> spellings, const std::string_view name)
+{
+    std::map<std::string_view, std::size_t> ranks{};
+
+    for (std::size_t rank{0}; rank < spellings.size(); ++rank)
+    {
+        const auto [listed, inserted]{ranks.try_emplace(spellings[rank], rank)};
+
+        if (!inserted)
+        {
+            throw std::invalid_argument{std::format(
+                    "read_tiktoken: the token at rank {} of {} repeats the spelling of the token at rank {}", rank,
+                    name, listed->second)};
+        }
+    }
+}
+
 } // namespace
 
 Definition read_tiktoken(const std::filesystem::path& path, const std::span<const Special_token> specials)
@@ -242,6 +275,8 @@ Definition read_tiktoken(const std::filesystem::path& path, const std::span<cons
     auto entries{entries_of(text, name)};
 
     auto spellings{spellings_by_rank(std::move(entries), name)};
+
+    require_distinct_spellings(spellings, name);
 
     std::vector<Special_token> vendor_specials(specials.begin(), specials.end());
 

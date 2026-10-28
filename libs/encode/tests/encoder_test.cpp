@@ -26,6 +26,7 @@
 
 #include "matisse/encode/merger.hpp"
 #include "matisse/encode/piece_cache.hpp"
+#include "matisse/encode/stream_encoder.hpp"
 #include "matisse/pretok/classes.hpp"
 #include "matisse/pretok/segmenter.hpp"
 #include "matisse/validate/report.hpp"
@@ -648,6 +649,190 @@ TEST(Encoder_test, An_allowed_spelling_that_is_not_one_of_the_definition_s_speci
     EXPECT_TRUE(refusal.contains(R"(the allowed spelling "<|start|>" is not one of the definition's special tokens)"))
             << refusal;
     EXPECT_TRUE(encoder_refusal({"<|end|>"}).empty());
+}
+
+TEST(Encoder_test, An_allowed_special_token_whose_spelling_is_empty_is_refused_naming_its_id)
+{
+    auto definition{test_definition()};
+
+    const auto empty{definition.specials.back().id + 1};
+
+    definition.specials.push_back({.spelling = "", .id = empty});
+
+    try
+    {
+        std::ignore = encoder_of(definition, {"<|end|>", ""});
+
+        ADD_FAILURE() << "Encoder took an empty allowed spelling";
+    }
+    catch (const std::invalid_argument& refusal)
+    {
+        const std::string_view message{refusal.what()};
+
+        EXPECT_TRUE(message.contains(std::format("the allowed special token at id {} has an empty spelling", empty)))
+                << message;
+    }
+
+    EXPECT_NO_THROW(std::ignore = encoder_of(definition, {"<|end|>"}));
+}
+
+TEST(Encoder_test, An_allowed_special_token_whose_id_is_an_ordinary_token_s_is_refused_naming_its_spelling_and_id)
+{
+    auto definition{test_definition()};
+
+    const auto ordinary{static_cast<Token_id_t>('a')};
+
+    definition.specials.push_back({.spelling = "<x>", .id = ordinary});
+
+    try
+    {
+        std::ignore = encoder_of(definition, {"<|end|>", "<x>"});
+
+        ADD_FAILURE() << "Encoder took an allowed special token with an ordinary token's id";
+    }
+    catch (const std::invalid_argument& refusal)
+    {
+        const std::string_view message{refusal.what()};
+
+        EXPECT_TRUE(message.contains(
+                std::format(R"(the allowed special token "<x>" has the id {} of an ordinary token)", ordinary)))
+                << message;
+    }
+
+    EXPECT_NO_THROW(std::ignore = encoder_of(definition, {"<|end|>"}));
+}
+
+TEST(Encoder_test, A_special_token_whose_id_is_another_special_token_s_is_refused_allowed_or_not_naming_both)
+{
+    auto definition{test_definition()};
+
+    const auto end{definition.specials.front().id};
+
+    definition.specials.push_back({.spelling = "<x>", .id = end});
+
+    const std::vector<std::vector<std::string>> allowed_sets{{}, {"<x>"}, {"<|end|>", "<x>"}};
+
+    for (const auto& allowed : allowed_sets)
+    {
+        try
+        {
+            std::ignore = encoder_of(definition, allowed);
+
+            ADD_FAILURE() << "Encoder took two special tokens with one id";
+        }
+        catch (const std::invalid_argument& refusal)
+        {
+            const std::string_view message{refusal.what()};
+
+            EXPECT_TRUE(message.contains(
+                    std::format(R"(the special token "<x>" has the id {} of the special token "<|end|>")", end)))
+                    << message;
+        }
+    }
+
+    EXPECT_NO_THROW(std::ignore = encoder_of(test_definition(), {"<|end|>"}));
+}
+
+TEST(Encoder_test, A_special_token_listed_twice_with_two_ids_is_refused_allowed_or_not_naming_both_ids)
+{
+    auto definition{test_definition()};
+
+    const auto end{definition.specials.front().id};
+
+    const auto next{definition.specials.back().id + 1};
+
+    definition.specials.push_back({.spelling = "<|end|>", .id = next});
+
+    const std::vector<std::vector<std::string>> allowed_sets{{}, {"<|end|>"}};
+
+    for (const auto& allowed : allowed_sets)
+    {
+        try
+        {
+            std::ignore = encoder_of(definition, allowed);
+
+            ADD_FAILURE() << "Encoder took one special token listed with two ids";
+        }
+        catch (const std::invalid_argument& refusal)
+        {
+            const std::string_view message{refusal.what()};
+
+            EXPECT_TRUE(message.contains(
+                    std::format(R"(the special token "<|end|>" is listed twice, with the ids {} and {})", end, next)))
+                    << message;
+        }
+    }
+
+    EXPECT_NO_THROW(std::ignore = encoder_of(test_definition(), {"<|end|>"}));
+}
+
+TEST(Encoder_test, A_special_token_whose_spelling_is_not_utf_8_is_refused_allowed_or_not_naming_its_bytes)
+{
+    auto definition{test_definition()};
+
+    const auto next{definition.specials.back().id + 1};
+
+    // A continuation byte first: allowed, it would begin inside the sequence of a code point such as é, C3 A9.
+    definition.specials.push_back({.spelling = "\xA9X", .id = next});
+
+    const std::vector<std::vector<std::string>> allowed_sets{{}, {"\xA9X"}, {"<|end|>", "\xA9X"}};
+
+    for (const auto& allowed : allowed_sets)
+    {
+        try
+        {
+            std::ignore = encoder_of(definition, allowed);
+
+            ADD_FAILURE() << "Encoder took a special token whose spelling is not UTF-8";
+        }
+        catch (const std::invalid_argument& refusal)
+        {
+            const std::string_view message{refusal.what()};
+
+            EXPECT_TRUE(message.contains(R"(the special token "\xA9X" is not UTF-8)")) << message;
+        }
+    }
+
+    EXPECT_NO_THROW(std::ignore = encoder_of(test_definition(), {"<|end|>"}));
+}
+
+TEST(Encoder_test, A_special_token_spelled_from_a_code_point_s_bytes_is_encoded_alike_serially_in_parallel_and_streamed)
+{
+    auto definition{test_definition()};
+
+    const auto next{definition.specials.back().id + 1};
+
+    definition.specials.push_back({.spelling = "éx", .id = next});
+
+    const auto encoder{encoder_of(definition, {"<|end|>", "éx"})};
+
+    for (const std::string_view text : {"é", "éé", "éx", "aéxé", "é<|end|>éx éa"})
+    {
+        const auto expected{encoder.encode(text)};
+
+        for (const std::size_t chunks : {1UZ, 2UZ, 3UZ, 4UZ})
+        {
+            EXPECT_EQ(encoder.encode_parallel(text, chunks), expected) << text << " in " << chunks;
+        }
+
+        Stream_encoder stream{encoder};
+
+        std::vector<Token_id_t> streamed{};
+
+        for (const auto byte : text)
+        {
+            const auto ids{stream.push(std::string_view{&byte, 1})};
+
+            streamed.insert(streamed.end(), ids.begin(), ids.end());
+        }
+
+        const auto rest{stream.finish()};
+
+        streamed.insert(streamed.end(), rest.begin(), rest.end());
+
+        EXPECT_EQ(streamed, expected) << text;
+        EXPECT_EQ(encoder.decode(expected), text);
+    }
 }
 
 TEST(Encoder_test, Decode_refuses_an_id_that_is_neither_an_ordinary_nor_a_special_token_naming_it_and_its_index)

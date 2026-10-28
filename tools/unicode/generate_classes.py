@@ -4,8 +4,8 @@ each set the tokenizer's pattern names.
 
 Each set is named on the command line as TABLE=SET: TABLE is the name of the array in the output, and SET is a general
 category of one letter, the union of its subcategories, such as L for Lu, Ll, Lt, Lm and Lo, a general category of two
-letters, such as Lu, or a property of PropList.txt, such as White_Space, which is what the regex crate and Python's re
-read \\s as. Reads PropList.txt and extracted/DerivedGeneralCategory.txt, published at
+letters, such as Lu, or a property of PropList.txt, such as White_Space, which is what the regex crate and Python's
+regex module read \\s as. Reads PropList.txt and extracted/DerivedGeneralCategory.txt, published at
 https://www.unicode.org/Public/<version>/ucd/, and emits one table file for the database it is given, the tables in the
 order named. The pattern reads each set as itself, and a code point is classed by the first set holding it, so a code
 point in two of them would be read as in the first alone: the sets named must be disjoint, and a database where two of

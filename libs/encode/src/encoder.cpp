@@ -159,6 +159,108 @@ private:
     return byte;
 }
 
+/**
+ * @brief Returns the length of the well-formed UTF-8 sequence at an index, zero when none stands there: an ASCII byte,
+ *        or a lead byte of the shape 110xxxxx, 1110xxxx or 11110xxx followed by as many continuation bytes as its shape
+ *        says, the overlong, surrogate and beyond-U+10FFFF encodings excluded as the standard excludes them, which the
+ *        second byte's narrower range after a lead of E0, ED, F0 or F4 rules out.
+ * @param text The text.
+ * @param at The index, within the text.
+ * @return One to four, or zero.
+ */
+[[nodiscard]] constexpr std::size_t well_formed_length(const std::string_view text, const std::size_t at) noexcept
+{
+    const auto lead{static_cast<unsigned char>(text[at])};
+
+    const auto length{
+            lead < 0x80U                  ? 1UZ :
+            lead >= 0xC2U && lead < 0xE0U ? 2UZ :
+            lead >= 0xE0U && lead < 0xF0U ? 3UZ :
+            lead >= 0xF0U && lead < 0xF5U ? 4UZ :
+                                            0UZ};
+
+    if (length == 0 || at + length > text.size())
+    {
+        return 0;
+    }
+
+    for (std::size_t index{1}; index < length; ++index)
+    {
+        if (!is_continuation(static_cast<unsigned char>(text[at + index])))
+        {
+            return 0;
+        }
+    }
+
+    const auto second{static_cast<unsigned char>(text[at + (length > 1 ? 1 : 0)])};
+
+    const auto malformed{
+            (lead == 0xE0U && second < 0xA0U) || (lead == 0xEDU && second >= 0xA0U) ||
+            (lead == 0xF0U && second < 0x90U) || (lead == 0xF4U && second >= 0x90U)};
+
+    return malformed ? 0 : length;
+}
+
+/**
+ * @brief Returns whether a spelling is UTF-8 throughout, every sequence in it well-formed.
+ * @param spelling The spelling's bytes.
+ * @return True when every byte belongs to a well-formed sequence.
+ */
+[[nodiscard]] constexpr bool is_utf8(const std::string_view spelling) noexcept
+{
+    for (std::size_t at{0}; at < spelling.size();)
+    {
+        const auto length{well_formed_length(spelling, at)};
+
+        if (length == 0)
+        {
+            return false;
+        }
+
+        at += length;
+    }
+
+    return true;
+}
+
+/**
+ * @brief Returns a spelling as a refusal quotes it: a printable ASCII byte as itself, the quote and the backslash
+ *        escaped, and every other byte as `\xHH`, so that a spelling outside ASCII reads the same in every terminal.
+ * @param spelling The spelling's bytes.
+ * @return The spelling, quoted.
+ */
+[[nodiscard]] std::string quoted_spelling(const std::string_view spelling)
+{
+    constexpr unsigned char first_printable{0x20};
+    constexpr unsigned char last_printable{0x7E};
+
+    std::string out{'"'};
+
+    for (const auto byte : spelling)
+    {
+        const auto value{static_cast<unsigned char>(byte)};
+
+        const auto printable{value >= first_printable && value <= last_printable};
+
+        if (byte == '"' || byte == '\\')
+        {
+            out += std::format(R"(\{})", byte);
+        }
+        else if (printable)
+        {
+            out += byte;
+        }
+        else
+        {
+            out += std::format(R"(\x{:02X})", value);
+        }
+    }
+
+    out += '"';
+
+    return out;
+}
+
 } // namespace
 
 Encoder::Encoder(
@@ -167,7 +269,7 @@ Encoder::Encoder(
     : definition_{std::move(definition)}
     , merger_{definition_}
     , segmenter_{report.pattern}
-    , allowed_{allowed_of(definition_.specials, allowed)}
+    , allowed_{allowed_of(definition_, allowed)}
     , windows_{table_of(report, inventory)}
     , right_context_{table_of(report, inventory).right_context}
     , class_table_{report.pattern.alphabet}
@@ -177,8 +279,39 @@ Encoder::Encoder(
 {}
 
 std::vector<load::Special_token> Encoder::allowed_of(
-        const std::span<const load::Special_token> specials, const std::span<const std::string> allowed)
+        const load::Definition& definition, const std::span<const std::string> allowed)
 {
+    const auto& specials{definition.specials};
+
+    for (const auto [index, special] : std::views::enumerate(specials))
+    {
+        const auto earlier{specials | std::views::take(index)};
+
+        const auto repeated{std::ranges::find(earlier, special.spelling, &load::Special_token::spelling)};
+
+        if (repeated != earlier.end())
+        {
+            throw std::invalid_argument{std::format(
+                    R"(Encoder: the special token "{}" is listed twice, with the ids {} and {})", special.spelling,
+                    repeated->id, special.id)};
+        }
+
+        const auto shared{std::ranges::find(earlier, special.id, &load::Special_token::id)};
+
+        if (shared != earlier.end())
+        {
+            throw std::invalid_argument{std::format(
+                    R"(Encoder: the special token "{}" has the id {} of the special token "{}")", special.spelling,
+                    special.id, shared->spelling)};
+        }
+
+        if (!is_utf8(special.spelling))
+        {
+            throw std::invalid_argument{
+                    std::format("Encoder: the special token {} is not UTF-8", quoted_spelling(special.spelling))};
+        }
+    }
+
     std::vector<load::Special_token> chosen{};
 
     for (const auto& spelling : allowed)
@@ -189,6 +322,19 @@ std::vector<load::Special_token> Encoder::allowed_of(
         {
             throw std::invalid_argument{std::format(
                     R"(Encoder: the allowed spelling "{}" is not one of the definition's special tokens)", spelling)};
+        }
+
+        if (spelling.empty())
+        {
+            throw std::invalid_argument{
+                    std::format("Encoder: the allowed special token at id {} has an empty spelling", found->id)};
+        }
+
+        if (found->id < definition.spellings.size())
+        {
+            throw std::invalid_argument{std::format(
+                    R"(Encoder: the allowed special token "{}" has the id {} of an ordinary token)", spelling,
+                    found->id)};
         }
 
         chosen.push_back(*found);
