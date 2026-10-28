@@ -104,13 +104,13 @@ publicly, as hopper_json does: load (its definition holds `munch::verifier::Merg
 "pre-1.0" in the README, as hopper's did.
 
 CI copies hopper's workflow with munch's sanitizer matrix: format-check with clang-format-19, build and test with GCC
-13.3 (with coverage) and with Clang 19, an ARM64 job where plain char is unsigned, the address and undefined-behavior
-sanitizers and, because the encoder spawns threads, munch's thread-sanitizer job and its `-fprofile-update=atomic`
-coverage flag, the fuzz job once the harnesses exist, the installed-consumer job, and CodeQL. The README has hopper's
-sections (Status, Features, a first example, Getting Started, Documentation, Testing, Versioning and Stability, License,
-Author), docs/ has three pages, design.md, limits.md and benchmarks.md, and CITATION.cff names the munch release with
-its version DOI under `references`, as hopper's does. Tests run with `ctest --test-dir build --timeout 300`, as munch's
-do.
+13.3 (with coverage), with GCC in strict C++23, extensions off and warnings as errors, as munch's strict job builds, and
+with Clang 19, an ARM64 job where plain char is unsigned, the address and undefined-behavior sanitizers and, because the
+encoder spawns threads, munch's thread-sanitizer job and its `-fprofile-update=atomic` coverage flag, the fuzz job once
+the harnesses exist, the installed-consumer job, and CodeQL. The README has hopper's sections (Status, Features, a first
+example, Getting Started, Documentation, Testing, Versioning and Stability, License, Author), docs/ has three pages,
+design.md, limits.md and benchmarks.md, and CITATION.cff names the munch release with its version DOI under
+`references`, as hopper's does. Tests run with `ctest --test-dir build --timeout 300`, as munch's do.
 
 ## **The API**
 

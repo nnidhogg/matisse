@@ -7,6 +7,7 @@
 #include <functional>
 #include <iterator>
 #include <mutex>
+#include <numeric>
 #include <optional>
 #include <ranges>
 #include <span>
@@ -198,11 +199,9 @@ std::vector<load::Special_token> Encoder::allowed_of(
 
 std::vector<load::Token_id_t> Encoder::sorted_of(const std::span<const std::string> spellings)
 {
-    const auto ids{std::views::iota(0UZ, spellings.size()) | std::views::transform([](const std::size_t id) {
-                       return static_cast<load::Token_id_t>(id);
-                   })};
+    std::vector<load::Token_id_t> sorted(spellings.size());
 
-    std::vector<load::Token_id_t> sorted{ids.begin(), ids.end()};
+    std::iota(sorted.begin(), sorted.end(), load::Token_id_t{0});
 
     const auto spelling_of{[spellings](const load::Token_id_t id) { return std::string_view{spellings[id]}; }};
 

@@ -9,6 +9,7 @@
 #include <gtest/gtest.h>
 #include <iterator>
 #include <map>
+#include <numeric>
 #include <optional>
 #include <random>
 #include <ranges>
@@ -1043,9 +1044,9 @@ TEST(Encoder_test, A_stream_pushed_in_parts_of_every_size_returns_prefixes_of_en
     {
         const auto text{random_text(random, 40)};
 
-        const auto one_byte{std::views::iota(1UZ, text.size() + 1)};
+        std::vector<std::size_t> one_byte_cuts(text.size());
 
-        const std::vector<std::size_t> one_byte_cuts{one_byte.begin(), one_byte.end()};
+        std::iota(one_byte_cuts.begin(), one_byte_cuts.end(), 1UZ);
 
         for (const auto& encoder : encoders)
         {

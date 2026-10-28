@@ -4,6 +4,7 @@
 #include <array>
 #include <cstddef>
 #include <gtest/gtest.h>
+#include <numeric>
 #include <random>
 #include <ranges>
 #include <set>
@@ -226,9 +227,11 @@ std::vector<std::size_t> random_cuts(std::mt19937& random, const std::size_t siz
  */
 std::vector<std::size_t> one_byte_cuts(const std::size_t size)
 {
-    const auto ends{std::views::iota(1UZ, size + 1)};
+    std::vector<std::size_t> ends(size);
 
-    return {ends.begin(), ends.end()};
+    std::iota(ends.begin(), ends.end(), 1UZ);
+
+    return ends;
 }
 
 /**
