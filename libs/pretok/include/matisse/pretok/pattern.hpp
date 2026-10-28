@@ -50,8 +50,8 @@ struct Code_point_set
  * its own, listed before the sets the pattern names, holding the code points the literal matches: the literal alone
  * where the pattern matches it case sensitively, and its case partners besides where it matches it caselessly, as
  * cl100k's `(?i:s)` matches `s`, `S` and U+017F, the long s, under the simple case folding both the regex crate and
- * Python's re apply. So a pattern that reads upper and lower case apart, or puts a code point with one literal and not
- * its other case partners, states its partition as the sets it lists.
+ * Python's regex module apply. So a pattern that reads upper and lower case apart, or puts a code point with one
+ * literal and not its other case partners, states its partition as the sets it lists.
  */
 struct Alphabet
 {

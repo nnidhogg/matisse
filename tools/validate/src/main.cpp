@@ -55,9 +55,8 @@ constexpr std::string_view diagnostic_prefix{"matisse-validate: "};
  */
 constexpr std::string_view usage_text{R"(usage: matisse-validate [options] FILE
 
-Reads a tokenizer definition, a Hugging Face tokenizer.json or a tiktoken rank file, and reports which windows of its
-pre-tokenizer's classes certify a cut, at which origin and with which right context, under the factorization and the
-policy certificate.
+Reads a tokenizer definition, a tiktoken rank file, and reports which windows of its pre-tokenizer's classes certify a
+cut, at which origin and with which right context, under the factorization and the policy certificate.
 
   --tiktoken PATTERN    read FILE as a tiktoken rank file whose pre-tokenizer is PATTERN, gpt2, cl100k, o200k or
                         llama3, since the file names none; a tokenizer.json, read without it, has no reader yet

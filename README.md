@@ -25,14 +25,14 @@ tables, and the runtime with its token ids, normalizers and special-token cuts.
 
 ## **Status**
 
-Not yet released; the version is 0.1.0, pre-1.0, and nothing is stable yet. matisse depends on munch 3.0.0, the release
-its submodule is pinned to. It loads GPT-2's encoder.json and vocab.bpe and tiktoken rank files, and it encodes text
-under GPT-2, cl100k_base, o200k_base and Llama 3 sequentially, in parallel at certified cuts and as a stream, with the
-vendors' special tokens cut out where they are allowed, and decodes ids back to bytes; validate decides each pattern's
-certified windows, and `matisse-validate` reports them for a rank file. The ids are held to the vendors' on pinned
-vocabularies, fixtures and corpora, with the classes of code points pinned to Unicode 15.0.0. A Hugging Face
-tokenizer.json reader and the certification of merge tables without a pre-tokenizer are planned and not written. What
-each library will hold, the proved results the loaders rest on and the order of work are in
+Not yet released, the version is 0.1.0, pre-1.0 and nothing is stable yet, and matisse depends on munch 3.0.0, the
+release its submodule is pinned to. It loads GPT-2's encoder.json and vocab.bpe and tiktoken rank files, and it encodes
+text under GPT-2, cl100k_base, o200k_base and Llama 3 sequentially, in parallel at certified cuts and as a stream, with
+the vendors' special tokens cut out where they are allowed, and decodes ids back to bytes; validate decides each
+pattern's certified windows, and `matisse-validate` reports them for a rank file. The ids are held to the vendors' on
+pinned vocabularies, fixtures and corpora, with the classes of code points pinned to Unicode 15.0.0, while a Hugging
+Face tokenizer.json reader and the certification of merge tables without a pre-tokenizer are planned and not yet
+written. What each library will hold, the proved results the loaders rest on and the order of work are in
 [docs/design.md](docs/design.md), and what every call guarantees is in [docs/limits.md](docs/limits.md).
 
 ## **Libraries**
@@ -90,8 +90,8 @@ The default `CMAKE_BUILD_TYPE` is `Release` when unset.
 
 ## **A First Encoding**
 
-A complete program, from a rank file to its ids and back. It takes the path of cl100k_base.tiktoken, decides the
-pattern's report once, allows `<|endoftext|>` and encodes a text sequentially and in four chunks:
+A complete program, from a rank file to its ids and back, takes the path of cl100k_base.tiktoken, decides the pattern's
+report once, allows `<|endoftext|>` and encodes a text sequentially and in four chunks:
 
 ```cpp
 #include <iostream>
@@ -138,8 +138,8 @@ int main(int argc, char** argv)
 }
 ```
 
-It prints `9906 11 1917 0 100257`, the special token's id last, and then the text again, decoded from the parallel ids.
-A CMake project builds it with the cl100k library and encode:
+It prints `9906 11 1917 0 100257`, the special token's id last, and then the text again, decoded from the parallel ids,
+and a CMake project builds it by linking the cl100k library and encode:
 
 ```cmake
 add_subdirectory(matisse)
@@ -214,13 +214,25 @@ may change in minor releases. So may the five accessors through which an `Encode
 the renderings. The corpus probe and the bench under `tools/probes` and the prose in `docs/` carry no compatibility
 promise, and performance numbers are measurements, not contracts.
 
+**Targets and headers.** The surface includes how a consumer reaches it: the CMake targets `matisse::load`,
+`matisse::pretok`, `matisse::validate`, `matisse::encode`, `matisse::gpt2`, `matisse::cl100k`, `matisse::o200k`,
+`matisse::llama3` and `matisse::lookup`, with the umbrella `matisse::matisse` that links them all, the same names under
+`add_subdirectory` and in an installed package, and the include paths of the headers that declare the surface,
+`matisse/load/definition.hpp`, `matisse/pretok/pattern.hpp`, `classes.hpp`, `segmenter.hpp` and `verifier.hpp`,
+`matisse/validate/report.hpp` and `supply.hpp`, `matisse/encode/encoder.hpp`, `piece_cache.hpp` and
+`stream_encoder.hpp`, each tokenizer's `matisse/<name>/tokenizer.hpp` and `matisse/lookup/tokenizers.hpp`. A target is
+renamed or a header moved only in a major release, as munch's 3.0.0 moved its verifier to a library and an include path
+of its own.
+
 **Copies and moves.** An `Encoder` is copied and moved and never assigned to, both assignments deleted, since nothing
 changes it after construction: a copy is an encoder of its own, which refuses a piece cache made for the original. A
 `Report` is copied and moved whole, a move copying its `const` members, and never assigned to, so it keeps the pattern
 its window tables were decided of. A `Piece_cache` and a `Stream_encoder` borrow their encoder, are copied and moved and
 are not assigned to: a copy borrows the same encoder, a copied cache holds the same pieces, and a copied stream reads on
 from where the original stood, apart from it. A cache or a stream reads the encoder object it was made for, so that
-encoder must outlive it and must not be moved while it is in use.
+encoder must outlive it and must not be moved while it is in use. An `Encoder`, a `Piece_cache` or a `Stream_encoder`
+that has been moved from may only be destroyed: none of the three can be assigned a fresh value, and no other call on
+one is defined.
 
 **Errors.** A function refuses content it cannot take with `std::invalid_argument`, the message naming what it refuses,
 among them ill-formed UTF-8 at its byte offset, a definition the merge cannot take, a special token the definition does

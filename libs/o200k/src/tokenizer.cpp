@@ -133,8 +133,8 @@ constexpr std::array<Code_point_range, 1> r_points{{{.first = U'r', .last = U'r'
 
 /**
  * @brief `s`, a contraction letter matched caselessly and a lower case letter: `s` and U+017F, the long s, which `s`
- *        matches under the simple case folding both the regex crate and Python's re apply and which is a lower case
- *        letter too.
+ *        matches under the simple case folding both the regex crate and Python's regex module apply and which is a
+ *        lower case letter too.
  */
 constexpr std::array<Code_point_range, 2> s_points{{{.first = U's', .last = U's'}, {.first = 0x17F, .last = 0x17F}}};
 

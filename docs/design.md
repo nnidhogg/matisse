@@ -35,7 +35,7 @@ sense if no LLM existed; if it would, it belongs in munch. matisse is also the i
 an execution-contract compiler (the full-dictionary verifier, the two-mode WordPiece construction, a labeler carrying
 token ids, certified-prefix streaming). Certified-prefix streaming is built, as the `Stream_encoder` of libs/encode,
 with one claim: every id it returns is a prefix of `encode()` of the whole text, and what it returns is the longest such
-prefix but for the two exceptions the encoder's section names; the others are not in the first version.
+prefix but for the three exceptions the encoder's section names; the others are not in the first version.
 
 The name is after Matisse's paper cut-outs, cutting with certainty, beside munch, the lexer library, and hopper, the
 parser toolkit.
@@ -785,7 +785,7 @@ public:
 
     [[nodiscard]] std::optional<std::size_t> next_closed();
 
-    [[nodiscard]] std::vector<Marking> markings() const;
+    [[nodiscard]] std::vector<Marking> markings(std::size_t from) const;
 
     [[nodiscard]] std::vector<std::size_t> accepted() const;
 
@@ -982,13 +982,16 @@ a special token's spelling, and those bytes are held until a later push complete
 completed is refused as `classes_of()` refuses it. The stream claims one thing: after every push the ids it has returned
 are a prefix of `encode()` of the whole text, whatever the rest of the text turns out to be, and after `finish()` they
 are `encode()` of it. What a push returns is the longest such prefix, the greatest stable prefix of Dalirrooyfard and
-Ye's online tokenization, with two exceptions: while the bytes read end in a proper prefix of an allowed spelling those
-bytes are held, fewer than the longest allowed spelling, and not classed, as their online special-token segmentation
-holds them, so that a push returns the longest prefix final for the bytes before them and the ids can lag by more than
-the held bytes, a word before a held `<` staying an open piece when `<|endoftext|>` is allowed, and inside a piece an id
-is held against every byte continuation of the piece where the pattern allows fewer. One `Encoder` serves any number of
-streams on as many threads with no lock, since a stream keeps its runs, its held bytes and its piece cache to itself and
-reads the encoder through `const` accessors alone.
+Ye's online tokenization, with three exceptions: while the bytes read end in a proper prefix of an allowed spelling
+those bytes are held, fewer than the longest allowed spelling, and not classed, as their online special-token
+segmentation holds them, so that a push returns the longest prefix final for the bytes before them and the ids can lag
+by more than the held bytes, a word before a held `<` staying an open piece when `<|endoftext|>` is allowed; while they
+end inside a UTF-8 sequence its bytes are held and not classed until the sequence completes, so that a push returns the
+longest prefix final for the code points before it, even where an id of those bytes is final under every completion, as
+GPT-2's byte token for `\xF4` is, since no token of two or more bytes begins with it; and inside a piece an id is held
+against every byte continuation of the piece where the pattern allows fewer. One `Encoder` serves any number of streams
+on as many threads with no lock, since a stream keeps its runs, its held bytes and its piece cache to itself and reads
+the encoder through `const` accessors alone.
 
 The encoder builds what a stream reads once, beside the `Segmenter`: the class table of the pattern's alphabet, the
 split verifier M of `split_verifier()` as a `Verifier_table`, a flat array of its steps by state, class and mark with
@@ -1136,9 +1139,10 @@ SHA-256:
 | llama3.tiktoken | 82e9d31979e92ab929cd544440f129d9ecd797b69e327f80f17e1c50d5551b55 |
 | twitter.json | 30721e496a8d73cfc50658923c34eb2c0fbe15ee6835005e43ee624d8dedf200 |
 
-No GPT-2 or cl100k tokenizer.json is pinned yet; the loader's tests need one of each, taken once and pinned the same
-way. Nothing is fetched at test time: the test data is in the tree, or given to the probe as paths. Whether the
-vocabulary files themselves go into the tree is open choice 8.
+No GPT-2 or cl100k tokenizer.json is pinned for the loader's tests yet, which need one of each, taken once and pinned
+the same way; the tokenizer.json files [benchmarks.md](benchmarks.md) runs Hugging Face tokenizers on are pinned there
+by their digests. Nothing is fetched at test time: the test data is in the tree, or given to the probe as paths. Whether
+the vocabulary files themselves go into the tree is open choice 8.
 
 Three layers, each against something independent of the code under test:
 
@@ -1178,9 +1182,9 @@ between them, so that a corpus of any size encodes in bounded memory, and hold t
 the vendors'; a corpus the directory lacks is skipped by name, and every one is skipped when no directory is named. A
 difference would be the Unicode version or a vendor's engine; on every corpus each vendor ran on there is none.
 
-The fuzz harnesses are step 16 of the order of work and not written yet. They are to live in tools/fuzz and follow
-hopper's contract (a refusal is the answer to bad input, a crash, a sanitizer report or a hang is a finding): one is to
-feed arbitrary bytes to the tiktoken reader, and to the tokenizer.json reader once it is written, and one arbitrary
+The fuzz harnesses, step 16 of the order of work and not written yet, are to live in tools/fuzz and follow hopper's
+contract (a refusal is the answer to bad input, a crash, a sanitizer report or a hang is a finding): one is to feed
+arbitrary bytes to the tiktoken reader, and to the tokenizer.json reader once it is written, and one arbitrary
 well-formed UTF-8 to the encoder, asserting that `encode_parallel()` equals `encode()` at a chunk count drawn from the
 input, which turns the encoder's one claim into a fuzz property.
 
@@ -1274,9 +1278,11 @@ matisse's by the division.
    and 1.7 MB for cl100k, plus the two tokenizer.json files. hopper vendors the JSONTestSuite cases with their licence
    and provenance. The vocabulary files' own terms need checking first. As far as is known, GPT-2's are published with
    the model under MIT on its Hugging Face card, and cl100k_base.tiktoken is served by OpenAI without a licence file of
-   its own. Recommendation: vendor them under libs/load/tests/data with provenance, as hopper vendors its cases, if the
-   terms allow; otherwise a `MATISSE_VOCAB_DIR` option naming a directory of the pinned files, the tests that need them
-   registered only when it is given, as the vendored-or-system pattern of `USE_SYSTEM_GTEST` already works.
+   its own. Settled: the files are not in the tree, and the `MATISSE_VOCAB_DIR` option names a directory holding them,
+   each held to its digest, with nothing fetched at test time. Every test program of the libraries and the validator
+   registers with CTest whether or not a directory is named, the tests in it that read the files skipping when none is,
+   and the corpus probe and the bench in tools/probes register only when one is named, as the README's Testing section
+   says.
 9. **The encoder's default inventory.** The factorization inventory needs one codepoint of right context and rests on
    less, its cut holding for every complete factorization into the gate-erased languages whatever the engine does inside
    its matches; the policy inventory needs two and rests on Q, validated and not machine-checked, but lands on more

@@ -149,23 +149,28 @@ thread runs at 54.6 and 57.1.
 A `Stream_encoder` reads a text in pushes and returns each id once no continuation of the text can change it. It claims
 one thing: after every push the ids it has returned are a prefix of `encode()` of the whole text, whatever the rest
 turns out to be, and after `finish()` they are `encode()` of it. What a push returns is the longest such prefix but for
-two exceptions: while the bytes read end in a proper prefix of an allowed special token's spelling those bytes are held,
-fewer than the longest allowed spelling, and a push returns the longest prefix final for the bytes before them, and
-inside a piece an id is held against every byte continuation where the pattern allows fewer. The tests hold the claim on
-seeded texts pushed in random parts, a byte at a time and whole, under all four tokenizers and the tests' own pattern,
-and against brute force over the continuations on the tests' pattern, as [design.md](design.md) describes.
+three exceptions: while the bytes read end in a proper prefix of an allowed special token's spelling those bytes are
+held, fewer than the longest allowed spelling, and a push returns the longest prefix final for the bytes before them;
+while they end inside a UTF-8 sequence its bytes are held until the sequence completes, and a push returns the longest
+prefix final for the code points before it, even where an id of those bytes is final under every completion, as GPT-2's
+byte token for `\xF4` is, since no token of two or more bytes begins with it; and inside a piece an id is held against
+every byte continuation where the pattern allows fewer. The tests hold the claim on seeded texts pushed in random parts,
+a byte at a time and whole, under all four tokenizers and the tests' own pattern, and against brute force over the
+continuations on the tests' pattern, as [design.md](design.md) describes.
 
-What a stream holds after a push, read and not yet spelled by the ids it has returned, is four things. A UTF-8 sequence
-the push ended inside, at most three bytes. A proper prefix of an allowed spelling. The code points after the last one
-every live run of the pattern's verifier agrees on: on GPT-2's pattern the runs agree on every pre-token boundary but
-the last two code points', by the bounded backoff of the report on pre-tokenizer certification, and on cl100k's no bound
-exists, since a newline followed by tabs is one piece when the text ends there and a newline and pieces of tabs when a
-letter follows, so the run is held whole until something other than white space or the end arrives and no streamer can
-return it earlier, as Dalirrooyfard and Ye show for o200k's as well. And inside each run's open piece what the merge
+How far a stream's ids lag after a push, the bytes it has read and not yet spelled by the ids it has returned, its
+delay, comes from four things. A UTF-8 sequence the push ended inside, at most three bytes. A proper prefix of an
+allowed spelling. The code points after the last one every live run of the pattern's verifier agrees on: on GPT-2's
+pattern the runs agree on every pre-token boundary but the last two code points', by the bounded backoff of the report
+on pre-tokenizer certification, and on cl100k's no bound exists, since a newline followed by tabs is one piece when the
+text ends there and a newline and pieces of tabs when a letter follows, so the boundary after the newline stays open
+until something other than white space or the end arrives, and where the two segmentations' ids part no streamer can
+return them earlier, as Dalirrooyfard and Ye show for o200k's as well. And inside each run's open piece what the merge
 cannot yet decide, at most the right span radius of the dictionary by the report *The Left Ripple of Byte-Pair
 Encoding*, finite for every dictionary and 129 bytes for GPT-2's table, not computed for the others. On the corpora of
 [benchmarks.md](benchmarks.md), which gives the figures for every tokenizer and corpus, a stream in pushes of 64 bytes
-or 4 KiB holds 1.01 to 6.71 bytes on average after a push and at most 132.
+or 4 KiB lags 1.01 to 6.71 bytes on average after a push and at most 132. That is the delay of its ids, and not the
+memory the stream keeps, which the next paragraph gives.
 
 A stream keeps the stretch's bytes since its last closed piece, so a white space run of the family above is held in
 memory whole, and the pieces it closes are merged as `encode()` merges them, with a piece cache of its own. Each code
@@ -246,6 +251,9 @@ id. Moving the pin is open choice 6 of [design.md](design.md).
 - A copy of an `Encoder` encodes as the original does and is an encoder of its own, so `encode(text, cache)` on the copy
   refuses a cache made for the original, and an encoder is never assigned to, both assignments deleted, so a cache made
   for it never meets another definition at its address.
+- An `Encoder`, a `Piece_cache` or a `Stream_encoder` that has been moved from may only be destroyed. None of the three
+  can be assigned a fresh value, the encoder's assignments being deleted and the cache and the stream holding a
+  reference to their encoder, and no other call on one is defined.
 
 ## **Construction Cost**
 
@@ -282,7 +290,7 @@ instead of weakening them:
 - **Short calls.** `encode(text, cache)` with a cache kept across the calls amortizes the piece cache `encode(text)`
   builds for each, though every call still classes and segments its own text.
 - **A text that arrives in parts.** A `Stream_encoder` returns each id as soon as it is final, so a caller never
-  re-encodes a growing text and never holds more of it than the section on streaming bounds.
+  re-encodes a growing text, and its ids lag the bytes pushed by no more than the section on streaming describes.
 - **Scarce cuts.** The policy inventory lands on more boundaries than the factorization inventory, at the cost of
   resting on the verifier's one-step relation, and an allowed special token is a cut wherever it stands.
 - **A new pattern.** A tokenizer is added as a library of its own, its pattern described as data; `split_verifier()`

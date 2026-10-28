@@ -19,12 +19,15 @@
  * Every id a stream has returned after a push is a prefix of encode() of the whole text, whatever the rest of the text
  * turns out to be, and finish() returns the rest, so that the ids returned between two finish() calls, concatenated,
  * are encode() of the bytes pushed between them. What a push returns is the longest such prefix, the greatest stable
- * prefix of Dalirrooyfard and Ye's online tokenization, with two exceptions: while the bytes read end in a proper
+ * prefix of Dalirrooyfard and Ye's online tokenization, with three exceptions: while the bytes read end in a proper
  * prefix of an allowed special token's spelling those bytes are held, fewer than the longest allowed spelling, and not
  * classed, so that a push returns the longest prefix final for the bytes before them, and the ids can lag by more than
  * the held bytes: with `<|endoftext|>` allowed, a word followed by `<` stays an open piece whose ids are held until the
- * bytes after it show whether the `<` begins the special token; and inside a piece the continuations a stable id is
- * held against are all byte strings, where the pattern allows fewer.
+ * bytes after it show whether the `<` begins the special token; while they end inside a UTF-8 sequence, its bytes are
+ * held and not classed until a later push or finish() completes it, so that a push returns the longest prefix final for
+ * the code points before it, even where an id of those bytes is final under every completion, as a byte's own id is
+ * when no token of two or more bytes begins with it; and inside a piece the continuations a stable id is held against
+ * are all byte strings, where the pattern allows fewer.
  *
  * The encoding has three layers, each exact at its level. A special token's occurrence is committed once no proper
  * prefix of an allowed spelling can still begin before it, so the stretches between special tokens are encode()'s. In a
@@ -67,9 +70,11 @@ public:
     /**
      * @brief Reads the next bytes of the text and returns the ids that have become final: every id returned since the
      *        last finish() is a prefix of encode() of the whole text, whatever the rest of it, and what is returned is
-     *        the longest such prefix but for two exceptions: while the bytes read end in a proper prefix of an allowed
-     *        special token's spelling, it is the longest prefix final for the bytes before that prefix, and inside a
-     *        piece an id is held against every byte continuation of the piece, where the pattern allows fewer.
+     *        the longest such prefix but for three exceptions: while the bytes read end in a proper prefix of an
+     *        allowed special token's spelling, it is the longest prefix final for the bytes before that prefix; while
+     *        they end inside a UTF-8 sequence, it is the longest prefix final for the code points before the sequence,
+     *        though an id of its bytes may be final under every completion; and inside a piece an id is held against
+     *        every byte continuation of the piece, where the pattern allows fewer.
      *
      * A push may end inside a UTF-8 sequence or inside a special token's spelling; those bytes are held until a later
      * push or finish() completes them.
