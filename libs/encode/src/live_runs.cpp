@@ -24,7 +24,7 @@ void Live_runs::step(const pretok::Class_t symbol_class, const std::size_t end)
 {
     const auto first{erased_ + nodes_.size()};
 
-    const auto extend{[&](const Verifier_table::State_t state, const std::size_t parent) {
+    const auto extend{[&](const Verifier_table::State_t state, const std::size_t parent, const std::size_t marked) {
         for (const auto boundary_after : {false, true})
         {
             const auto next{table_.step(state, symbol_class, boundary_after)};
@@ -35,7 +35,13 @@ void Live_runs::step(const pretok::Class_t symbol_class, const std::size_t end)
             }
 
             nodes_.push_back(
-                    {.state = next, .parent = parent, .boundary_after = boundary_after, .children = 0, .live = true});
+                    {.state = next,
+                     .boundary_after = boundary_after,
+                     .live = true,
+                     .parent = parent,
+                     .children = 0,
+                     .marked_before = marked,
+                     .end = end});
 
             if (parent != root)
             {
@@ -46,7 +52,7 @@ void Live_runs::step(const pretok::Class_t symbol_class, const std::size_t end)
 
     if (front_ == layers_.size())
     {
-        extend(stable_, root);
+        extend(stable_, root, root);
 
         const auto count{erased_ + nodes_.size() - first};
 
@@ -59,11 +65,11 @@ void Live_runs::step(const pretok::Class_t symbol_class, const std::size_t end)
 
     for (auto number{back_first}; number < back_first + back_count; ++number)
     {
-        const auto [state, parent, boundary_after, children, live]{node(number)};
+        const auto [state, boundary_after, live, parent, children, marked_before, node_end]{node(number)};
 
         if (live)
         {
-            extend(state, number);
+            extend(state, number, boundary_after ? number : marked_before);
         }
     }
 
@@ -243,7 +249,7 @@ void Live_runs::drop_front()
     }
 }
 
-std::vector<Live_runs::Marking> Live_runs::markings() const
+std::vector<Live_runs::Marking> Live_runs::markings(const std::size_t from) const
 {
     if (front_ == layers_.size())
     {
@@ -258,32 +264,37 @@ std::vector<Live_runs::Marking> Live_runs::markings() const
     {
         if (node(number).live)
         {
-            found.push_back(marking_of(number));
+            found.push_back(marking_of(number, from));
         }
     }
 
     return found;
 }
 
-Live_runs::Marking Live_runs::marking_of(const std::size_t number) const
+Live_runs::Marking Live_runs::marking_of(const std::size_t number, const std::size_t from) const
 {
+    const auto& last{node(number)};
+
+    // A link to a node of a layer dropped since, numbered before the front layer's first, stands for none.
+    const auto kept{[this](const std::size_t at) { return at != root && at >= layers_[front_].first; }};
+
     std::vector<std::size_t> ends{};
 
-    auto layer{layers_.size()};
-
-    for (auto at{number}; at != root; at = node(at).parent)
+    for (auto at{last.boundary_after ? number : last.marked_before}; kept(at); at = node(at).marked_before)
     {
-        --layer;
+        const auto end{node(at).end};
 
-        if (node(at).boundary_after)
+        ends.push_back(end);
+
+        if (end <= from)
         {
-            ends.push_back(layers_[layer].end);
+            break;
         }
     }
 
     std::ranges::reverse(ends);
 
-    return {.ends = std::move(ends), .dead_end = table_.is_dead_end(node(number).state)};
+    return {.ends = std::move(ends), .dead_end = table_.is_dead_end(last.state)};
 }
 
 std::vector<std::size_t> Live_runs::accepted() const
@@ -297,11 +308,12 @@ std::vector<std::size_t> Live_runs::accepted() const
 
     for (auto number{back.first}; number < back.first + back.count; ++number)
     {
-        const auto& [state, parent, boundary_after, children, live]{node(number)};
+        const auto& [state, boundary_after, live, parent, children, marked_before, end]{node(number)};
 
+        // No piece ends at the stretch's start, so every piece end of the run is kept.
         if (live && table_.accepts(state))
         {
-            return marking_of(number).ends;
+            return marking_of(number, 0).ends;
         }
     }
 

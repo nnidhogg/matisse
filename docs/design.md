@@ -1022,12 +1022,23 @@ the piece's end. The test runs from the right and stops at the first boundary th
 continuation keeps are closed downward; a boundary across which no token begins inside the token before it, a token that
 is a suffix of it followed by a prefix of the bytes after the boundary or by all of them and more, holds with no merge,
 since the first join that crosses a boundary joins such a suffix, and is taken first. Where pieces are looked up whole
-no id is stable while a token the merge does not form begins with the piece. Once the ids returned reach into a piece of
-a run, open or closed by the run, the boundary they end at holds for every continuation, so only the rest after it is
-merged, with no whole-piece lookup, and the stream keeps the number of ids returned and the bytes they spell rather than
-the ids themselves, so that the work of a push does not grow with the part of a piece already returned. A push returns
-the common prefix over the runs of each run's closed pieces followed by its open piece's stable ids, less what has been
-returned.
+no id is stable while a token the merge does not form begins with the piece. A push returns the common prefix over the
+runs of each run's closed pieces followed by its open piece's stable ids, less what has been returned.
+
+The stream keeps one cursor, the byte that the ids returned since the stretch began reach, and works from it alone.
+Those ids are a prefix of `encode()` of every continuation, so every continuation keeps the boundary at the cursor and
+nothing before it is read again. A piece of a run, open or closed by the run, adds nothing once the cursor reaches its
+end, and where the cursor stands inside it only the rest after the cursor is merged, with no whole-piece lookup. Each
+node of the live runs keeps the byte its code point ends at and a link to the last node before it on its run after which
+a piece ends, and a push reads each run's piece ends back from the last one only as far as the last at or before the
+cursor. The bytes before the cursor are erased in bulk, after each code point fed and after each push, once they are
+half of the stretch's bytes held and at least 64, so that each byte is moved a constant number of times on average, and
+a piece closed behind the cursor costs nothing but its end, even where one code point closes a long run of pieces: on a
+pattern whose alternatives are `a+` anchored at the end of the text, then `a`, then any other code point, a run of `a`
+is held as one-byte pieces until a code point other than `a` closes them all. What a push reads of the runs and merges
+therefore grows with the bytes not yet returned, and not with the part of a piece already returned or with the code
+points the runs have read since they parted, however long they stay apart, as after a line feed and a run of tabs under
+cl100k's pattern.
 
 The third layer rests on results stated for one join at a time, the pair rule. They hold for the rank rule too, which
 makes on every piece the joins one join at a time makes on the dictionary of the tokens' self splits, the last join of
@@ -1178,9 +1189,10 @@ of their ids in the vendor fixture beside the known-answer fixture, holding them
 three corpora of the test strategy, so that matisse is held to the vendors themselves. Given the corpus directory with
 `-DMATISSE_CORPUS_DIR`, each tokenizer's tests encode every corpus of the fixture the directory holds, each document
 pushed to a stream in parts of a mebibyte, whose ids between two `finish()` calls are `encode()`'s of the bytes pushed
-between them, so that a corpus of any size encodes in bounded memory, and hold the corpus to its digest and the ids to
-the vendors'; a corpus the directory lacks is skipped by name, and every one is skipped when no directory is named. A
-difference would be the Unicode version or a vendor's engine; on every corpus each vendor ran on there is none.
+between them, so that each push and the ids it returns stay bounded whatever the corpus's size, though the test reads
+the whole corpus first, and hold the corpus to its digest and the ids to the vendors'; a corpus the directory lacks is
+skipped by name, and every one is skipped when no directory is named. A difference would be the Unicode version or a
+vendor's engine; on every corpus each vendor ran on there is none.
 
 The fuzz harnesses, step 16 of the order of work and not written yet, are to live in tools/fuzz and follow hopper's
 contract (a refusal is the answer to bad input, a crash, a sanitizer report or a hang is a finding): one is to feed

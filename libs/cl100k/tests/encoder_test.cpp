@@ -797,8 +797,9 @@ TEST(Encoder_test, Every_corpus_of_the_vendor_fixture_the_corpus_directory_holds
         std::size_t count{0};
         std::size_t parts{0};
 
-        // Each document is pushed to the stream in parts of a mebibyte, so that a corpus of any size encodes in bounded
-        // memory, and finish() ends it, the ids returned since the last finish() being encode()'s of the document.
+        // Each document is pushed to the stream in parts of a mebibyte and finish() ends it, the ids returned since the
+        // last finish() being encode()'s of the document; each push and the ids it returns stay bounded whatever the
+        // corpus's size, though the corpus itself is read whole above.
         constexpr std::size_t push_bytes{1UZ << 20U};
 
         Stream_encoder stream{encoder};

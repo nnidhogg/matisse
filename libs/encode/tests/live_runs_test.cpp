@@ -4,6 +4,7 @@
 #include <array>
 #include <cstddef>
 #include <gtest/gtest.h>
+#include <iterator>
 #include <optional>
 #include <random>
 #include <ranges>
@@ -103,8 +104,9 @@ std::vector<std::size_t> ends_before(
 
 /**
  * @brief Expects the live runs over seeded random texts of the three classes to be the segmentations of every
- *        continuation of up to five code points, restricted to the text, and the pieces they close to be the ones all
- *        those segmentations share from the start.
+ *        continuation of up to five code points, restricted to the text, the pieces they close to be the ones all
+ *        those segmentations share from the start, and each run's marking from a byte to be its whole marking from
+ *        the last piece end at or before the byte.
  * @param pattern The pattern.
  * @param seed The seed of the texts.
  */
@@ -189,7 +191,7 @@ void expect_futures(const Pattern& pattern, const unsigned seed)
 
             std::set<std::vector<std::size_t>> marked{};
 
-            for (const auto& [ends, dead_end] : runs.markings())
+            for (const auto& [ends, dead_end] : runs.markings(0))
             {
                 std::vector<std::size_t> all{closed};
 
@@ -212,6 +214,27 @@ void expect_futures(const Pattern& pattern, const unsigned seed)
 
             EXPECT_EQ(marked, futures) << text;
             EXPECT_EQ(closed_before, *shared) << text;
+
+            const auto whole{runs.markings(0)};
+
+            for (std::size_t from{1}; from <= text.size(); ++from)
+            {
+                const auto read_back{runs.markings(from)};
+
+                ASSERT_EQ(read_back.size(), whole.size()) << text;
+
+                for (const auto& [all, part] : std::views::zip(whole, read_back))
+                {
+                    const auto after{std::ranges::upper_bound(all.ends, from)};
+
+                    const auto kept{after == all.ends.begin() ? after : std::prev(after)};
+
+                    const std::vector<std::size_t> expected{kept, all.ends.end()};
+
+                    EXPECT_EQ(part.ends, expected) << text << ' ' << from;
+                    EXPECT_EQ(part.dead_end, all.dead_end) << text << ' ' << from;
+                }
+            }
         }
     }
 }

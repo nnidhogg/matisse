@@ -19,16 +19,18 @@
  * and reaches acceptance, the runs are exactly the restrictions of the segmentations of every continuation; two runs
  * end in two states, so there are at most as many as M has states. Their markings are kept as a tree, one layer per
  * code point read since the last stable one, each node a state with the mark of the code point that led to it, the
- * number of its live children and its parent in the layer before; a node whose children all die dies, and the layer
- * before loses it. The layers and nodes are held in two vectors, dropped from the front and erased in bulk, since a
- * deque that is pushed at the back and popped at the front allocates a block and frees one every few code points. The
- * front layer is stable when only one node of it is live, every run passing through it, and the last code point read is
- * stable when every run says the same of a piece ending after it: a run marked there says it ends, one unmarked in a
- * state that does not accept says it does not, one unmarked in an accepting state says both unless the state is a dead
- * end, where it ends. That is the stable marking, the longest prefix of markings every continuation's segmentation
- * shares, as the design of the streaming encoder proves. Live_runs is the streaming encoder's own and is not part of
- * matisse's stable surface. The header is installed only because every header of the library lives under include, as
- * munch keeps none under src, and it may change in minor releases.
+ * number of its live children and its parent in the layer before, with the byte its code point ends at and a link to
+ * the last node before it on its run after which a piece ends, so that a run's piece ends are read back from the last
+ * one without visiting the code points between them; a node whose children all die dies, and the layer before loses it.
+ * The layers and nodes are held in two vectors, dropped from the front and erased in bulk, since a deque that is pushed
+ * at the back and popped at the front allocates a block and frees one every few code points. The front layer is stable
+ * when only one node of it is live, every run passing through it, and the last code point read is stable when every run
+ * says the same of a piece ending after it: a run marked there says it ends, one unmarked in a state that does not
+ * accept says it does not, one unmarked in an accepting state says both unless the state is a dead end, where it ends.
+ * That is the stable marking, the longest prefix of markings every continuation's segmentation shares, as the design of
+ * the streaming encoder proves. Live_runs is the streaming encoder's own and is not part of matisse's stable surface.
+ * The header is installed only because every header of the library lives under include, as munch keeps none under src,
+ * and it may change in minor releases.
  */
 namespace matisse::encode
 {
@@ -45,7 +47,9 @@ public:
     struct Marking
     {
         /**
-         * @brief The byte after each code point the run marks, where a piece ends, ascending.
+         * @brief The byte after each code point the run marks, where a piece ends, ascending: the last one at or before
+         *        the byte the markings were asked from, where one stands since the last stable code point, and every
+         *        one after it.
          */
         std::vector<std::size_t> ends{};
 
@@ -79,10 +83,16 @@ public:
     [[nodiscard]] std::optional<std::size_t> next_closed();
 
     /**
-     * @brief Returns the marking of every live run since the last stable code point.
+     * @brief Returns the marking of every live run since the last stable code point, from its last piece end at or
+     *        before a byte.
+     *
+     * A run's piece ends are read back from its last one through the link each node keeps to the last marked node
+     * before it, so the work is the runs times their piece ends after the byte, however many code points the runs have
+     * read since the last stable one.
+     * @param from The byte, counted from the stretch's start.
      * @return The markings, one per run.
      */
-    [[nodiscard]] std::vector<Marking> markings() const;
+    [[nodiscard]] std::vector<Marking> markings(std::size_t from) const;
 
     /**
      * @brief Returns the piece ends of the run that accepts, the stretch's segmentation as a complete input since the
@@ -104,6 +114,9 @@ private:
 
     /**
      * @brief One step of a run: the state it reached and how.
+     *
+     * The two flags stand beside the state, which packs a node into 40 bytes; in 56, a stream in pushes of 4 KiB runs
+     * 13 per cent slower on cl100k.
      */
     struct Node
     {
@@ -113,15 +126,20 @@ private:
         Verifier_table::State_t state{};
 
         /**
+         * @brief Whether a piece ends after the code point the step read.
+         */
+        bool boundary_after{};
+
+        /**
+         * @brief Whether a run passes through the node.
+         */
+        bool live{};
+
+        /**
          * @brief The node of the layer before, by its number among every node made since the reset, root in the front
          *        layer.
          */
         std::size_t parent{};
-
-        /**
-         * @brief Whether a piece ends after the code point the step read.
-         */
-        bool boundary_after{};
 
         /**
          * @brief The number of live nodes of the next layer whose parent this is.
@@ -129,9 +147,16 @@ private:
         std::size_t children{};
 
         /**
-         * @brief Whether a run passes through the node.
+         * @brief The last node before this one on its run after whose code point a piece ends, by its number among
+         *        every node made since the reset, root when none does since the run left the stable state; a node of a
+         *        layer dropped since stands for none.
          */
-        bool live{};
+        std::size_t marked_before{};
+
+        /**
+         * @brief The byte after the code point the step read, counted from the stretch's start.
+         */
+        std::size_t end{};
     };
 
     /**
@@ -194,11 +219,13 @@ private:
     void drop_front();
 
     /**
-     * @brief Returns the marking of the run through a node of the last layer, or of the stable state alone.
+     * @brief Returns the marking of the run through a node of the last layer from its last piece end at or before a
+     *        byte, read back through the marked nodes alone.
      * @param number The node's number, a node of the last layer.
+     * @param from The byte, counted from the stretch's start.
      * @return The marking.
      */
-    [[nodiscard]] Marking marking_of(std::size_t number) const;
+    [[nodiscard]] Marking marking_of(std::size_t number, std::size_t from) const;
 
     /**
      * @brief M's table.

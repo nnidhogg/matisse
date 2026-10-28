@@ -114,7 +114,8 @@ private:
     [[nodiscard]] std::size_t read(std::string_view text, bool ended, std::vector<load::Token_id_t>& ids);
 
     /**
-     * @brief Feeds the code points of bytes to the live runs and closes every piece that becomes stable.
+     * @brief Feeds the code points of bytes to the live runs and closes every piece that becomes stable, compacting the
+     *        stretch after each code point.
      * @param bytes The bytes, between special tokens.
      * @param ended Whether no later byte can complete a sequence they end inside.
      * @param ids The ids closed so far, appended to.
@@ -124,11 +125,32 @@ private:
     [[nodiscard]] std::size_t feed(std::string_view bytes, bool ended, std::vector<load::Token_id_t>& ids);
 
     /**
-     * @brief Closes the piece that ends at a byte of the stretch: appends its ids less those already returned of it.
+     * @brief Erases the bytes of the stretch before the cursor in bulk once they are half of the stretch's bytes held
+     *        and at least 64, run after each code point fed and after each push's emit(), where the cursor moves, so
+     *        that between calls fewer bytes stand before the cursor than the larger of the bytes after it and 64.
+     */
+    void compact();
+
+    /**
+     * @brief Closes the piece that ends at a byte of the stretch: appends its ids past the cursor and moves the cursor
+     *        to its end where the cursor stands before it.
      * @param end The byte after the piece, counted from the stretch's start.
      * @param ids The ids closed so far, appended to.
      */
     void close_piece(std::size_t end, std::vector<load::Token_id_t>& ids);
+
+    /**
+     * @brief Appends the ids of a piece past the cursor: none where the cursor stands at or after its end, the merge of
+     *        its bytes from the cursor where the cursor stands inside it, and its ids as encode() gives them where the
+     *        cursor stands at or before its start.
+     *
+     * Every continuation keeps the boundary the ids returned end at, so the merge of the bytes after it is the rest of
+     * the piece's merge, with no whole-piece lookup, and the bytes before it are not merged again.
+     * @param start The byte the piece begins at, counted from the stretch's start.
+     * @param end The byte after the piece.
+     * @param ids The ids, appended to.
+     */
+    void append_closed(std::size_t start, std::size_t end, std::vector<load::Token_id_t>& ids);
 
     /**
      * @brief Appends the ids of a piece as encode() gives them: looked up whole where the definition says so, else
@@ -145,8 +167,8 @@ private:
     void flush(std::vector<load::Token_id_t>& ids);
 
     /**
-     * @brief Appends the ids every live run's futures begin with past those already returned: the common prefix of each
-     *        run's closed pieces followed by its open piece's stable ids.
+     * @brief Appends the ids every live run's futures begin with past those already returned, the common prefix of each
+     *        run's closed pieces followed by its open piece's stable ids, and moves the cursor past them.
      * @param ids The ids returned by the push, appended to.
      */
     void emit(std::vector<load::Token_id_t>& ids);
@@ -154,7 +176,7 @@ private:
     /**
      * @brief Returns the ids a run's futures all begin with past those already returned: from the stretch's last
      *        closed piece, the ids of the pieces it closes, then the stable ids of its open piece, or all of them when
-     *        the run stands in a dead end, a piece the ids returned reach into merged from where they end.
+     *        the run stands in a dead end, a piece the cursor stands inside merged from the cursor.
      * @param marking The run's marking.
      * @return The ids.
      */
@@ -182,24 +204,33 @@ private:
     std::string held_;
 
     /**
-     * @brief The stretch's bytes from the end of its last closed piece.
+     * @brief The stretch's bytes from the first one not yet erased: those before the cursor, erased together once they
+     *        are half of the bytes held and at least 64, then those the ids returned do not yet spell.
      */
     std::string stretch_;
 
     /**
-     * @brief Where the stretch's last closed piece ends, counted from the stretch's start.
+     * @brief The number of bytes erased from the front of the stretch's bytes, so that a byte's index among those held
+     *        is its offset from the stretch's start less this.
+     */
+    std::size_t erased_bytes_;
+
+    /**
+     * @brief Where the stretch's last closed piece ends, counted from the stretch's start, where every live run's
+     *        pieces after the closed ones begin.
      */
     std::size_t closed_end_;
 
     /**
-     * @brief The number of ids returned past the stretch's last closed piece.
+     * @brief The cursor: where the ids returned since the stretch began end, counted from the stretch's start.
+     *
+     * Every offset the stream keeps is ordered by it: the bytes erased and the stretch's last closed piece end at or
+     * before it, and it ends at or before the stretch's end. The ids returned spell the bytes before it and are a
+     * prefix of encode() of every continuation, so every continuation keeps the boundary at it and nothing before it is
+     * read again: the bytes before it are erased in bulk, a run's piece ends are read back only to the last one at or
+     * before it, and a piece it stands inside, closed or open, is merged only from it.
      */
-    std::size_t returned_ids_;
-
-    /**
-     * @brief The bytes the ids returned past the stretch's last closed piece spell.
-     */
-    std::size_t returned_bytes_;
+    std::size_t covered_;
 };
 
 } // namespace matisse::encode

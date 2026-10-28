@@ -169,20 +169,34 @@ pattern the runs agree on every pre-token boundary but the last two code points'
 on pre-tokenizer certification, and on cl100k's no bound exists, since a newline followed by tabs is one piece when the
 text ends there and a newline and pieces of tabs when a letter follows, so the boundary after the newline stays open
 until something other than white space or the end arrives, and where the two segmentations' ids part no streamer can
-return them earlier, as Dalirrooyfard and Ye show for o200k's as well. And inside each run's open piece what the merge
-cannot yet decide, at most the right span radius of the dictionary by the report *The Left Ripple of Byte-Pair
-Encoding*, finite for every dictionary and 129 bytes for GPT-2's table, not computed for the others. On the corpora of
-[benchmarks.md](benchmarks.md), which gives the figures for every tokenizer and corpus, a stream in pushes of 64 bytes
-or 4 KiB lags 1.01 to 6.71 bytes on average after a push and at most 132. That is the delay of its ids, and not the
-memory the stream keeps, which the next paragraph gives.
+return them earlier, as Dalirrooyfard and Ye show for o200k's as well. On cl100k's pattern a vocabulary whose merge
+joins the newline to the first white-space byte parts the two runs' ids at a fixed id, `\n\t` against `\n`, after which
+the bytes not yet returned and the cost of each push grow without bound for as long as the white space lasts; cl100k's
+own ranks are not such a vocabulary, and under them a newline followed by tabs or by spaces streams in time linear in
+its length. And inside each run's open piece what the merge cannot yet decide, at most the right span radius of the
+dictionary by the report *The Left Ripple of Byte-Pair Encoding*, finite for every dictionary and 129 bytes for GPT-2's
+table, not computed for the others. On the corpora of [benchmarks.md](benchmarks.md), which gives the figures for every
+tokenizer and corpus, a stream in pushes of 64 bytes or 4 KiB lags 1.01 to 6.71 bytes on average after a push and at
+most 132. That is the delay of its ids, and not the memory the stream keeps, which the next paragraph gives.
 
-A stream keeps the stretch's bytes since its last closed piece, so a white space run of the family above is held in
-memory whole, and the pieces it closes are merged as `encode()` merges them, with a piece cache of its own. Each code
-point costs a class lookup and at most two steps of the verifier's table per live run, at most one run per state of the
-verifier; each push costs, for every live run, the merge of what its open piece has left after the ids returned and the
-tests of its boundaries from the right. Ill-formed UTF-8 is refused with `std::invalid_argument` by the push that
-classes it, and a text that ends inside a sequence by `finish()`; a stream that has refused is not pushed to or finished
-again, and a new `Stream_encoder` over the same encoder reads the next text.
+A stream keeps the stretch's bytes that the ids it has returned do not yet spell, and before them fewer bytes than the
+larger of their number and 64, since it erases those in bulk once they are as many as the rest and at least 64. Beside
+them it keeps the live runs' tree, a layer per code point since the last stable one, at or after the end of the last
+closed piece, which the ids returned do not move: each layer takes 40 bytes and up to one node of 40 bytes per state of
+the verifier, and the layers and nodes dropped from the front are kept until they are as many as the rest and at
+least 64. The tree is the larger part when the runs stay apart: on a newline followed by tabs under cl100k's pattern and
+ranks the ids lag a few bytes while the tree keeps a layer for every tab since the newline, about 250 bytes per code
+point as measured on that case. None of these containers gives its capacity back, so a stream holds the most it has
+needed for any stretch until it is destroyed.
+
+Each code point costs a class lookup and at most two steps of the verifier's table per live run, at most one run per
+state of the verifier; each piece closed costs at most its merge, as `encode()` merges it, with a piece cache of its
+own, and its bytes are moved a constant number of times on average, however many pieces one code point closes; each push
+costs, for every live run, the reading of its piece ends back to the last one the ids returned reach, the merge of what
+its open piece has left after the ids returned and the tests of its boundaries from the right, which grow with the bytes
+not yet returned and not with how long the runs have been apart. Ill-formed UTF-8 is refused with
+`std::invalid_argument` by the push that classes it, and a text that ends inside a sequence by `finish()`; a stream that
+has refused is not pushed to or finished again, and a new `Stream_encoder` over the same encoder reads the next text.
 
 ## **Unicode: Tables Pinned to 15.0.0**
 
@@ -211,8 +225,9 @@ id. Moving the pin is open choice 6 of [design.md](design.md).
 - The merge holds every offset in 32 bits, so it merges a piece shorter than 2^32 bytes, and `Merger::merged()` refuses
   a longer one with `std::length_error` naming its length, which `encode()` and `encode_parallel()` pass on. A
   `Stream_encoder` merges only the bytes of a piece after the ids it has returned, when the piece closes and at the end
-  of every push before then, so it refuses a piece once 2^32 or more of those bytes are merged at once, and a piece
-  whose ids it returns as it reads them can grow past 2^32 bytes without a refusal.
+  of every push before then, so it refuses a piece once 2^32 or more bytes are merged at once, counting with those bytes
+  the rest of a token that the test of a boundary merges after them, and a piece whose ids it returns as it reads them
+  can grow past 2^32 bytes without a refusal.
 - A piece of at most 128 bytes is merged by a scan of its parts held in an array on the stack, a longer one by a binary
   heap, and on a definition that meets the backtracking's condition every piece longer than 128 bytes and every one at
   least half outside ASCII by backtracking. All three give the same ids, so the routing changes the speed and never an
