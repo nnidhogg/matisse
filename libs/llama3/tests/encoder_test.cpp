@@ -1135,9 +1135,12 @@ TEST(Encoder_test, A_cut_in_white_space_holds_with_the_right_context_each_invent
     EXPECT_EQ(policy.encode_parallel(between_tabs, 2), policy.encode(between_tabs));
 }
 
-TEST(Encoder_test, Llama3_s_rank_file_is_refused_the_backtracking_and_the_pieces_it_would_take_merge_as_the_plain_loop)
+TEST(Encoder_test,
+     Llama3_s_backtracking_gives_way_beside_a_token_out_of_order_and_the_pieces_it_takes_merge_as_the_rule)
 {
-    // .:.: at 100421 is joined last from .:., at 105051, and :, so a split has a part of higher rank than its token.
+    // .:.: at 100421 is joined last from .:., at 105051, and :, so a split has a part of higher rank than its token,
+    // its own merge does not join in order of rank, and the backtracking gives way where the pair test would be asked
+    // about it.
     auto definition{pinned_llama3()};
 
     if (!definition)
@@ -1147,16 +1150,19 @@ TEST(Encoder_test, Llama3_s_rank_file_is_refused_the_backtracking_and_the_pieces
 
     const auto tables{rank_tables_of(*definition)};
 
-    EXPECT_FALSE(Backtracker::of(definition->spellings, tables.byte_ids, tables.joins).has_value());
+    const auto backtracker{Backtracker::of(definition->spellings, tables.byte_ids, tables.joins)};
+
+    EXPECT_EQ(backtracker.merged(".:.:"), std::optional{std::vector<Token_id_t>{100421}});
+    EXPECT_FALSE(backtracker.merged(".:.:x").has_value());
 
     const Merger merger{*definition};
 
     EXPECT_EQ(merger.merged(".:.:"), std::vector<Token_id_t>{100421});
     EXPECT_EQ(plain_merge(".:.:", tables), std::vector<Token_id_t>{100421});
+    EXPECT_EQ(merger.merged(".:.:x"), plain_merge(".:.:x", tables));
 
     // Pieces of 100 to 200 bytes of the seeded random texts, either side of the scan's threshold, and pieces of one to
-    // forty code points of Cyrillic and CJK, wholly outside ASCII, which a definition meeting the condition would
-    // backtrack.
+    // forty code points of Cyrillic and CJK, wholly outside ASCII, which the merge backtracks.
     std::mt19937 random{31};
 
     for (std::size_t count{0}; count < 200; ++count)

@@ -138,26 +138,44 @@ Tables tables_of(const Definition& definition)
 }
 
 /**
- * @brief Returns the backtracking merge of a definition, or none where the definition does not meet its condition.
+ * @brief Returns the backtracking merge of a definition.
  * @param definition The definition.
  * @param tables The definition's tables.
- * @return The backtracking merge, std::nullopt when the definition does not meet the condition.
+ * @return The backtracking merge.
  */
-std::optional<Backtracker> backtracker_of(const Definition& definition, const Tables& tables)
+Backtracker backtracker_of(const Definition& definition, const Tables& tables)
 {
     return Backtracker::of(definition.spellings, tables.byte_ids, tables.joins);
 }
 
 /**
- * @brief Returns the ids of a piece under the plain loop over a merge's joins: join the adjacent pair of least rank,
- *        the leftmost on a tie, until no pair has a join.
+ * @brief The run of the plain loop on a piece: the ids it ends with and the rank of every join it makes, in order.
+ */
+struct Plain_run
+{
+    /**
+     * @brief The ids of the parts the run ends with.
+     */
+    std::vector<Token_id_t> ids{};
+
+    /**
+     * @brief The rank of every join, in the order the run makes them.
+     */
+    std::vector<std::uint32_t> ranks{};
+};
+
+/**
+ * @brief Returns the run of the plain loop over a merge's joins on a piece: join the adjacent pair of least rank, the
+ *        leftmost on a tie, until no pair has a join.
  * @param piece The piece, at least one byte.
  * @param tables The definition's tables.
- * @return The ids.
+ * @return The run.
  */
-std::vector<Token_id_t> plain_merge(const std::string_view piece, const Tables& tables)
+Plain_run plain_run(const std::string_view piece, const Tables& tables)
 {
     std::vector<Token_id_t> parts{};
+
+    std::vector<std::uint32_t> ranks{};
 
     for (const auto byte : piece)
     {
@@ -186,13 +204,50 @@ std::vector<Token_id_t> plain_merge(const std::string_view piece, const Tables& 
 
         if (rank == no_rank)
         {
-            return parts;
+            return {.ids = parts, .ranks = ranks};
         }
+
+        ranks.push_back(rank);
 
         parts[at] = product;
 
         parts.erase(parts.begin() + static_cast<std::ptrdiff_t>(at) + 1);
     }
+}
+
+/**
+ * @brief Returns the ids of a piece under the plain loop over a merge's joins.
+ * @param piece The piece, at least one byte.
+ * @param tables The definition's tables.
+ * @return The ids.
+ */
+std::vector<Token_id_t> plain_merge(const std::string_view piece, const Tables& tables)
+{
+    return plain_run(piece, tables).ids;
+}
+
+/**
+ * @brief Returns how many tokens of a definition encode to themselves by a merge that does not join in order of rank:
+ *        the plain loop on the token's spelling ends with the token alone, and a join of a lower rank follows one of a
+ *        higher.
+ * @param definition The definition.
+ * @param tables The definition's tables.
+ * @return The number of such tokens.
+ */
+std::size_t out_of_order_tokens(const Definition& definition, const Tables& tables)
+{
+    std::size_t count{0};
+
+    for (std::size_t id{0}; id < definition.spellings.size(); ++id)
+    {
+        const auto [ids, ranks]{plain_run(definition.spellings[id], tables)};
+
+        const auto itself{ids == std::vector{static_cast<Token_id_t>(id)}};
+
+        count += itself && !std::ranges::is_sorted(ranks) ? 1UZ : 0UZ;
+    }
+
+    return count;
 }
 
 /**
@@ -452,14 +507,29 @@ struct Vocabulary_check
     std::size_t not_their_own_merge{0};
 
     /**
+     * @brief The tokens that encode to themselves by a merge that does not join in order of rank.
+     */
+    std::size_t out_of_order{0};
+
+    /**
+     * @brief The multi-byte tokens on which the backtracking gives way.
+     */
+    std::size_t tokens_given_way{0};
+
+    /**
      * @brief The random pieces merged.
      */
     std::size_t pieces{0};
+
+    /**
+     * @brief The random pieces on which the backtracking gives way.
+     */
+    std::size_t pieces_given_way{0};
 };
 
 /**
- * @brief Holds the backtracking merge of a definition that meets its condition to the plain loop over its joins on
- *        every multi-byte token and on seeded random pieces.
+ * @brief Holds the backtracking merge of a definition to the plain loop over its joins on every multi-byte token and on
+ *        seeded random pieces, wherever it does not give way.
  * @param definition The definition.
  * @return What the check found.
  */
@@ -468,13 +538,6 @@ Vocabulary_check expect_vocabulary_backtracks_as_the_plain_loop(const Definition
     const auto tables{tables_of(definition)};
 
     const auto backtracker{backtracker_of(definition, tables)};
-
-    EXPECT_TRUE(backtracker.has_value());
-
-    if (!backtracker)
-    {
-        return {};
-    }
 
     Vocabulary_check check{};
 
@@ -487,20 +550,38 @@ Vocabulary_check expect_vocabulary_backtracks_as_the_plain_loop(const Definition
             continue;
         }
 
-        const auto merged{backtracker->merged(spelling)};
+        const auto merged{backtracker.merged(spelling)};
 
-        EXPECT_EQ(merged, plain_merge(spelling, tables)) << matisse::common::sha256(spelling);
+        const auto [plain, ranks]{plain_run(spelling, tables)};
+
+        if (merged)
+        {
+            EXPECT_EQ(*merged, plain) << matisse::common::sha256(spelling);
+        }
+
+        const auto itself{plain == std::vector{static_cast<Token_id_t>(id)}};
 
         ++check.tokens;
 
-        check.not_their_own_merge += merged != std::vector{static_cast<Token_id_t>(id)} ? 1UZ : 0UZ;
+        check.not_their_own_merge += itself ? 0UZ : 1UZ;
+
+        check.out_of_order += itself && !std::ranges::is_sorted(ranks) ? 1UZ : 0UZ;
+
+        check.tokens_given_way += merged ? 0UZ : 1UZ;
     }
 
     for (const auto& piece : random_pieces(definition.spellings, 20000))
     {
-        EXPECT_EQ(backtracker->merged(piece), plain_merge(piece, tables)) << matisse::common::sha256(piece);
+        const auto merged{backtracker.merged(piece)};
+
+        if (merged)
+        {
+            EXPECT_EQ(*merged, plain_merge(piece, tables)) << matisse::common::sha256(piece);
+        }
 
         ++check.pieces;
+
+        check.pieces_given_way += merged ? 0UZ : 1UZ;
     }
 
     return check;
@@ -508,32 +589,42 @@ Vocabulary_check expect_vocabulary_backtracks_as_the_plain_loop(const Definition
 
 } // namespace
 
-TEST(Backtracker_test, Under_aa_aba_ab_aba_is_joined_from_the_later_ab_so_the_table_is_not_backtracked)
+TEST(Backtracker_test, Under_aa_aba_ab_aba_is_joined_from_the_later_ab_so_the_backtracking_gives_way_beside_it)
 {
     // aba at 257 is joined last from ab, at 258, and a: abaa is ab aa by the rule, where the bpe crate, whose pair test
-    // takes every token to be joined from two of lower rank, gives aba a.
+    // takes every token to be joined from two of lower rank, gives aba a. The search lays aba first and gives way when
+    // the pair test would be asked about it.
     const auto definition{ranks_definition({"aa", "aba", "ab"})};
 
-    EXPECT_FALSE(backtracker_of(definition, tables_of(definition)).has_value());
+    const auto backtracker{backtracker_of(definition, tables_of(definition))};
+
+    EXPECT_FALSE(backtracker.merged("abaa").has_value());
+    EXPECT_EQ(backtracker.merged("aab"), std::optional{ids_of({"aa", "b"}, definition)});
     EXPECT_EQ(Merger{definition}.merged("abaa"), ids_of({"ab", "aa"}, definition));
 }
 
-TEST(Backtracker_test, Under_ab_aaa_aa_aaa_is_joined_from_the_later_aa_so_the_table_is_not_backtracked)
+TEST(Backtracker_test, Under_ab_aaa_aa_aaa_is_joined_from_the_later_aa_so_the_backtracking_gives_way_beside_it)
 {
     // aaa at 257 is joined last from aa, at 258, and a: aaab is aa ab by the rule, where the bpe crate gives aaa b.
     const auto definition{ranks_definition({"ab", "aaa", "aa"})};
 
-    EXPECT_FALSE(backtracker_of(definition, tables_of(definition)).has_value());
+    const auto backtracker{backtracker_of(definition, tables_of(definition))};
+
+    EXPECT_FALSE(backtracker.merged("aaab").has_value());
+    EXPECT_EQ(backtracker.merged("aab"), std::optional{ids_of({"a", "ab"}, definition)});
     EXPECT_EQ(Merger{definition}.merged("aaab"), ids_of({"aa", "ab"}, definition));
 }
 
-TEST(Backtracker_test, Under_aab_aa_aab_is_joined_from_the_later_aa_so_the_table_is_not_backtracked)
+TEST(Backtracker_test, Under_aab_aa_aab_is_joined_from_the_later_aa_so_the_backtracking_gives_way_beside_it)
 {
     // aab at 256 is joined last from aa, at 257, and b, so the joins of aaaab do not come in order of rank: aa aab is
-    // the rule's answer, and the pair test, which reads the run in that order, refuses aa beside aab.
+    // the rule's answer, and the pair test, which reads the run in that order, would refuse aa beside aab.
     const auto definition{ranks_definition({"aab", "aa"})};
 
-    EXPECT_FALSE(backtracker_of(definition, tables_of(definition)).has_value());
+    const auto backtracker{backtracker_of(definition, tables_of(definition))};
+
+    EXPECT_FALSE(backtracker.merged("aaaab").has_value());
+    EXPECT_EQ(backtracker.merged("aaaa"), std::optional{ids_of({"aa", "aa"}, definition)});
     EXPECT_EQ(Merger{definition}.merged("aaaab"), ids_of({"aa", "aab"}, definition));
 }
 
@@ -546,9 +637,8 @@ TEST(Backtracker_test, A_token_that_does_not_encode_to_itself_is_never_laid)
 
     const auto backtracker{backtracker_of(definition, tables)};
 
-    ASSERT_TRUE(backtracker.has_value());
-    EXPECT_EQ(backtracker->merged("aba"), ids_of({"a", "b", "a"}, definition));
-    EXPECT_EQ(backtracker->merged("abba"), ids_of({"a", "bb", "a"}, definition));
+    EXPECT_EQ(backtracker.merged("aba"), std::optional{ids_of({"a", "b", "a"}, definition)});
+    EXPECT_EQ(backtracker.merged("abba"), std::optional{ids_of({"a", "bb", "a"}, definition)});
 }
 
 TEST(Backtracker_test, The_backtracking_merge_of_a_single_byte_is_its_byte_and_of_the_empty_piece_nothing)
@@ -557,16 +647,16 @@ TEST(Backtracker_test, The_backtracking_merge_of_a_single_byte_is_its_byte_and_o
 
     const auto backtracker{backtracker_of(definition, tables_of(definition))};
 
-    ASSERT_TRUE(backtracker.has_value());
-    EXPECT_EQ(backtracker->merged("a"), std::vector<Token_id_t>{'a'});
-    EXPECT_TRUE(backtracker->merged("").empty());
+    EXPECT_EQ(backtracker.merged("a"), std::optional{std::vector<Token_id_t>{'a'}});
+    EXPECT_EQ(backtracker.merged(""), std::optional{std::vector<Token_id_t>{}});
 }
 
-TEST(Backtracker_test, On_random_tables_over_three_symbols_that_meet_the_condition_backtracking_is_the_plain_loop)
+TEST(Backtracker_test, On_random_tables_over_three_symbols_backtracking_is_the_plain_loop_or_gives_way)
 {
     // Pair tables of up to 12 pairs of strings of one to three symbols, ranked at random, and rank tables of up to 20
     // strings of one to five symbols, each with 20 pieces of up to 12 symbols and one of 100 to 160: ties, overlaps and
-    // tokens that do not encode to themselves among them.
+    // tokens that do not encode to themselves among them. On a table whose every token's merge joins in order of rank
+    // the backtracking never gives way, and on the others it gives the plain loop's ids or gives way.
     constexpr std::string_view alphabet{"abc"};
 
     constexpr std::size_t tables_drawn{3000};
@@ -579,9 +669,11 @@ TEST(Backtracker_test, On_random_tables_over_three_symbols_that_meet_the_conditi
 
     std::uniform_int_distribution<std::size_t> token_count{1, 20};
 
-    std::size_t met{0};
+    std::size_t in_order{0};
 
-    std::size_t not_met{0};
+    std::size_t out_of_order{0};
+
+    std::size_t given_way{0};
 
     for (std::size_t table{0}; table < tables_drawn; ++table)
     {
@@ -622,14 +714,11 @@ TEST(Backtracker_test, On_random_tables_over_three_symbols_that_meet_the_conditi
 
             const auto backtracker{backtracker_of(definition, tables)};
 
-            if (!backtracker)
-            {
-                ++not_met;
+            const auto all_in_order{out_of_order_tokens(definition, tables) == 0};
 
-                continue;
-            }
+            in_order += all_in_order ? 1UZ : 0UZ;
 
-            ++met;
+            out_of_order += all_in_order ? 0UZ : 1UZ;
 
             for (std::size_t count{0}; count <= pieces_per_table; ++count)
             {
@@ -641,13 +730,23 @@ TEST(Backtracker_test, On_random_tables_over_three_symbols_that_meet_the_conditi
 
                 const auto piece{random_string(random, alphabet, shortest, longest)};
 
-                EXPECT_EQ(backtracker->merged(piece), plain_merge(piece, tables)) << "table " << table << " " << piece;
+                const auto merged{backtracker.merged(piece)};
+
+                EXPECT_TRUE(merged || !all_in_order) << "table " << table << " " << piece;
+
+                if (merged)
+                {
+                    EXPECT_EQ(*merged, plain_merge(piece, tables)) << "table " << table << " " << piece;
+                }
+
+                given_way += merged ? 0UZ : 1UZ;
             }
         }
     }
 
-    EXPECT_EQ(met, 4429U);
-    EXPECT_EQ(not_met, 1571U);
+    EXPECT_EQ(in_order, 4446U);
+    EXPECT_EQ(out_of_order, 1554U);
+    EXPECT_EQ(given_way, 6402U);
 }
 
 TEST(Backtracker_test, Every_multi_byte_token_of_gpt2_and_random_pieces_backtrack_as_the_plain_loop)
@@ -659,12 +758,16 @@ TEST(Backtracker_test, Every_multi_byte_token_of_gpt2_and_random_pieces_backtrac
         GTEST_SKIP() << "MATISSE_VOCAB_DIR names no directory holding gpt2-vocab.json and gpt2-merges.txt";
     }
 
-    const auto [tokens, not_their_own_merge, pieces]{expect_vocabulary_backtracks_as_the_plain_loop(*definition)};
+    const auto [tokens, not_their_own_merge, out_of_order, tokens_given_way, pieces, pieces_given_way]{
+            expect_vocabulary_backtracks_as_the_plain_loop(*definition)};
 
     // <|endoftext|> is the one multi-byte token the merge does not form, which encoder.py reads as text.
     EXPECT_EQ(tokens, 50001U);
     EXPECT_EQ(not_their_own_merge, 1U);
+    EXPECT_EQ(out_of_order, 0U);
+    EXPECT_EQ(tokens_given_way, 0U);
     EXPECT_EQ(pieces, 20000U);
+    EXPECT_EQ(pieces_given_way, 0U);
 }
 
 TEST(Backtracker_test, Every_multi_byte_token_of_cl100k_and_random_pieces_backtrack_as_the_plain_loop)
@@ -676,11 +779,15 @@ TEST(Backtracker_test, Every_multi_byte_token_of_cl100k_and_random_pieces_backtr
         GTEST_SKIP() << "MATISSE_VOCAB_DIR names no directory holding cl100k_base.tiktoken";
     }
 
-    const auto [tokens, not_their_own_merge, pieces]{expect_vocabulary_backtracks_as_the_plain_loop(*definition)};
+    const auto [tokens, not_their_own_merge, out_of_order, tokens_given_way, pieces, pieces_given_way]{
+            expect_vocabulary_backtracks_as_the_plain_loop(*definition)};
 
     EXPECT_EQ(tokens, 100000U);
     EXPECT_EQ(not_their_own_merge, 0U);
+    EXPECT_EQ(out_of_order, 0U);
+    EXPECT_EQ(tokens_given_way, 0U);
     EXPECT_EQ(pieces, 20000U);
+    EXPECT_EQ(pieces_given_way, 0U);
 }
 
 TEST(Backtracker_test, Every_multi_byte_token_of_o200k_and_random_pieces_backtrack_as_the_plain_loop)
@@ -692,16 +799,19 @@ TEST(Backtracker_test, Every_multi_byte_token_of_o200k_and_random_pieces_backtra
         GTEST_SKIP() << "MATISSE_VOCAB_DIR names no directory holding o200k_base.tiktoken";
     }
 
-    const auto [tokens, not_their_own_merge, pieces]{expect_vocabulary_backtracks_as_the_plain_loop(*definition)};
+    const auto [tokens, not_their_own_merge, out_of_order, tokens_given_way, pieces, pieces_given_way]{
+            expect_vocabulary_backtracks_as_the_plain_loop(*definition)};
 
     EXPECT_EQ(tokens, 199742U);
     EXPECT_EQ(not_their_own_merge, 0U);
+    EXPECT_EQ(out_of_order, 0U);
+    EXPECT_EQ(tokens_given_way, 0U);
     EXPECT_EQ(pieces, 20000U);
+    EXPECT_EQ(pieces_given_way, 0U);
 }
 
-TEST(Backtracker_test, Llama3_s_rank_file_does_not_meet_the_condition_since_a_split_part_follows_its_token)
+TEST(Backtracker_test, Every_multi_byte_token_of_llama3_and_random_pieces_backtrack_as_the_plain_loop_or_give_way)
 {
-    // .:.: at 100421 is joined last from .:., at 105051, and :, the first by rank of 81 such tokens.
     const auto definition{pinned_tiktoken("llama3.tiktoken", llama3_digest)};
 
     if (!definition)
@@ -709,5 +819,15 @@ TEST(Backtracker_test, Llama3_s_rank_file_does_not_meet_the_condition_since_a_sp
         GTEST_SKIP() << "MATISSE_VOCAB_DIR names no directory holding llama3.tiktoken";
     }
 
-    EXPECT_FALSE(backtracker_of(*definition, tables_of(*definition)).has_value());
+    const auto [tokens, not_their_own_merge, out_of_order, tokens_given_way, pieces, pieces_given_way]{
+            expect_vocabulary_backtracks_as_the_plain_loop(*definition)};
+
+    // .:.: at 100421 is joined last from .:., at 105051, and :, the first by rank of 81 tokens whose split has a part
+    // of higher order; their merges and those of 26 tokens built on them do not join in order of rank.
+    EXPECT_EQ(tokens, 127744U);
+    EXPECT_EQ(not_their_own_merge, 588U);
+    EXPECT_EQ(out_of_order, 107U);
+    EXPECT_EQ(tokens_given_way, 20U);
+    EXPECT_EQ(pieces, 20000U);
+    EXPECT_EQ(pieces_given_way, 50U);
 }

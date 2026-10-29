@@ -674,11 +674,11 @@ public:
 class Backtracker
 {
 public:
-    [[nodiscard]] static std::optional<Backtracker> of(
+    [[nodiscard]] static Backtracker of(
             std::span<const std::string> spellings, std::span<const load::Token_id_t, 256> byte_ids,
             const Join_table& joins);
 
-    [[nodiscard]] std::vector<load::Token_id_t> merged(std::string_view piece) const;
+    [[nodiscard]] std::optional<std::vector<load::Token_id_t>> merged(std::string_view piece) const;
 };
 
 class Merger
@@ -885,52 +885,80 @@ rank, and tables on which the pass and one join at a time differ. The merge form
 bytes on cl100k and o200k, all but `<|endoftext|>` on GPT-2, and all but 588 on Llama 3, which Llama 3's whole-piece
 lookup gives whole.
 
-On a definition that meets one condition the `Merger` also builds a `Backtracker`, and a piece longer than 128 bytes, or
-one at least half of whose bytes lie outside ASCII, is merged by backtracking instead. A token encodes to itself when
-the merge of its spelling ends with it alone; its split is the pair of parts that merge joins last, and its order is the
-rank of that join plus one, zero for a byte. The condition is that the parts of every split have lower orders than the
-token they make, and the constructor decides it once, reading each token's split from the merge of its own spelling run
-until two parts are left: GPT-2's, cl100k's and o200k's files meet it, and Llama 3's does not, 81 of its tokens having a
-split with a part of higher rank, `.:.:` at 100,421 the first, joined from `.:.` at 105,051 and `:`. A definition that
-does not meet it is merged by the scan and the heap alone. The backtracking lays along the piece, from the left, the
-longest token that encodes to itself and begins the rest of the piece, read from a `Token_trie`, the trie of those
-tokens in a double array; it holds each token to the one before it by a pair test, tries the longest token that is a
-proper prefix of it when the test fails, and when no prefix is left takes the last token back and marks the position it
-went back from, to which no token is laid again. The pieces it takes are where it pays: timed piece by piece on nine
-corpora, it takes 0.28 to 0.90 times the scan's time on a piece of up to 128 bytes at least half outside ASCII, 0.10 to
-0.34 times the heap's on the pieces longer than 128 bytes, which only `twitter.json`, `wiki-zh` and enwik8 hold, and on
-the others 1.16 to 2.36 times under cl100k, whose whole-piece lookup leaves the merge only the pieces that are no token,
-and 0.60 to 1.38 times under GPT-2.
+The `Merger` also builds a `Backtracker`, and a piece longer than 128 bytes, or one at least half of whose bytes lie
+outside ASCII, is merged by backtracking instead. A token encodes to itself when the merge of its spelling ends with it
+alone; its split is the pair of parts that merge joins last, and its order is the rank of that join plus one, zero for a
+byte. A token's own merge joins in order of rank when the parts of every split in it, its own among them, have lower
+orders than the token they make, and the constructor decides that once for every token, reading each token's split from
+the merge of its own spelling run until two parts are left and taking the tokens shortest first, so that both parts of a
+split are decided before the token they make. On GPT-2's, cl100k's and o200k's files every token's merge joins in order,
+and on Llama 3's 107 do not: 81 of its tokens have a split with a part of higher rank, `.:.:` at 100,421 the first,
+joined from `.:.` at 105,051 and `:`, and 26 more are built on them. The backtracking lays along the piece, from the
+left, the longest token that encodes to itself and begins the rest of the piece, read from a `Token_trie`, the trie of
+those tokens in a double array; it holds each token to the one before it by a pair test, tries the longest token that is
+a proper prefix of it when the test fails, and when no prefix is left takes the last token back and marks the position
+it went back from, to which no token is laid again. Where the pair test would be asked about a token whose own merge
+does not join in order, the search gives way, and the piece is merged by the scan or the heap as a piece the
+backtracking does not take is. The pieces it takes are where it pays: timed piece by piece on nine corpora under GPT-2
+and cl100k, it takes 0.28 to 0.90 times the scan's time on a piece of up to 128 bytes at least half outside ASCII, 0.10
+to 0.34 times the heap's on the pieces longer than 128 bytes, which only `twitter.json`, `wiki-zh` and enwik8 hold, and
+on the others 1.16 to 2.36 times under cl100k, whose whole-piece lookup leaves the merge only the pieces that are no
+token, and 0.60 to 1.38 times under GPT-2.
 
 Its ids are the heap merge's on every piece, in four steps. Interval projection: while no join of a run crosses either
 end of an interval, the joins inside it are a prefix of the run on the interval alone, the least pair inside being the
 least among the interval's own; so a run that forms a token forms it by its split, and no run forms a token that does
-not encode to itself. Order: on a definition that meets the condition every run joins in order of rank, the leftmost
-first among equal ranks, since a join of rank r makes a part p, a pair p then makes with a neighbour at a rank below r
-would be the least pair present and be joined next, forming a token whose split has the part p of higher order than the
-token, which the condition excludes, and a pair at rank r would be the join that made p, which no pair holding p is,
-being longer than p. The pair test: until a join crosses between two tokens, the run on their spellings is the joins of
-their own merges in order of rank and then of place, the left token's first on a tie, so the parts beside the boundary
-are one on the left token's right spine and one on the right token's left spine, and going back from the two tokens,
-each step undoing the later of the joins that made the two parts, lists every pair of them that stands beside the
-boundary, each until the join undone; the pair's join, if it has one, comes first exactly when its rank is below the
-undone join's on the left, which precedes it on a tie, or at most the undone join's on the right, which it precedes. So
-the test answers whether the merge of the two spellings ends with the two tokens, their compatibility. The first join of
-the replayed run that crosses is a join the real run makes, which is the split of the token it makes, so the test looks
-up only the splits' pairs, and only where each part's 32 bits of hashed partners hold the other. The local
-characterization of byte-pair encoding is not new: Vieira et al. prove it for merge lists in Language Models over
-Canonical Byte-Pair Encodings (ICML 2025), and it follows from the gluing corollary of Berglund and van der Merwe's
-Formalizing BPE Tokenization; the proof below, which also covers the rank rule, is a short one: tokens t_1 to t_k that
-encode to themselves, every adjacent pair compatible, are the merge of their concatenation x, under the rank rule and
-under the pair rule, with no condition on the table. Take the first join of the run on x that crosses a boundary between
-two of them, t_i and t_(i+1); before it every part lies inside one token, so the join lies inside t_i t_(i+1) and
-neither end of that interval has been crossed, and by interval projection the run on t_i t_(i+1) alone crosses its
-middle, against their compatibility. So no boundary is crossed, and the run ends with each token's own merge, the token
-itself. The search ends with such a sequence: the tokens it has laid before a position are compatible and encode to
-themselves, so they are the merge of the bytes before it, one sequence however the search reaches the position, and a
-position from which no token fits once fits from none; every token that encodes to itself and begins at a position is
-tried there, longest first; and the merge of the piece is such a sequence, so the search reaches the piece's end, with
-the merge.
+not encode to itself. Order: a token's own merge joins in order of rank, the leftmost first among equal ranks, exactly
+when the parts of every split in it have lower orders than the token they make. If a join of rank r makes a part p and
+the next join has a lower rank, that join holds p, since every other pair stood when the join of rank r was the least,
+and it forms a token whose split has the part p of higher order than the token; a pair holding p at rank r would be the
+join that made p, which no pair holding p is, being longer than p; and a split whose part has a higher order than its
+token is a join of lower rank made after the join that made the part. The pair test: on two tokens whose own merges join
+in order, until a join crosses between them the run on their spellings is the joins of their own merges in order of rank
+and then of place, the left token's first on a tie, since the least pair on each side is the next join of that side's
+own merge, so the parts beside the boundary are one on the left token's right spine and one on the right token's left
+spine, and going back from the two tokens, each step undoing the later of the joins that made the two parts, lists every
+pair of them that stands beside the boundary, each until the join undone; the pair's join, if it has one, comes first
+exactly when its rank is below the undone join's on the left, which precedes it on a tie, or at most the undone join's
+on the right, which it precedes. So the test answers whether the merge of the two spellings ends with the two tokens,
+their compatibility. The first join of the replayed run that crosses is a join the real run makes, which is the split of
+the token it makes, whatever that token's own merge, so the test looks up the splits' pairs of every token that encodes
+to itself, and only where each part's 32 bits of hashed partners hold the other. The local characterization of byte-pair
+encoding is not new: Vieira et al. prove it for merge lists in Language Models over Canonical Byte-Pair Encodings (ICML
+2025), and it follows from the gluing corollary of Berglund and van der Merwe's Formalizing BPE Tokenization; the proof
+below, which also covers the rank rule, is a short one: tokens t_1 to t_k that encode to themselves, every adjacent pair
+compatible, are the merge of their concatenation x, under the rank rule and under the pair rule, with no condition on
+the table. Take the first join of the run on x that crosses a boundary between two of them, t_i and t_(i+1); before it
+every part lies inside one token, so the join lies inside t_i t_(i+1) and neither end of that interval has been crossed,
+and by interval projection the run on t_i t_(i+1) alone crosses its middle, against their compatibility. So no boundary
+is crossed, and the run ends with each token's own merge, the token itself. The search ends with such a sequence unless
+it gives way: until then every answer of the pair test it acted on was about two tokens whose own merges join in order,
+so it was their compatibility, and the search has made the moves of a search whose test is exact on every pair. The
+tokens that search has laid before a position are compatible and encode to themselves, so they are the merge of the
+bytes before it, one sequence however the search reaches the position, and a position from which no token fits once fits
+from none; every token that encodes to itself and begins at a position is tried there, longest first; and the merge of
+the piece is such a sequence, so the search reaches the piece's end, with the merge. A search that does not give way is
+that search to its end, and a piece on which it gives way is merged by the scan or the heap, so every piece has the heap
+merge's ids.
+
+What a split with a part of higher order breaks is the pair test alone: interval projection and the local
+characterization hold on every table, and the search asks of the test only that it answer compatibility. On a token
+whose own merge does not join in order a later join can rank below an earlier one, so going back by orders undoes the
+joins beside the boundary in the wrong order, and a pair beside the boundary can be joined while it stands though it
+ranks above the join that ends its stand, once the next joins of both sides have risen above it. Under aab and then aa
+after the bytes, aab, of order 257, is joined from aa, of order 258, and b, and the test reads the pair of aa and aab
+back as if the left aa were the later join and refuses it, though aa aab is the merge of aaaab. Three other ways were
+weighed. A pair test that read the run in its true order would need, for every pair beside the boundary, the greatest
+rank the lesser of the two sides' next joins reaches while the pair stands, which turns on how the two tokens' merges
+interleave and not on their spines alone, and the four steps would need a fifth for it. A routing test that sent to the
+scan or the heap every piece holding the spelling of a token whose split has a part of higher order, one of 81 on Llama
+3's file, keeps the proof as it stood on the pieces it lets through, but reads every piece for those spellings before
+merging it and sends on at least every piece on which the search gives way, since a token the search asks about lies in
+the piece and holds such a spelling. A trie without the tokens whose own merges do not join in order never asks about
+one and fails exactly on the pieces whose merge holds one, but only after searching every position it reaches, and the
+heap then merges the piece afresh. Giving way costs at most the search up to the first test it would ask about such a
+token, reads one flag a token beside the split the test reads anyway, and leaves the four steps as they stood but for
+the order they ask of the two tokens, so it is the change made.
 
 The method is GitHub's bpe crate's, bpe 0.2.3 at github/rust-gems 31331e8: the Corollaries III and IIIa of its README,
 its backtracking encoder with the table of each token's next shorter prefix and the marks of the positions given up, and
@@ -939,12 +967,17 @@ constructor checks only that every token encodes to itself, and its pair test re
 prefix of lower rank whose rest is a token of lower rank and whose pair its own test accepts; on a table whose tokens
 all encode to themselves but where a split has a part of higher rank it returns other ids than the rule's, [aaa, b] on
 aaab for the ranks a, b, ab, aaa, aa, where the rule gives [aa, ab], and [aba, a] on abaa for aa, aba and ab after the
-bytes, where it gives [ab, aa]. matisse's additions are the condition decided at construction, which sends both tables
-to the scan and the heap, and the splits read from each token's own merge. The tests hold the backtracking to the plain
-loop over the joins on every multi-byte token of GPT-2's, cl100k's and o200k's files and on 20,000 seeded random pieces
-of each, on the 4,429 of 6,000 random tables over three symbols that meet the condition, and on those two tables and a
-third, aab and then aa after the bytes, on which the pair test would refuse the rule's own aa aab on aaaab; they hold
-all three and Llama 3's file not to meet the condition, and the merge's references hold the routed merge.
+bytes, where it gives [ab, aa]. matisse's additions are the order of each token's own merge decided at construction, the
+search giving way beside a token whose merge does not join in order, which sends those pieces to the scan or the heap,
+and the splits read from each token's own merge. The tests hold the backtracking to the plain loop over the joins,
+wherever it does not give way, on every multi-byte token of GPT-2's, cl100k's, o200k's and Llama 3's files and on 20,000
+seeded random pieces of each, on which it gives way only under Llama 3, on 20 of its tokens and 50 of its pieces, and on
+6,000 random tables over three symbols, never giving way on the 4,446 whose every token's merge joins in order and
+giving way on 6,402 of the pieces of the other 1,554; they read from the plain loop which tokens' merges join in order,
+107 of Llama 3's not, and on those two tables and a third, aab and then aa after the bytes, on which the pair test would
+refuse the rule's own aa aab on aaaab, they hold the search to give way where the test would be asked about the token
+out of order and the merge to the rule's ids. The merge's references hold the routed merge on every multi-byte token of
+the four files and on their random pieces.
 
 `encode()` looks each piece up whole first where the definition says so, then in a `Piece_cache`, and only then merges
 it, storing its ids. The ids of a piece are a function of its bytes and the definition alone, the merge building its

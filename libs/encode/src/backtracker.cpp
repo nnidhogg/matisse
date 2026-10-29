@@ -1,5 +1,6 @@
 #include "matisse/encode/backtracker.hpp"
 
+#include <algorithm>
 #include <boost/container_hash/hash.hpp>
 #include <cstddef>
 #include <cstdint>
@@ -49,7 +50,7 @@ Backtracker::Backtracker(Token_trie tokens, std::vector<Split> splits, Join_tabl
     : tokens_{std::move(tokens)}, splits_{std::move(splits)}, pairs_{std::move(pairs)}
 {}
 
-std::optional<Backtracker> Backtracker::of(
+Backtracker Backtracker::of(
         const std::span<const std::string> spellings, const std::span<const load::Token_id_t, 256> byte_ids,
         const Join_table& joins)
 {
@@ -57,7 +58,8 @@ std::optional<Backtracker> Backtracker::of(
 
     for (const auto id : byte_ids)
     {
-        found[id] = Split{.order = 0, .left = id, .right = id, .bit = 0, .followers = 0, .leaders = 0};
+        found[id] =
+                Split{.order = 0, .left = id, .right = id, .in_order = true, .bit = 0, .followers = 0, .leaders = 0};
     }
 
     for (std::size_t id{0}; id < spellings.size(); ++id)
@@ -86,7 +88,13 @@ std::optional<Backtracker> Backtracker::of(
         }
 
         found[id] =
-                Split{.order = join->rank + 1, .left = left, .right = right, .bit = 0, .followers = 0, .leaders = 0};
+                Split{.order = join->rank + 1,
+                      .left = left,
+                      .right = right,
+                      .in_order = false,
+                      .bit = 0,
+                      .followers = 0,
+                      .leaders = 0};
     }
 
     const auto lower{[&](const load::Token_id_t part, const std::uint32_t order) {
@@ -106,7 +114,7 @@ std::optional<Backtracker> Backtracker::of(
             continue;
         }
 
-        const auto [order, left, right, bit, followers, leaders]{*found[id]};
+        const auto [order, left, right, in_order, bit, followers, leaders]{*found[id]};
 
         const auto token{static_cast<load::Token_id_t>(id)};
 
@@ -118,16 +126,13 @@ std::optional<Backtracker> Backtracker::of(
 
         splits[id].right = right;
 
+        splits[id].in_order = in_order;
+
         splits[id].bit = partner_bit(token);
 
         if (order == 0)
         {
             continue;
-        }
-
-        if (!lower(left, order) || !lower(right, order))
-        {
-            return std::nullopt;
         }
 
         const auto key{Join_table::key_of(left, right)};
@@ -137,6 +142,24 @@ std::optional<Backtracker> Backtracker::of(
         splits[left].followers |= partner_bit(right);
 
         splits[right].leaders |= partner_bit(left);
+    }
+
+    // A part is shorter than its token, so with the tokens taken shortest first both parts of a split are decided
+    // before the token they make: its merge joins in order when theirs do and their orders are below its own.
+    auto shortest_first{ids};
+
+    std::ranges::stable_sort(shortest_first, {}, [&](const load::Token_id_t id) { return spellings[id].size(); });
+
+    for (const auto id : shortest_first)
+    {
+        auto& [order, left, right, in_order, bit, followers, leaders]{splits[id]};
+
+        if (order == 0)
+        {
+            continue;
+        }
+
+        in_order = lower(left, order) && lower(right, order) && splits[left].in_order && splits[right].in_order;
     }
 
     Token_trie tokens{spellings, ids};
@@ -239,7 +262,7 @@ std::uint32_t Backtracker::partner_bit(const load::Token_id_t id) noexcept
     return 1U << bit;
 }
 
-std::vector<load::Token_id_t> Backtracker::merged(const std::string_view piece) const
+std::optional<std::vector<load::Token_id_t>> Backtracker::merged(const std::string_view piece) const
 {
     std::vector<load::Token_id_t> ids{};
 
@@ -262,6 +285,15 @@ std::vector<load::Token_id_t> Backtracker::merged(const std::string_view piece) 
         const auto end{at + token.length};
 
         const auto open{dead.empty() || !dead[end]};
+
+        const auto asked{open && !ids.empty()};
+
+        // The pair test is exact on two tokens whose own merges join in order of rank, so the search gives way before
+        // it would act on the test's answer about any other.
+        if (asked && (!splits_[ids.back()].in_order || !splits_[token.id].in_order))
+        {
+            return std::nullopt;
+        }
 
         const auto fits{open && (ids.empty() || compatible(ids.back(), token.id))};
 
@@ -309,9 +341,11 @@ bool Backtracker::compatible(load::Token_id_t left, load::Token_id_t right) cons
 
     while (true)
     {
-        const auto& [left_order, left_left, left_right, left_bit, left_followers, left_leaders]{splits_[left]};
+        const auto& [left_order, left_left, left_right, left_in_order, left_bit, left_followers, left_leaders]{
+                splits_[left]};
 
-        const auto& [right_order, right_left, right_right, right_bit, right_followers, right_leaders]{splits_[right]};
+        const auto& [right_order, right_left, right_right, right_in_order, right_bit, right_followers, right_leaders]{
+                splits_[right]};
 
         const auto right_follows{(left_followers & right_bit) != 0};
 

@@ -15,6 +15,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace matisse::encode
@@ -727,9 +728,14 @@ std::vector<load::Token_id_t> Merger::merged(const std::string_view piece) const
 
     const auto scanned{piece.size() <= longest_scanned_piece};
 
-    if (backtracker_ && (!scanned || mostly_outside_ascii(piece)))
+    if (!scanned || mostly_outside_ascii(piece))
     {
-        return backtracker_->merged(piece);
+        auto backtracked{backtracker_.merged(piece)};
+
+        if (backtracked)
+        {
+            return std::move(*backtracked);
+        }
     }
 
     if (scanned)
