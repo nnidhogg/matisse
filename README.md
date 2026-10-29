@@ -161,8 +161,9 @@ target_link_libraries(first PRIVATE matisse::cl100k matisse::encode)
 The theory matisse builds on is in munch's technical reports, listed in the [munch
 README](https://github.com/nnidhogg/munch) by their arXiv identifiers:
 [arXiv:2608.03473](https://arxiv.org/abs/2608.03473), [arXiv:2608.09761](https://arxiv.org/abs/2608.09761),
-[arXiv:2609.10600](https://arxiv.org/abs/2609.10600) and [arXiv:2610.08854](https://arxiv.org/abs/2610.08854), the last
-of which holds the verifiers matisse's certificates are decided on.
+[arXiv:2609.10600](https://arxiv.org/abs/2609.10600), [arXiv:2610.08854](https://arxiv.org/abs/2610.08854), which holds
+the verifiers matisse's certificates are decided on, and [arXiv:2610.30168](https://arxiv.org/abs/2610.30168), which
+brings every tokenizer with a finite verifier, byte-pair dictionaries among them, under the same decisions.
 
 ## **Testing**
 

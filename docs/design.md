@@ -72,7 +72,7 @@ matisse/
     unicode/    generate_classes.py
 ```
 
-The fuzz harnesses, step 16 of the order of work, are to live in tools/fuzz beside them.
+The fuzz harnesses, step 17 of the order of work, are to live in tools/fuzz beside them.
 
 The libraries are of two kinds, as hopper's generic parse library sits beside its json and clike grammars. The four
 stage libraries are the four subjects of the first version, and none of them holds a tokenizer's pattern or special
@@ -195,13 +195,13 @@ is GPT-2's, and a Split on cl100k's published pattern, isolated and not inverted
 regex is cl100k's. An empty spelling reads a null pre-tokenizer, for the lazy route. The `added_tokens` marked special
 become `specials`. It refuses, naming the member: a model other than BPE, a normalizer other than null, any other
 pre-tokenizer or pattern (the cl100k pattern as tiktoken shipped it before its possessive rewrite is a different
-pattern, refused until it has its own verifier), `byte_fallback`, a post-processor that adds tokens, ordinary ids that
-are not dense from zero, and an empty token. `read_gpt2()` takes encoder.json and vocab.bpe as encoder.py reads them,
-with no special tokens, since encoder.py treats `<|endoftext|>` as text. `read_tiktoken()` takes a rank file, one base64
-token and its rank per line; the file names neither its pattern nor its special tokens, so the caller gives the vendor's
-special tokens, which the tokenizer library supplies from its own table, quoted from tiktoken's openai_public.py (for
-cl100k_base `<|endoftext|>` 100257, `<|fim_prefix|>` 100258, `<|fim_middle|>` 100259, `<|fim_suffix|>` 100260 and
-`<|endofprompt|>` 100276, to be held to the pinned source).
+pattern, Llama 3's, which the llama3 library's verifier covers), `byte_fallback`, a post-processor that adds tokens,
+ordinary ids that are not dense from zero, and an empty token. `read_gpt2()` takes encoder.json and vocab.bpe as
+encoder.py reads them, with no special tokens, since encoder.py treats `<|endoftext|>` as text. `read_tiktoken()` takes
+a rank file, one base64 token and its rank per line; the file names neither its pattern nor its special tokens, so the
+caller gives the vendor's special tokens, which the tokenizer library supplies from its own table, quoted from
+tiktoken's openai_public.py (for cl100k_base `<|endoftext|>` 100257, `<|fim_prefix|>` 100258, `<|fim_middle|>` 100259,
+`<|fim_suffix|>` 100260 and `<|endofprompt|>` 100276, to be held to the pinned source).
 
 The JSON files need a JSON reader; which one is open choice 5.
 
@@ -1194,7 +1194,7 @@ the whole corpus first, and hold the corpus to its digest and the ids to the ven
 skipped by name, and every one is skipped when no directory is named. A difference would be the Unicode version or a
 vendor's engine; on every corpus each vendor ran on there is none.
 
-The fuzz harnesses, step 16 of the order of work and not written yet, are to live in tools/fuzz and follow hopper's
+The fuzz harnesses, step 17 of the order of work and not written yet, are to live in tools/fuzz and follow hopper's
 contract (a refusal is the answer to bad input, a crash, a sanitizer report or a hang is a finding): one is to feed
 arbitrary bytes to the tiktoken reader, and to the tokenizer.json reader once it is written, and one arbitrary
 well-formed UTF-8 to the encoder, asserting that `encode_parallel()` equals `encode()` at a chunk count drawn from the
@@ -1266,13 +1266,14 @@ matisse's by the division.
    measurement. Measured ([benchmarks.md](benchmarks.md)): 24 workers encode enwik9 11.2 times faster than `encode()`,
    and a chunking at every anchor of munch's C++ sources, 559,642 chunks, fails with `std::system_error` where the
    system cannot start that many threads, so the corpus probe asks for at most 32,768 chunks.
-5. **The JSON reader.** tokenizer.json and encoder.json are JSON, with `\u` escapes and surrogate pairs in GPT-2's
-   vocabulary. hopper has a complete RFC 8259 parser (`hopper::json::Parser`, held to the JSONTestSuite), munch has
-   none, and a third-party library would be a new vendored dependency. Taking hopper means a second submodule, and
-   hopper's external/CMakeLists.txt adds its own munch submodule unless hopper is built against a system munch, which
-   would define munch's targets twice beside matisse's own submodule. Recommendation: hopper's parser, with matisse
-   keeping its own munch submodule as hopper does and hopper skipping its submodule when `munch::munch` already exists,
-   a one-line change in hopper's next release, which has to build against munch 3.0.0 anyway (as 1.0.1 lifted hopper to
+5. **The JSON reader.** tokenizer.json and encoder.json are JSON, with `\u` escapes, and a JSON reader must take
+   surrogate pairs, though GPT-2's byte-map characters lie at or below U+0143 and its vocabulary needs none. hopper has
+   a complete RFC 8259 parser (`hopper::json::Parser`, held to the JSONTestSuite), munch has none, and a third-party
+   library would be a new vendored dependency. Taking hopper means a second submodule, and hopper's
+   external/CMakeLists.txt adds its own munch submodule unless hopper is built against a system munch, which would
+   define munch's targets twice beside matisse's own submodule. Recommendation: hopper's parser, with matisse keeping
+   its own munch submodule as hopper does and hopper skipping its submodule when `munch::munch` already exists, a
+   one-line change in hopper's next release, which has to build against munch 3.0.0 anyway (as 1.0.1 lifted hopper to
    2.1.0). A third JSON parser in the family would duplicate a tested one.
 6. **The Unicode version of the class tables.** The fixtures come from Python 3.12, Unicode 15.0.0; tiktoken's and
    Hugging Face's engines carry their own versions. Settled: 15.0.0, so that the fixtures replay, since the vendor
@@ -1351,5 +1352,5 @@ Each step lands green on its own, its tests first where a fixture exists.
     corpora `-DMATISSE_CORPUS_DIR` holds. On all fourteen, 4.14 GB, every digest holds, in 228 seconds under GPT-2, 235
     under cl100k, 243 under o200k and 254 under Llama 3, each test within 2.2 GB resident. The pin stays at Unicode
     15.0.0.
-16. The fuzz harnesses and their CI job; the README's Versioning and Stability section naming the stable surface; then
-    the first release.
+16. The README's Versioning and Stability section naming the stable surface; then the first release.
+17. The fuzz harnesses and their CI job, in tools/fuzz, after the first release.

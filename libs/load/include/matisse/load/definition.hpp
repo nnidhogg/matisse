@@ -109,9 +109,12 @@ struct Definition
  * @brief Reads GPT-2's encoder.json and vocab.bpe as openai/gpt-2's src/encoder.py reads them.
  *
  * encoder.json is read as the one flat object it is, each token's spelling under GPT-2's byte-to-character map and its
- * id, with JSON's escapes; vocab.bpe, UTF-8 throughout as encoder.py's text-mode read requires, as a version line and
- * then one merge per line, its two parts separated by white space, the text after the last newline dropped as
- * encoder.py drops it. The byte map is undone, so "Ġthe" is read as " the". The definition has the pair rule, no
+ * id written as digits, with JSON's escapes; vocab.bpe, UTF-8 throughout as encoder.py's text-mode read requires,
+ * as a version line and then one merge per line, its two parts separated by ASCII white space, the text after the
+ * last newline dropped as encoder.py drops it. The grammar is narrower than Python's in two places that no vendor
+ * file reaches, and both are refused: an id spelled `-0`, which Python's json reads as zero, and a merge separator
+ * that is Unicode white space outside ASCII, which Python's str.split() also splits at. The byte map is undone, so
+ * "Ġthe" is read as " the". The definition has the pair rule, no
  * whole-piece lookup, and no special tokens, since encoder.py reads `<|endoftext|>` as text. The merge table is checked
  * once: no pair is listed twice, and no part of a merge is formed by a merge of a later rank, so that the pair rule is
  * encoder.py's loop on it.
@@ -140,8 +143,9 @@ struct Definition
  * @param specials The vendor's special tokens, by id ascending.
  * @return The definition.
  * @throws std::runtime_error If the file cannot be read.
- * @throws std::invalid_argument If a line is not a base64 token and a decimal rank, the ranks are not dense from
- *         zero, or two tokens have one spelling; the message names the file and the line or the ranks.
+ * @throws std::invalid_argument If a line is not a base64 token and a decimal rank written as digits alone, the ranks
+ *         are not dense from zero, or two tokens have one spelling; the message names the file and the line or the
+ *         ranks.
  */
 [[nodiscard]] Definition read_tiktoken(const std::filesystem::path& path, std::span<const Special_token> specials);
 
