@@ -90,6 +90,10 @@ public:
      * @brief Stores the ids of a piece not stored yet, unless the cache holds its bound or the piece is longer than
      *        longest_cached_piece.
      *
+     * A piece becomes findable only once its bytes and ids are stored, so a store that throws, as an allocation can,
+     * stores nothing, and a caller that catches the exception may go on using the cache, every find answering as
+     * before.
+     *
      * It serves the encoder and the streaming encoder and is not part of matisse's stable surface.
      * @param piece The piece's bytes.
      * @param ids The piece's ids, as the merge gives them.

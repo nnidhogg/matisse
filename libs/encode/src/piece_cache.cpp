@@ -86,7 +86,8 @@ void Piece_cache::store(const std::string_view piece, std::vector<load::Token_id
         return;
     }
 
-    slot = {.hash = hash,
+    const Slot stored{
+            .hash = hash,
             .bytes_at = bytes_.size(),
             .ids_at = ids_.size(),
             .length = static_cast<std::uint16_t>(piece.size()),
@@ -95,6 +96,10 @@ void Piece_cache::store(const std::string_view piece, std::vector<load::Token_id
     bytes_ += piece;
 
     ids_.insert(ids_.end(), ids.begin(), ids.end());
+
+    // The slot is written last, once the bytes and the ids it names are stored, so a store that an allocation fails
+    // leaves every find as it was; what it appended before the failure is named by no slot.
+    slot = stored;
 
     ++size_;
 }
