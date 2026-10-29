@@ -258,6 +258,12 @@ MIT, see [LICENSE](LICENSE). The generated Unicode class tables derive from the 
 under the Unicode License v3; the complete notice is in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md), installed
 alongside the package.
 
+The vendors' vocabulary files are not part of matisse. GPT-2's encoder.json and vocab.bpe are OpenAI's under the
+modified MIT license of the gpt-2 repository, tiktoken's rank files are OpenAI's under the MIT license of the tiktoken
+repository, and Llama 3's tokenizer.model is Meta's under the Llama 3 Community License; you obtain each from its vendor
+under those terms, and matisse holds only their SHA-256 digests, the vendors' pre-tokenizer patterns and the spellings
+of their special tokens.
+
 ## **Author**
 
 Developed and maintained by **Nicklas Nidhögg**, [nnidhogg](https://github.com/nnidhogg) on GitHub.
