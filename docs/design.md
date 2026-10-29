@@ -89,7 +89,7 @@ holds the tests' and the probes' SHA-256 alone, which the tokenizer tests hold t
 and the probes the corpora and their ids; its target `matisse_common` lives in the build tree only, with no alias, no
 install rule and no place in the umbrella.
 
-The top-level CMakeLists.txt is hopper's with the prefix changed: `project(matisse VERSION 0.1.0 LANGUAGES CXX)`, C++23
+The top-level CMakeLists.txt is hopper's with the prefix changed: `project(matisse VERSION 1.0.0 LANGUAGES CXX)`, C++23
 required, `MATISSE_IS_TOP_LEVEL`, Release by default at the top level only, `MATISSE_SOURCE_DIR` for test data paths,
 `-Wall -Wunused -Wextra` with `MATISSE_WERROR` on at the top level, `MATISSE_BUILD_TESTS`, `USE_SYSTEM_GTEST`, and, once
 the harnesses exist, `MATISSE_BUILD_FUZZER` instrumenting the whole tree with the submodule included. munch is consumed

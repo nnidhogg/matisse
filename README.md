@@ -25,15 +25,15 @@ tables, and the runtime with its token ids, normalizers and special-token cuts.
 
 ## **Status**
 
-Not yet released, the version is 0.1.0, pre-1.0 and nothing is stable yet, and matisse depends on munch 3.0.0, the
-release its submodule is pinned to. It loads GPT-2's encoder.json and vocab.bpe and tiktoken rank files, and it encodes
-text under GPT-2, cl100k_base, o200k_base and Llama 3 sequentially, in parallel at certified cuts and as a stream, with
-the vendors' special tokens cut out where they are allowed, and decodes ids back to bytes; validate decides each
-pattern's certified windows, and `matisse-validate` reports them for a rank file. The ids are held to the vendors' on
-pinned vocabularies, fixtures and corpora, with the classes of code points pinned to Unicode 15.0.0, while a Hugging
-Face tokenizer.json reader and the certification of merge tables without a pre-tokenizer are planned and not yet
-written. What each library will hold, the proved results the loaders rest on and the order of work are in
-[docs/design.md](docs/design.md), and what every call guarantees is in [docs/limits.md](docs/limits.md).
+The version is 1.0.0, the first release, and matisse depends on munch 3.0.0, the release its submodule is pinned to. It
+loads GPT-2's encoder.json and vocab.bpe and tiktoken rank files, and it encodes text under GPT-2, cl100k_base,
+o200k_base and Llama 3 sequentially, in parallel at certified cuts and as a stream, with the vendors' special tokens cut
+out where they are allowed, and decodes ids back to bytes; validate decides each pattern's certified windows, and
+`matisse-validate` reports them for a rank file. The ids are held to the vendors' on pinned vocabularies, fixtures and
+corpora, with the classes of code points pinned to Unicode 15.0.0, while a Hugging Face tokenizer.json reader and the
+certification of merge tables without a pre-tokenizer are planned and not yet written. What each library will hold, the
+proved results the loaders rest on and the order of work are in [docs/design.md](docs/design.md), and what every call
+guarantees is in [docs/limits.md](docs/limits.md).
 
 ## **Libraries**
 
