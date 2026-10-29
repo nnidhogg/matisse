@@ -220,6 +220,32 @@ jobs:
           gcov --version
           gcovr --version
 
+      - name: Restore the pinned vocabulary files
+        # The four public files the tests pin are kept in the Actions cache under their digests, so the vendors' hosts
+        # are read on the first run and after the cache expires, and never on a hit.
+        id: vocab
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/vocab
+          key: vocab-196139668be63f3b-1ce1664773c50f3e-223921b76ee99bde-446a9538cb6c348e
+
+      - name: Fetch the pinned vocabulary files
+        # The four public files the tests pin, under the names the tests expect, each held to the SHA-256 the tests
+        # hold it to, so that the loaders', the encoders' and the CLI's real-vocabulary tests run in the measured
+        # build. Llama 3's tokenizer.model is gated behind its vendor's license and is not fetched; its tests skip.
+        if: steps.vocab.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p "$RUNNER_TEMP/vocab"
+          cd "$RUNNER_TEMP/vocab"
+          curl -sSfL -o gpt2-vocab.json https://openaipublic.blob.core.windows.net/gpt-2/encodings/main/encoder.json
+          curl -sSfL -o gpt2-merges.txt https://openaipublic.blob.core.windows.net/gpt-2/encodings/main/vocab.bpe
+          curl -sSfL -o cl100k_base.tiktoken https://openaipublic.blob.core.windows.net/encodings/cl100k_base.tiktoken
+          curl -sSfL -o o200k_base.tiktoken https://openaipublic.blob.core.windows.net/encodings/o200k_base.tiktoken
+          echo "196139668be63f3b5d6574427317ae82f612a97c5d1cdaf36ed2256dbf636783  gpt2-vocab.json" | sha256sum -c -
+          echo "1ce1664773c50f3e0cc8842619a93edc4624525b728b188a9e0be33b7726adc5  gpt2-merges.txt" | sha256sum -c -
+          echo "223921b76ee99bde995b7ff738513eef100fb51d18c93597a113bcffe865b2a7  cl100k_base.tiktoken" | sha256sum -c -
+          echo "446a9538cb6c348e3516120d7c08b09f57c36495e2acfffe59a5bf8b0cfb1a2d  o200k_base.tiktoken" | sha256sum -c -
+
       - name: Configure build with CMake
         # -fprofile-update=atomic: the parallel encoder runs on several threads, and gcov's counters are not atomic
         # by default.
@@ -230,7 +256,8 @@ jobs:
           mkdir build
           cd build
           cmake -G Ninja .. -DCMAKE_BUILD_TYPE=Debug \
-                -DCMAKE_CXX_FLAGS="--coverage -fprofile-abs-path -fprofile-update=atomic"
+                -DCMAKE_CXX_FLAGS="--coverage -fprofile-abs-path -fprofile-update=atomic" \
+                -DMATISSE_VOCAB_DIR="$RUNNER_TEMP/vocab"
 
       - name: Build with CMake
         run: |
