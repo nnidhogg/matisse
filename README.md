@@ -5,7 +5,11 @@
   <img src="https://github.com/nnidhogg/matisse/actions/workflows/ci.yml/badge.svg" alt="CI">
   <img src="https://github.com/nnidhogg/matisse/actions/workflows/codeql.yml/badge.svg" alt="CodeQL">
   <img src="https://codecov.io/gh/nnidhogg/matisse/branch/master/graph/badge.svg" alt="Coverage">
-  <img src="https://img.shields.io/github/license/nnidhogg/matisse" alt="License">
+  <img src="https://img.shields.io/github/license/nnidhogg/matisse?color=green" alt="License">
+  <img src="https://img.shields.io/github/v/release/nnidhogg/matisse?sort=semver" alt="Release">
+  <a href="https://doi.org/10.5281/zenodo.23782291">
+    <img src="https://zenodo.org/badge/1422531956.svg" alt="DOI">
+  </a>
 </p>
 
 `matisse` is a **C++23 library** that reads the definition of a **real tokenizer**, decides where its output can be
