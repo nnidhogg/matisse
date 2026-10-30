@@ -13,6 +13,32 @@ session of 2026-10-21 at 89ccd3d and the scouting runs beside it, those of the b
 at 2dc197a, and those of the streaming section from one session of 2026-10-27 at 047f82d; the probe's run on enwik9
 named below is the exception, and the figures in the prose are read from the tables and from the archived outputs.
 
+## **The standing**
+
+The sections below are the log of the collection in the order it was run, each keeping the figures of its own session,
+and the latest standing is the backtracking section's for GPT-2 and cl100k and the section on o200k and Llama 3 for
+those two. This is what they say, on the machine of the next section, with every competitor in its fastest exact
+configuration: GitHub's bpe crate, tiktoken's Rust core, tiktoken-rs and Hugging Face's crate beside the Python
+packages. The one-core row holds on every corpus of the collection but the two cells that name one, a prompt's figure is
+the mean latency of one call in microseconds, with a cache of its own and in parentheses with a cache kept across calls,
+and a ratio is matisse over the competitor named.
+
+|                                          | GPT-2                                    | cl100k                       | o200k                                         | Llama 3                                          |
+|------------------------------------------|------------------------------------------|------------------------------|-----------------------------------------------|--------------------------------------------------|
+| One core, `encode()`                     | 1.04x to 2.11x the bpe crate             | 1.17x to 1.84x the bpe crate | 1.06x to 1.77x the bpe crate, 0.99x on Arabic | 1.33x to 3.44x tiktoken's core, 0.87x on Chinese |
+| A kilobyte prompt, one call              | 24.52, the crate 24.93                   | 24.77, the crate 25.83       | 35.28 (31.05), the crate 30.41                | 41.96 (33.07), tiktoken's core 43.74             |
+| A batch of enwik9's pages, 24 threads    | 1.53x the crate                          | 1.65x the crate              | 794.0 MiB/s, 1.71x the crate                  | 874.1 MiB/s, 5.95x tiktoken's core               |
+| One text in parallel, enwik9, 24 workers | 557.5 MiB/s, 10.95x the crate's one call | 626.1 MiB/s, 13.18x          | 577.5 MiB/s, 13.31x                           | 579.5 MiB/s, 18.75x tiktoken's core              |
+
+No competitor encodes one text on more than one thread, so the last row stands beside each one's single call. Against
+the Python packages the leads are wider: in the batch under GPT-2 and cl100k matisse runs at 9.94 and 9.80 times
+tiktoken's fastest call from Python and at 24.78 and 22.77 times Hugging Face's crate, and under o200k and Llama 3 at
+10.25 and 10.66 times tiktoken's kept pool and 22.49 and 22.76 times Hugging Face's fastest. The exactness section is
+what the speeds rest on: on every corpus each competitor ran on, matisse's ids equal the vendors' by digest. Two cells
+trail a competitor, the o200k prompt against the crate's backtracking and Chinese under Llama 3, whose pieces that
+session merged by the scan and the heap; since then the merge backtracks under Llama 3 as well, as design.md describes,
+and the next collection times it.
+
 ## **The programs**
 
 Two programs in tools/probes measure matisse. `matisse_corpus` is the third layer of the test strategy: on GPT-2's,
@@ -65,13 +91,13 @@ enters it, and print rows and ids lines in the same format:
   as design.md counts them. Every call is `Tokenizer::encode()`, and a batch is the same pool of threads as matisse's,
   written in the harness.
 
-| File | Source | SHA-256 |
-|---|---|---|
+| File                                 | Source                                                                                | SHA-256                                                            |
+|--------------------------------------|---------------------------------------------------------------------------------------|--------------------------------------------------------------------|
 | openai-community_gpt2.tokenizer.json | huggingface.co/openai-community/gpt2, commit 607a30d783dfa663caf39e06633721c8d4cfcd7e | `8414cab924d8b9b33013f0d221c5862f365ee9be39c5c2bfae8a5a9e970478a6` |
-| Xenova_gpt-4.tokenizer.json | huggingface.co/Xenova/gpt-4, commit 1d9f1f1b1fae88c0e4df1dab0a397f8de6229075 | `239eb2359f79c38497476671aaa835e01fb43d42743c612a8514a0dfa2ac93a2` |
-| Xenova_gpt-4o.tokenizer.json | huggingface.co/Xenova/gpt-4o, commit 7956d98f2a83b2751a98ea7136fdf7fe6cf54e69 | `43a3ad4618a6a938f8c2614154ea10c31ad53a62d5683ae0b0e6133575cef07e` |
-| llama3-tokenizer.json | beside the pinned vocabulary files | `e134af98b985517b4f068e3755ae90d4e9cd2d45d328325dc503f1c6b2d06cc7` |
-| gpt2.tiktoken | GPT-2's ranks, written by tiktoken from the pinned encoder.json and vocab.bpe | `306cd27f03c1a714eca7108e03d66b7dc042abe8c258b44c199a7ed9838dd930` |
+| Xenova_gpt-4.tokenizer.json          | huggingface.co/Xenova/gpt-4, commit 1d9f1f1b1fae88c0e4df1dab0a397f8de6229075          | `239eb2359f79c38497476671aaa835e01fb43d42743c612a8514a0dfa2ac93a2` |
+| Xenova_gpt-4o.tokenizer.json         | huggingface.co/Xenova/gpt-4o, commit 7956d98f2a83b2751a98ea7136fdf7fe6cf54e69         | `43a3ad4618a6a938f8c2614154ea10c31ad53a62d5683ae0b0e6133575cef07e` |
+| llama3-tokenizer.json                | beside the pinned vocabulary files                                                    | `e134af98b985517b4f068e3755ae90d4e9cd2d45d328325dc503f1c6b2d06cc7` |
+| gpt2.tiktoken                        | GPT-2's ranks, written by tiktoken from the pinned encoder.json and vocab.bpe         | `306cd27f03c1a714eca7108e03d66b7dc042abe8c258b44c199a7ed9838dd930` |
 
 The rank files o200k_base.tiktoken and llama3.tiktoken are pinned in design.md's test strategy. matisse's rows of the
 sections before the one on o200k and Llama 3 are GPT-2's and cl100k's, and o200k and Llama 3 are measured there for the
@@ -90,34 +116,34 @@ rerun on your own machine before quoting any of them.
 
 ## **The corpora**
 
-| Corpus | What it is |
-|---|---|
-| `twitter.json` | simdjson's `jsonexamples/twitter.json` at v3.10.1, as the fixtures read it |
-| `munch-python@15b2863c` | munch's 10 tracked Python files at 15b2863c, in path order, as the fixtures build it |
-| `munch-cpp@15b2863c` | munch's 306 tracked C++ sources and headers at 15b2863c, in path order, as the fixtures build it |
-| `gutenberg` | six Project Gutenberg books, ebooks 1342, 2701, 84, 1661, 98 and 2600 (Pride and Prejudice, Moby Dick, Frankenstein, The Adventures of Sherlock Holmes, A Tale of Two Cities, War and Peace), concatenated in that order, public domain in the USA |
-| `wiki-zh`, `wiki-ar`, `wiki-ru`, `wiki-hi`, `wiki-sv` | Wikipedia's plain-text extracts, through the TextExtracts API, of the articles the English page Wikipedia:Vital articles/Level 3 names at revision 1380842742, in its order, to 4 MiB a language, CC BY-SA 4.0 |
-| `enwik8`, `enwik9` | the Hutter Prize files, the first 10^8 and 10^9 bytes of English Wikipedia's XML dump of 2006-03-03 |
-| `enwik9-pages` | enwik9 cut before every page, 243,427 documents, the siteinfo header and 243,426 pages, separated by NUL bytes |
-| `mixed-2g` | enwik9, then the five Wikipedia samples and munch's Python and C++ sources, that block repeated 38 times |
-| `prompts` | 20,000 texts of 100 to 2,000 bytes, each cut at a seeded random place from `gutenberg` and the five Wikipedia samples in turn, separated by NUL bytes |
+| Corpus                                                | What it is                                                                                                                                                                                                                                         |
+|-------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `twitter.json`                                        | simdjson's `jsonexamples/twitter.json` at v3.10.1, as the fixtures read it                                                                                                                                                                         |
+| `munch-python@15b2863c`                               | munch's 10 tracked Python files at 15b2863c, in path order, as the fixtures build it                                                                                                                                                               |
+| `munch-cpp@15b2863c`                                  | munch's 306 tracked C++ sources and headers at 15b2863c, in path order, as the fixtures build it                                                                                                                                                   |
+| `gutenberg`                                           | six Project Gutenberg books, ebooks 1342, 2701, 84, 1661, 98 and 2600 (Pride and Prejudice, Moby Dick, Frankenstein, The Adventures of Sherlock Holmes, A Tale of Two Cities, War and Peace), concatenated in that order, public domain in the USA |
+| `wiki-zh`, `wiki-ar`, `wiki-ru`, `wiki-hi`, `wiki-sv` | Wikipedia's plain-text extracts, through the TextExtracts API, of the articles the English page Wikipedia:Vital articles/Level 3 names at revision 1380842742, in its order, to 4 MiB a language, CC BY-SA 4.0                                     |
+| `enwik8`, `enwik9`                                    | the Hutter Prize files, the first 10^8 and 10^9 bytes of English Wikipedia's XML dump of 2006-03-03                                                                                                                                                |
+| `enwik9-pages`                                        | enwik9 cut before every page, 243,427 documents, the siteinfo header and 243,426 pages, separated by NUL bytes                                                                                                                                     |
+| `mixed-2g`                                            | enwik9, then the five Wikipedia samples and munch's Python and C++ sources, that block repeated 38 times                                                                                                                                           |
+| `prompts`                                             | 20,000 texts of 100 to 2,000 bytes, each cut at a seeded random place from `gutenberg` and the five Wikipedia samples in turn, separated by NUL bytes                                                                                              |
 
-| Corpus | Bytes | SHA-256 |
-|---|---:|---|
-| `twitter.json` | 631,515 | `30721e496a8d73cfc50658923c34eb2c0fbe15ee6835005e43ee624d8dedf200` |
-| `munch-python@15b2863c` | 476,935 | `c9c0ae376366dbff19a74e74613be4b64ee965b73585804c3c439889b1bcd817` |
-| `munch-cpp@15b2863c` | 4,280,733 | `2cc4d25185f68248354133972339e31554fd0819ebaefdd8d1e80d3979cf43b7` |
-| `gutenberg` | 7,271,999 | `cd90a9bef7769a52aa74878ece818dc091b1933a0c24c2ed1d9949b8d5d3fdb1` |
-| `wiki-zh` | 4,206,554 | `10e07833839f83c73b49d276129ad3bbcda402a7cd92dde09adb13d249229d44` |
-| `wiki-ar` | 4,237,938 | `68d10011954b010d96ea36e76f4df0b10250518f8fdc05dc16eb443505db6d58` |
-| `wiki-ru` | 4,239,099 | `0a2e6e0fd7da235a18ac0e43533ce34b91b7d37e59c1aad3a889cdd6d72a9788` |
-| `wiki-hi` | 4,233,072 | `19fe2e4227a91ccc4d727fc843b61e6c5a061348a55213fceb0bd4bada7ddf62` |
-| `wiki-sv` | 4,195,270 | `a37c76e474d96850c304f8d7acfa4810f41fe05b02a466a952e59a64f91e213f` |
-| `enwik8` | 100,000,000 | `2b49720ec4d78c3c9fabaee6e4179a5e997302b3a70029f30f2d582218c024a8` |
-| `enwik9` | 1,000,000,000 | `159b85351e5f76e60cbe32e04c677847a9ecba3adc79addab6f4c6c7aa3744bc` |
-| `enwik9-pages` | 1,000,243,426 | `e7fb1adcee74a0f07fb3b9012dc14d65d1b251c1d803c465e507a0990156398c` |
-| `mixed-2g` | 1,983,044,838 | `b5262db6e69e40bbdd8e1a0df514606e8bd96dc575cc13a9e717b10b6dca3d5e` |
-| `prompts` | 20,993,021 | `34d58d7c1943dae602d69f8c3ce47492798516c1aa8da55da931e936947cfb52` |
+| Corpus                  |         Bytes | SHA-256                                                            |
+|-------------------------|--------------:|--------------------------------------------------------------------|
+| `twitter.json`          |       631,515 | `30721e496a8d73cfc50658923c34eb2c0fbe15ee6835005e43ee624d8dedf200` |
+| `munch-python@15b2863c` |       476,935 | `c9c0ae376366dbff19a74e74613be4b64ee965b73585804c3c439889b1bcd817` |
+| `munch-cpp@15b2863c`    |     4,280,733 | `2cc4d25185f68248354133972339e31554fd0819ebaefdd8d1e80d3979cf43b7` |
+| `gutenberg`             |     7,271,999 | `cd90a9bef7769a52aa74878ece818dc091b1933a0c24c2ed1d9949b8d5d3fdb1` |
+| `wiki-zh`               |     4,206,554 | `10e07833839f83c73b49d276129ad3bbcda402a7cd92dde09adb13d249229d44` |
+| `wiki-ar`               |     4,237,938 | `68d10011954b010d96ea36e76f4df0b10250518f8fdc05dc16eb443505db6d58` |
+| `wiki-ru`               |     4,239,099 | `0a2e6e0fd7da235a18ac0e43533ce34b91b7d37e59c1aad3a889cdd6d72a9788` |
+| `wiki-hi`               |     4,233,072 | `19fe2e4227a91ccc4d727fc843b61e6c5a061348a55213fceb0bd4bada7ddf62` |
+| `wiki-sv`               |     4,195,270 | `a37c76e474d96850c304f8d7acfa4810f41fe05b02a466a952e59a64f91e213f` |
+| `enwik8`                |   100,000,000 | `2b49720ec4d78c3c9fabaee6e4179a5e997302b3a70029f30f2d582218c024a8` |
+| `enwik9`                | 1,000,000,000 | `159b85351e5f76e60cbe32e04c677847a9ecba3adc79addab6f4c6c7aa3744bc` |
+| `enwik9-pages`          | 1,000,243,426 | `e7fb1adcee74a0f07fb3b9012dc14d65d1b251c1d803c465e507a0990156398c` |
+| `mixed-2g`              | 1,983,044,838 | `b5262db6e69e40bbdd8e1a0df514606e8bd96dc575cc13a9e717b10b6dca3d5e` |
+| `prompts`               |    20,993,021 | `34d58d7c1943dae602d69f8c3ce47492798516c1aa8da55da931e936947cfb52` |
 
 None is in the repository. The corpus directory's manifest pins each file, and its README gives every source, licence
 and recipe; its `make_corpora.py check` holds the files to the manifest. The API serves the extract of an article's
@@ -137,64 +163,64 @@ have enwik9's digest, so every page begins at a piece boundary of every pattern,
 o200k and Llama 3 matisse's ids equal every other encoder's on every corpus as well. Each engine carries Unicode tables
 of its own and matisse pins Unicode 15.0.0, and on these corpora the difference changes no id.
 
-| Corpus | Tokenizer | Ids | SHA-256 of the ids | Agreeing |
-|---|---|---:|---|---|
-| `twitter.json` | gpt2 | 332,556 | `44eabd1f3c08a75ea2181d5dc357ac3fb05d2c525b5fecf670f114990201cd67` | bpe, Hugging Face, matisse, tiktoken |
-| `twitter.json` | cl100k | 173,645 | `ea966e05d3246f335e1f360efeec236ea89682f8f7cb5c4a61c07340f0760c37` | bpe, Hugging Face, matisse, tiktoken |
-| `twitter.json` | o200k | 163,117 | `53f263ccd2c55d48da0ee7071860bea4769244e2cae750aac1429ad09d0980cc` | bpe, Hugging Face, matisse, tiktoken |
-| `twitter.json` | llama3 | 160,933 | `097bdc5645cbdeca5822488fc84307633cad18d0b70290f0ba6c03e809f9d6d5` | Hugging Face, matisse, tiktoken |
-| `munch-python@15b2863c` | gpt2 | 184,012 | `6eb94834cdca2d97450eb86d883cf3ddc447569944f5a44da0cc2b70216549b2` | bpe, Hugging Face, matisse, tiktoken |
-| `munch-python@15b2863c` | cl100k | 109,965 | `1453748b540ca6ffad8310025d7fc886182b2c05bbdc18c519eb5b2d9ee9fe4b` | bpe, Hugging Face, matisse, tiktoken |
-| `munch-python@15b2863c` | o200k | 110,390 | `be2c2699af3efa4f9f9a98cd78485682700e0b3a95c72d9e796fcd3d25e0c0f6` | bpe, Hugging Face, matisse, tiktoken |
-| `munch-python@15b2863c` | llama3 | 109,965 | `1453748b540ca6ffad8310025d7fc886182b2c05bbdc18c519eb5b2d9ee9fe4b` | Hugging Face, matisse, tiktoken |
-| `munch-cpp@15b2863c` | gpt2 | 1,639,282 | `8f34429ef998914438e243d129ae1ccdb0c26d97f29094f9a9cb1d93b18022fe` | bpe, Hugging Face, matisse, tiktoken |
-| `munch-cpp@15b2863c` | cl100k | 1,060,572 | `97ee02f4cb13d88775f8fe807d895b0810fecb718e4e53d2953017399e0da201` | bpe, Hugging Face, matisse, tiktoken |
-| `munch-cpp@15b2863c` | o200k | 1,063,148 | `bd829cb1281381b51aa3836f0e22ef90b3d60f9d891ed6939e3e4e8428ba5401` | bpe, Hugging Face, matisse, tiktoken |
-| `munch-cpp@15b2863c` | llama3 | 1,060,516 | `c23dec7f0914366b8332666fc7bc098440c11b0e94de14379d9319a50830dfa3` | Hugging Face, matisse, tiktoken |
-| `gutenberg` | gpt2 | 2,002,145 | `f8c1359e9260f01b1a1bde0580480b4cac01d8f7c9ca20a8c2443718ed000434` | bpe, Hugging Face, matisse, tiktoken |
-| `gutenberg` | cl100k | 1,708,273 | `9c925a5984d22eb7dbb8408b897f612f0a345931605a822aab52c480382c21ea` | bpe, Hugging Face, matisse, tiktoken |
-| `gutenberg` | o200k | 1,695,829 | `f561e9d7ea3cf117591bc9b806e39bb094e378068728065e3c512eb992816e08` | bpe, Hugging Face, matisse, tiktoken |
-| `gutenberg` | llama3 | 1,706,691 | `96bf65b9a9a7e608664af5a1730be923e7350d71e4bcbfa8a26f92a051769183` | Hugging Face, matisse, tiktoken |
-| `wiki-zh` | gpt2 | 2,984,479 | `9e1315d4c8f265369c3891e10d08a5358c663db4368c6a8050f6e75759384017` | bpe, Hugging Face, matisse, tiktoken |
-| `wiki-zh` | cl100k | 1,939,825 | `7a0ec4e167b68b621e6562e2191bdcc43b4d73a31dd8b20d7e1b5aac67b986fc` | bpe, Hugging Face, matisse, tiktoken |
-| `wiki-zh` | o200k | 1,299,269 | `f3b08b0ba50957619314917ebc98cc3b26c9e82f4a09fab530aba5976d56d56e` | bpe, Hugging Face, matisse, tiktoken |
-| `wiki-zh` | llama3 | 1,298,383 | `9b3f7244ef292fb222cac56c62a7b68a86abbc95f2e8d7d7ce1d7a2fed7cf605` | Hugging Face, matisse, tiktoken |
-| `wiki-ar` | gpt2 | 2,385,003 | `b45551f291d84403bc9cbb0f3bb37ed0678e63788fba17560958570d0e11b17a` | bpe, Hugging Face, matisse, tiktoken |
-| `wiki-ar` | cl100k | 1,663,728 | `ae59537c4ab51ccf984b5ac2e212f0cd1072612e00bce2711f2bca027fb9d109` | bpe, Hugging Face, matisse, tiktoken |
-| `wiki-ar` | o200k | 806,639 | `8117c3677d2a42c469e8b94dd894bdf60351cee48e01e9b90b5ce6e7cc114be6` | bpe, Hugging Face, matisse, tiktoken |
-| `wiki-ar` | llama3 | 932,883 | `01c49be3bab1a0eb5d0406047d77e0b0ce0f9481dbc50d4b20e211aa731d365c` | Hugging Face, matisse, tiktoken |
-| `wiki-ru` | gpt2 | 2,470,902 | `1cff652bf33ba07b6e4899c9d997cc50495d115dda68bf252355a82397080b94` | bpe, Hugging Face, matisse, tiktoken |
-| `wiki-ru` | cl100k | 1,162,181 | `9bebf2079fdff13a446ee5d02d723ebe16930e48af5a4c0b4e3e5f72ddd10be1` | bpe, Hugging Face, matisse, tiktoken |
-| `wiki-ru` | o200k | 709,178 | `9b243bc017b9b6f62449eee4bde696ecb6d32ec2db90114b6ca4a0cd4d684713` | bpe, Hugging Face, matisse, tiktoken |
-| `wiki-ru` | llama3 | 791,648 | `87e884e6ac480da3f0cc024007f14ae2e69ec94fb847030c4d415f61bd779ee4` | Hugging Face, matisse, tiktoken |
-| `wiki-hi` | gpt2 | 2,502,380 | `019b5b9db2db6e35c198fa34d10e794952e4751976cd906bb26752edf123d38f` | bpe, Hugging Face, matisse, tiktoken |
-| `wiki-hi` | cl100k | 1,606,330 | `a03e85f6eba4fb48e4deb13a881c1af981435a8dd514eb86ef0b47f38e1ebf82` | bpe, Hugging Face, matisse, tiktoken |
-| `wiki-hi` | o200k | 549,062 | `7bfa0edf1d93ce07773a09f6169d930fc4fbe7120e05a74531e49f9fbb2b45ab` | bpe, Hugging Face, matisse, tiktoken |
-| `wiki-hi` | llama3 | 861,673 | `25012d454b9eded8553cb113d936ec27c2c3e03b4aa1fb8b4629ddb6a56974de` | Hugging Face, matisse, tiktoken |
-| `wiki-sv` | gpt2 | 1,585,688 | `c269cdbcf4f89d8cd35b2a4db25a5547609eee8b45c09ff041cbb7b79cdab544` | bpe, Hugging Face, matisse, tiktoken |
-| `wiki-sv` | cl100k | 1,325,036 | `b3333acbec23d85191832bbcd87dd3947afc2762065414a54055187ef7cff56d` | bpe, Hugging Face, matisse, tiktoken |
-| `wiki-sv` | o200k | 1,134,708 | `76bb07ee0c90962dabbbe607d7df4ae9226390ade251ad2297df7ec8d986dbf4` | bpe, Hugging Face, matisse, tiktoken |
-| `wiki-sv` | llama3 | 1,314,144 | `ab12bed671b83fd0991d19287fe99fd9e497cf77d61c03d2f9b10d3c295a3664` | Hugging Face, matisse, tiktoken |
-| `enwik8` | gpt2 | 29,013,572 | `a7e18c6d9ab250b10190b6e80c13942596b024e49552c63e699f056b38b9d53d` | bpe, Hugging Face, matisse, tiktoken |
-| `enwik8` | cl100k | 25,793,085 | `fc905793ea8efed63d03122c453f1a0f48e062490201b416cb3eacacc1302311` | bpe, Hugging Face, matisse, tiktoken |
-| `enwik8` | o200k | 25,426,300 | `7de481826895d0084a3bca6376494a2f70f6ff71224e7fb2bcdbee5439631ae1` | bpe, Hugging Face, matisse, tiktoken |
-| `enwik8` | llama3 | 25,706,310 | `3fc3bd5e699caaf8956c53b1e3dde1e1bfa9cea39d75454feb1e6c409c073a36` | Hugging Face, matisse, tiktoken |
-| `enwik9` | gpt2 | 312,043,861 | `ea97d225979c0efed9218b87bb4ce3a68699b915dbcadc93beb703f84f0cc386` | bpe, matisse, tiktoken |
-| `enwik9` | cl100k | 273,662,103 | `b68d6fa9a31df6f08ddb2f5d56dbacffff1721af22ad8beedc6a6bb73d15dad3` | bpe, matisse, tiktoken |
-| `enwik9` | o200k | 270,616,861 | `607c39e24e29658558589d913a6ca659b301a1e653bf3e9cd9b682fccac380f7` | bpe, matisse, tiktoken |
-| `enwik9` | llama3 | 272,991,894 | `c2c674d4e0bb3b0eda3bd9973a3199da89304561c3a4bd0710b4ac6f718ac1f0` | matisse, tiktoken |
-| `enwik9-pages` | gpt2 | 312,043,861 | `ea97d225979c0efed9218b87bb4ce3a68699b915dbcadc93beb703f84f0cc386` | bpe, Hugging Face, matisse, tiktoken |
-| `enwik9-pages` | cl100k | 273,662,103 | `b68d6fa9a31df6f08ddb2f5d56dbacffff1721af22ad8beedc6a6bb73d15dad3` | bpe, Hugging Face, matisse, tiktoken |
-| `enwik9-pages` | o200k | 270,616,861 | `607c39e24e29658558589d913a6ca659b301a1e653bf3e9cd9b682fccac380f7` | bpe, Hugging Face, matisse, tiktoken |
-| `enwik9-pages` | llama3 | 272,991,894 | `c2c674d4e0bb3b0eda3bd9973a3199da89304561c3a4bd0710b4ac6f718ac1f0` | Hugging Face, matisse, tiktoken |
-| `mixed-2g` | gpt2 | 834,610,208 | `1333a186fb31b79fd9540e62a266b360f3f6504ec5fbef676b508c45b73abcb6` | bpe, matisse, tiktoken |
-| `mixed-2g` | cl100k | 610,632,309 | `485b21bbb9b5d2cae61294c972540ca45f925c5ff294370e64457f7970a5eb8e` | bpe, matisse, tiktoken |
-| `mixed-2g` | o200k | 486,167,832 | `0684047f5428a5b19f89d49e550e7a4ae0063ab3db7a6bda297ae9cf8baa4916` | bpe, matisse, tiktoken |
-| `mixed-2g` | llama3 | 515,021,950 | `7d8b793d92a1bfde5960aabf89270634a82db11ebfe0d022f1c23db3fe64f3e8` | matisse, tiktoken |
-| `prompts` | gpt2 | 10,832,297 | `2e52723085d05b2a2e01e4e6356619f1d8d18870e9f80eb13f786f9548580bf1` | bpe, Hugging Face, matisse, tiktoken |
-| `prompts` | cl100k | 7,202,788 | `88674a5751d4bea4470490c4561cf9ade97e13839097ca542196bcefb7400bca` | bpe, Hugging Face, matisse, tiktoken |
-| `prompts` | o200k | 4,566,270 | `cba41e7a3fa25f4d46a664cd4c607d5921129872b108177725fdac0ce8e368c7` | bpe, Hugging Face, matisse, tiktoken |
-| `prompts` | llama3 | 5,142,480 | `2fc5ecf962ed0d2cc229aa7948c14a58427e270505fe018561ffc43f7872352c` | Hugging Face, matisse, tiktoken |
+| Corpus                  | Tokenizer |         Ids | SHA-256 of the ids                                                 | Agreeing                             |
+|-------------------------|-----------|------------:|--------------------------------------------------------------------|--------------------------------------|
+| `twitter.json`          | gpt2      |     332,556 | `44eabd1f3c08a75ea2181d5dc357ac3fb05d2c525b5fecf670f114990201cd67` | bpe, Hugging Face, matisse, tiktoken |
+| `twitter.json`          | cl100k    |     173,645 | `ea966e05d3246f335e1f360efeec236ea89682f8f7cb5c4a61c07340f0760c37` | bpe, Hugging Face, matisse, tiktoken |
+| `twitter.json`          | o200k     |     163,117 | `53f263ccd2c55d48da0ee7071860bea4769244e2cae750aac1429ad09d0980cc` | bpe, Hugging Face, matisse, tiktoken |
+| `twitter.json`          | llama3    |     160,933 | `097bdc5645cbdeca5822488fc84307633cad18d0b70290f0ba6c03e809f9d6d5` | Hugging Face, matisse, tiktoken      |
+| `munch-python@15b2863c` | gpt2      |     184,012 | `6eb94834cdca2d97450eb86d883cf3ddc447569944f5a44da0cc2b70216549b2` | bpe, Hugging Face, matisse, tiktoken |
+| `munch-python@15b2863c` | cl100k    |     109,965 | `1453748b540ca6ffad8310025d7fc886182b2c05bbdc18c519eb5b2d9ee9fe4b` | bpe, Hugging Face, matisse, tiktoken |
+| `munch-python@15b2863c` | o200k     |     110,390 | `be2c2699af3efa4f9f9a98cd78485682700e0b3a95c72d9e796fcd3d25e0c0f6` | bpe, Hugging Face, matisse, tiktoken |
+| `munch-python@15b2863c` | llama3    |     109,965 | `1453748b540ca6ffad8310025d7fc886182b2c05bbdc18c519eb5b2d9ee9fe4b` | Hugging Face, matisse, tiktoken      |
+| `munch-cpp@15b2863c`    | gpt2      |   1,639,282 | `8f34429ef998914438e243d129ae1ccdb0c26d97f29094f9a9cb1d93b18022fe` | bpe, Hugging Face, matisse, tiktoken |
+| `munch-cpp@15b2863c`    | cl100k    |   1,060,572 | `97ee02f4cb13d88775f8fe807d895b0810fecb718e4e53d2953017399e0da201` | bpe, Hugging Face, matisse, tiktoken |
+| `munch-cpp@15b2863c`    | o200k     |   1,063,148 | `bd829cb1281381b51aa3836f0e22ef90b3d60f9d891ed6939e3e4e8428ba5401` | bpe, Hugging Face, matisse, tiktoken |
+| `munch-cpp@15b2863c`    | llama3    |   1,060,516 | `c23dec7f0914366b8332666fc7bc098440c11b0e94de14379d9319a50830dfa3` | Hugging Face, matisse, tiktoken      |
+| `gutenberg`             | gpt2      |   2,002,145 | `f8c1359e9260f01b1a1bde0580480b4cac01d8f7c9ca20a8c2443718ed000434` | bpe, Hugging Face, matisse, tiktoken |
+| `gutenberg`             | cl100k    |   1,708,273 | `9c925a5984d22eb7dbb8408b897f612f0a345931605a822aab52c480382c21ea` | bpe, Hugging Face, matisse, tiktoken |
+| `gutenberg`             | o200k     |   1,695,829 | `f561e9d7ea3cf117591bc9b806e39bb094e378068728065e3c512eb992816e08` | bpe, Hugging Face, matisse, tiktoken |
+| `gutenberg`             | llama3    |   1,706,691 | `96bf65b9a9a7e608664af5a1730be923e7350d71e4bcbfa8a26f92a051769183` | Hugging Face, matisse, tiktoken      |
+| `wiki-zh`               | gpt2      |   2,984,479 | `9e1315d4c8f265369c3891e10d08a5358c663db4368c6a8050f6e75759384017` | bpe, Hugging Face, matisse, tiktoken |
+| `wiki-zh`               | cl100k    |   1,939,825 | `7a0ec4e167b68b621e6562e2191bdcc43b4d73a31dd8b20d7e1b5aac67b986fc` | bpe, Hugging Face, matisse, tiktoken |
+| `wiki-zh`               | o200k     |   1,299,269 | `f3b08b0ba50957619314917ebc98cc3b26c9e82f4a09fab530aba5976d56d56e` | bpe, Hugging Face, matisse, tiktoken |
+| `wiki-zh`               | llama3    |   1,298,383 | `9b3f7244ef292fb222cac56c62a7b68a86abbc95f2e8d7d7ce1d7a2fed7cf605` | Hugging Face, matisse, tiktoken      |
+| `wiki-ar`               | gpt2      |   2,385,003 | `b45551f291d84403bc9cbb0f3bb37ed0678e63788fba17560958570d0e11b17a` | bpe, Hugging Face, matisse, tiktoken |
+| `wiki-ar`               | cl100k    |   1,663,728 | `ae59537c4ab51ccf984b5ac2e212f0cd1072612e00bce2711f2bca027fb9d109` | bpe, Hugging Face, matisse, tiktoken |
+| `wiki-ar`               | o200k     |     806,639 | `8117c3677d2a42c469e8b94dd894bdf60351cee48e01e9b90b5ce6e7cc114be6` | bpe, Hugging Face, matisse, tiktoken |
+| `wiki-ar`               | llama3    |     932,883 | `01c49be3bab1a0eb5d0406047d77e0b0ce0f9481dbc50d4b20e211aa731d365c` | Hugging Face, matisse, tiktoken      |
+| `wiki-ru`               | gpt2      |   2,470,902 | `1cff652bf33ba07b6e4899c9d997cc50495d115dda68bf252355a82397080b94` | bpe, Hugging Face, matisse, tiktoken |
+| `wiki-ru`               | cl100k    |   1,162,181 | `9bebf2079fdff13a446ee5d02d723ebe16930e48af5a4c0b4e3e5f72ddd10be1` | bpe, Hugging Face, matisse, tiktoken |
+| `wiki-ru`               | o200k     |     709,178 | `9b243bc017b9b6f62449eee4bde696ecb6d32ec2db90114b6ca4a0cd4d684713` | bpe, Hugging Face, matisse, tiktoken |
+| `wiki-ru`               | llama3    |     791,648 | `87e884e6ac480da3f0cc024007f14ae2e69ec94fb847030c4d415f61bd779ee4` | Hugging Face, matisse, tiktoken      |
+| `wiki-hi`               | gpt2      |   2,502,380 | `019b5b9db2db6e35c198fa34d10e794952e4751976cd906bb26752edf123d38f` | bpe, Hugging Face, matisse, tiktoken |
+| `wiki-hi`               | cl100k    |   1,606,330 | `a03e85f6eba4fb48e4deb13a881c1af981435a8dd514eb86ef0b47f38e1ebf82` | bpe, Hugging Face, matisse, tiktoken |
+| `wiki-hi`               | o200k     |     549,062 | `7bfa0edf1d93ce07773a09f6169d930fc4fbe7120e05a74531e49f9fbb2b45ab` | bpe, Hugging Face, matisse, tiktoken |
+| `wiki-hi`               | llama3    |     861,673 | `25012d454b9eded8553cb113d936ec27c2c3e03b4aa1fb8b4629ddb6a56974de` | Hugging Face, matisse, tiktoken      |
+| `wiki-sv`               | gpt2      |   1,585,688 | `c269cdbcf4f89d8cd35b2a4db25a5547609eee8b45c09ff041cbb7b79cdab544` | bpe, Hugging Face, matisse, tiktoken |
+| `wiki-sv`               | cl100k    |   1,325,036 | `b3333acbec23d85191832bbcd87dd3947afc2762065414a54055187ef7cff56d` | bpe, Hugging Face, matisse, tiktoken |
+| `wiki-sv`               | o200k     |   1,134,708 | `76bb07ee0c90962dabbbe607d7df4ae9226390ade251ad2297df7ec8d986dbf4` | bpe, Hugging Face, matisse, tiktoken |
+| `wiki-sv`               | llama3    |   1,314,144 | `ab12bed671b83fd0991d19287fe99fd9e497cf77d61c03d2f9b10d3c295a3664` | Hugging Face, matisse, tiktoken      |
+| `enwik8`                | gpt2      |  29,013,572 | `a7e18c6d9ab250b10190b6e80c13942596b024e49552c63e699f056b38b9d53d` | bpe, Hugging Face, matisse, tiktoken |
+| `enwik8`                | cl100k    |  25,793,085 | `fc905793ea8efed63d03122c453f1a0f48e062490201b416cb3eacacc1302311` | bpe, Hugging Face, matisse, tiktoken |
+| `enwik8`                | o200k     |  25,426,300 | `7de481826895d0084a3bca6376494a2f70f6ff71224e7fb2bcdbee5439631ae1` | bpe, Hugging Face, matisse, tiktoken |
+| `enwik8`                | llama3    |  25,706,310 | `3fc3bd5e699caaf8956c53b1e3dde1e1bfa9cea39d75454feb1e6c409c073a36` | Hugging Face, matisse, tiktoken      |
+| `enwik9`                | gpt2      | 312,043,861 | `ea97d225979c0efed9218b87bb4ce3a68699b915dbcadc93beb703f84f0cc386` | bpe, matisse, tiktoken               |
+| `enwik9`                | cl100k    | 273,662,103 | `b68d6fa9a31df6f08ddb2f5d56dbacffff1721af22ad8beedc6a6bb73d15dad3` | bpe, matisse, tiktoken               |
+| `enwik9`                | o200k     | 270,616,861 | `607c39e24e29658558589d913a6ca659b301a1e653bf3e9cd9b682fccac380f7` | bpe, matisse, tiktoken               |
+| `enwik9`                | llama3    | 272,991,894 | `c2c674d4e0bb3b0eda3bd9973a3199da89304561c3a4bd0710b4ac6f718ac1f0` | matisse, tiktoken                    |
+| `enwik9-pages`          | gpt2      | 312,043,861 | `ea97d225979c0efed9218b87bb4ce3a68699b915dbcadc93beb703f84f0cc386` | bpe, Hugging Face, matisse, tiktoken |
+| `enwik9-pages`          | cl100k    | 273,662,103 | `b68d6fa9a31df6f08ddb2f5d56dbacffff1721af22ad8beedc6a6bb73d15dad3` | bpe, Hugging Face, matisse, tiktoken |
+| `enwik9-pages`          | o200k     | 270,616,861 | `607c39e24e29658558589d913a6ca659b301a1e653bf3e9cd9b682fccac380f7` | bpe, Hugging Face, matisse, tiktoken |
+| `enwik9-pages`          | llama3    | 272,991,894 | `c2c674d4e0bb3b0eda3bd9973a3199da89304561c3a4bd0710b4ac6f718ac1f0` | Hugging Face, matisse, tiktoken      |
+| `mixed-2g`              | gpt2      | 834,610,208 | `1333a186fb31b79fd9540e62a266b360f3f6504ec5fbef676b508c45b73abcb6` | bpe, matisse, tiktoken               |
+| `mixed-2g`              | cl100k    | 610,632,309 | `485b21bbb9b5d2cae61294c972540ca45f925c5ff294370e64457f7970a5eb8e` | bpe, matisse, tiktoken               |
+| `mixed-2g`              | o200k     | 486,167,832 | `0684047f5428a5b19f89d49e550e7a4ae0063ab3db7a6bda297ae9cf8baa4916` | bpe, matisse, tiktoken               |
+| `mixed-2g`              | llama3    | 515,021,950 | `7d8b793d92a1bfde5960aabf89270634a82db11ebfe0d022f1c23db3fe64f3e8` | matisse, tiktoken                    |
+| `prompts`               | gpt2      |  10,832,297 | `2e52723085d05b2a2e01e4e6356619f1d8d18870e9f80eb13f786f9548580bf1` | bpe, Hugging Face, matisse, tiktoken |
+| `prompts`               | cl100k    |   7,202,788 | `88674a5751d4bea4470490c4561cf9ade97e13839097ca542196bcefb7400bca` | bpe, Hugging Face, matisse, tiktoken |
+| `prompts`               | o200k     |   4,566,270 | `cba41e7a3fa25f4d46a664cd4c607d5921129872b108177725fdac0ce8e368c7` | bpe, Hugging Face, matisse, tiktoken |
+| `prompts`               | llama3    |   5,142,480 | `2fc5ecf962ed0d2cc229aa7948c14a58427e270505fe018561ffc43f7872352c` | Hugging Face, matisse, tiktoken      |
 
 `matisse_corpus` ran on every corpus but the pages, the mixed file and the prompts, whose ids lines come from
 `matisse_bench`, which holds the mixed file's `encode_parallel()` to `encode()` at every worker count. It ran at 97aa503
@@ -209,14 +235,14 @@ The supply the probe prints on the three corpora of the test strategy, at the de
 in bytes, the share of the serial pre-token boundaries that are anchors under each inventory, and the longest gap
 between anchors.
 
-| Tokenizer | Corpus | Longest piece | Factorization share | Policy share | Longest gap, factorization | Longest gap, policy |
-|---|---|---:|---:|---:|---:|---:|
-| gpt2 | `twitter.json` | 159 | 89.52% | 100.00% | 159 | 159 |
-| gpt2 | `munch-python@15b2863c` | 95 | 92.88% | 99.84% | 95 | 95 |
-| gpt2 | `munch-cpp@15b2863c` | 72 | 92.07% | 99.53% | 74 | 72 |
-| cl100k | `twitter.json` | 162 | 57.30% | 96.09% | 162 | 162 |
-| cl100k | `munch-python@15b2863c` | 98 | 78.28% | 98.50% | 98 | 98 |
-| cl100k | `munch-cpp@15b2863c` | 71 | 76.51% | 99.65% | 95 | 71 |
+| Tokenizer | Corpus                  | Longest piece | Factorization share | Policy share | Longest gap, factorization | Longest gap, policy |
+|-----------|-------------------------|--------------:|--------------------:|-------------:|---------------------------:|--------------------:|
+| gpt2      | `twitter.json`          |           159 |              89.52% |      100.00% |                        159 |                 159 |
+| gpt2      | `munch-python@15b2863c` |            95 |              92.88% |       99.84% |                         95 |                  95 |
+| gpt2      | `munch-cpp@15b2863c`    |            72 |              92.07% |       99.53% |                         74 |                  72 |
+| cl100k    | `twitter.json`          |           162 |              57.30% |       96.09% |                        162 |                 162 |
+| cl100k    | `munch-python@15b2863c` |            98 |              78.28% |       98.50% |                         98 |                  98 |
+| cl100k    | `munch-cpp@15b2863c`    |            71 |              76.51% |       99.65% |                         95 |                  71 |
 
 ## **Single core**
 
@@ -228,50 +254,50 @@ rate counts the same bytes.
 
 gpt2:
 
-| Corpus | MiB | Tokens per MiB | matisse `encode()` | no cache | segmentation | tiktoken | Hugging Face | bpe |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|
-| `twitter.json` | 0.6 | 552,000 | 23.2 (24.0) | 13.6 (14.0) | 32.6 (33.4) | 17.8 (18.5) | 2.1 (2.8) | 49.4 (51.5) |
-| `munch-python@15b2863c` | 0.5 | 405,000 | 20.3 (20.8) | 11.7 (12.0) | 29.1 (29.8) | 23.9 (24.3) | 2.9 (3.4) | 59.2 (60.7) |
-| `munch-cpp@15b2863c` | 4.1 | 402,000 | 21.4 (22.1) | 11.7 (11.9) | 26.8 (27.4) | 20.9 (21.9) | 1.9 (2.3) | 57.7 (59.0) |
-| `gutenberg` | 6.9 | 289,000 | 17.5 (17.9) | 10.4 (10.6) | 27.4 (28.2) | 26.6 (27.1) | 1.9 (2.3) | 56.9 (62.3) |
-| `wiki-zh` | 4.0 | 744,000 | 17.3 (17.7) | 17.5 (17.8) | 63.4 (65.3) | 26.3 (26.8) | 2.2 (2.6) | 41.5 (42.4) |
-| `wiki-ar` | 4.0 | 590,000 | 21.8 (23.6) | 17.0 (17.2) | 48.1 (50.4) | 23.8 (24.6) | 2.0 (2.3) | 48.9 (49.6) |
-| `wiki-ru` | 4.0 | 611,000 | 21.3 (22.0) | 16.9 (17.2) | 49.5 (52.3) | 26.2 (26.8) | 2.2 (2.5) | 49.2 (49.8) |
-| `wiki-hi` | 4.0 | 620,000 | 31.7 (33.2) | 19.7 (20.0) | 40.9 (42.0) | 19.7 (20.1) | 1.8 (2.2) | 56.1 (57.3) |
-| `wiki-sv` | 4.0 | 396,000 | 14.8 (14.9) | 10.1 (10.2) | 29.9 (30.8) | 21.8 (22.1) | 2.0 (2.3) | 32.0 (32.7) |
-| `enwik8` | 95.4 | 304,000 | 14.2 (14.6) | 10.0 (10.1) | 25.3 (26.4) | 24.5 (24.7) | 1.6 (1.9) | 48.7 (49.6) |
-| `enwik9` | 953.7 | 327,000 | 14.2 (14.2) | 9.9 (10.0) | 25.1 (25.2) | 22.8 (22.8) |  | 52.0 (53.1) |
+| Corpus                  |   MiB | Tokens per MiB | matisse `encode()` |    no cache | segmentation |    tiktoken | Hugging Face |         bpe |
+|-------------------------|------:|---------------:|-------------------:|------------:|-------------:|------------:|-------------:|------------:|
+| `twitter.json`          |   0.6 |        552,000 |        23.2 (24.0) | 13.6 (14.0) |  32.6 (33.4) | 17.8 (18.5) |    2.1 (2.8) | 49.4 (51.5) |
+| `munch-python@15b2863c` |   0.5 |        405,000 |        20.3 (20.8) | 11.7 (12.0) |  29.1 (29.8) | 23.9 (24.3) |    2.9 (3.4) | 59.2 (60.7) |
+| `munch-cpp@15b2863c`    |   4.1 |        402,000 |        21.4 (22.1) | 11.7 (11.9) |  26.8 (27.4) | 20.9 (21.9) |    1.9 (2.3) | 57.7 (59.0) |
+| `gutenberg`             |   6.9 |        289,000 |        17.5 (17.9) | 10.4 (10.6) |  27.4 (28.2) | 26.6 (27.1) |    1.9 (2.3) | 56.9 (62.3) |
+| `wiki-zh`               |   4.0 |        744,000 |        17.3 (17.7) | 17.5 (17.8) |  63.4 (65.3) | 26.3 (26.8) |    2.2 (2.6) | 41.5 (42.4) |
+| `wiki-ar`               |   4.0 |        590,000 |        21.8 (23.6) | 17.0 (17.2) |  48.1 (50.4) | 23.8 (24.6) |    2.0 (2.3) | 48.9 (49.6) |
+| `wiki-ru`               |   4.0 |        611,000 |        21.3 (22.0) | 16.9 (17.2) |  49.5 (52.3) | 26.2 (26.8) |    2.2 (2.5) | 49.2 (49.8) |
+| `wiki-hi`               |   4.0 |        620,000 |        31.7 (33.2) | 19.7 (20.0) |  40.9 (42.0) | 19.7 (20.1) |    1.8 (2.2) | 56.1 (57.3) |
+| `wiki-sv`               |   4.0 |        396,000 |        14.8 (14.9) | 10.1 (10.2) |  29.9 (30.8) | 21.8 (22.1) |    2.0 (2.3) | 32.0 (32.7) |
+| `enwik8`                |  95.4 |        304,000 |        14.2 (14.6) | 10.0 (10.1) |  25.3 (26.4) | 24.5 (24.7) |    1.6 (1.9) | 48.7 (49.6) |
+| `enwik9`                | 953.7 |        327,000 |        14.2 (14.2) |  9.9 (10.0) |  25.1 (25.2) | 22.8 (22.8) |              | 52.0 (53.1) |
 
 cl100k:
 
-| Corpus | MiB | Tokens per MiB | matisse `encode()` | no cache | segmentation | tiktoken | Hugging Face | bpe |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|
-| `twitter.json` | 0.6 | 288,000 | 22.8 (23.9) | 18.0 (19.3) | 32.2 (34.1) | 18.0 (18.4) | 2.7 (3.7) | 65.7 (70.0) |
-| `munch-python@15b2863c` | 0.5 | 242,000 | 22.5 (24.4) | 19.7 (20.1) | 30.3 (32.1) | 21.3 (22.4) | 3.4 (4.2) | 64.6 (66.5) |
-| `munch-cpp@15b2863c` | 4.1 | 260,000 | 23.4 (24.8) | 20.5 (21.1) | 29.1 (30.9) | 20.5 (21.2) | 2.0 (2.3) | 65.3 (66.8) |
-| `gutenberg` | 6.9 | 246,000 | 18.9 (19.3) | 17.2 (17.9) | 29.9 (31.1) | 24.5 (25.0) | 1.9 (2.1) | 60.3 (62.3) |
-| `wiki-zh` | 4.0 | 484,000 | 9.0 (9.1) | 9.4 (9.7) | 69.4 (71.9) | 21.6 (22.0) | 2.6 (3.0) | 45.9 (47.1) |
-| `wiki-ar` | 4.0 | 412,000 | 16.8 (17.1) | 10.6 (11.0) | 52.0 (53.7) | 21.4 (21.7) | 2.1 (2.4) | 53.4 (54.2) |
-| `wiki-ru` | 4.0 | 287,000 | 12.7 (13.2) | 8.5 (8.7) | 53.8 (55.3) | 19.6 (20.3) | 2.5 (2.9) | 45.0 (46.7) |
-| `wiki-hi` | 4.0 | 398,000 | 37.1 (38.0) | 16.1 (16.5) | 55.7 (58.1) | 21.3 (21.5) | 1.9 (2.1) | 65.6 (67.2) |
-| `wiki-sv` | 4.0 | 331,000 | 12.3 (12.5) | 8.6 (8.8) | 28.8 (29.9) | 18.1 (18.7) | 1.9 (2.2) | 30.0 (30.6) |
-| `enwik8` | 95.4 | 270,000 | 15.6 (16.0) | 14.9 (15.2) | 26.2 (26.4) | 20.0 (20.8) | 1.4 (1.6) | 44.3 (44.6) |
-| `enwik9` | 953.7 | 287,000 | 15.8 (15.8) | 15.1 (15.1) | 26.0 (26.0) | 21.1 (21.2) |  | 51.5 (52.2) |
+| Corpus                  |   MiB | Tokens per MiB | matisse `encode()` |    no cache | segmentation |    tiktoken | Hugging Face |         bpe |
+|-------------------------|------:|---------------:|-------------------:|------------:|-------------:|------------:|-------------:|------------:|
+| `twitter.json`          |   0.6 |        288,000 |        22.8 (23.9) | 18.0 (19.3) |  32.2 (34.1) | 18.0 (18.4) |    2.7 (3.7) | 65.7 (70.0) |
+| `munch-python@15b2863c` |   0.5 |        242,000 |        22.5 (24.4) | 19.7 (20.1) |  30.3 (32.1) | 21.3 (22.4) |    3.4 (4.2) | 64.6 (66.5) |
+| `munch-cpp@15b2863c`    |   4.1 |        260,000 |        23.4 (24.8) | 20.5 (21.1) |  29.1 (30.9) | 20.5 (21.2) |    2.0 (2.3) | 65.3 (66.8) |
+| `gutenberg`             |   6.9 |        246,000 |        18.9 (19.3) | 17.2 (17.9) |  29.9 (31.1) | 24.5 (25.0) |    1.9 (2.1) | 60.3 (62.3) |
+| `wiki-zh`               |   4.0 |        484,000 |          9.0 (9.1) |   9.4 (9.7) |  69.4 (71.9) | 21.6 (22.0) |    2.6 (3.0) | 45.9 (47.1) |
+| `wiki-ar`               |   4.0 |        412,000 |        16.8 (17.1) | 10.6 (11.0) |  52.0 (53.7) | 21.4 (21.7) |    2.1 (2.4) | 53.4 (54.2) |
+| `wiki-ru`               |   4.0 |        287,000 |        12.7 (13.2) |   8.5 (8.7) |  53.8 (55.3) | 19.6 (20.3) |    2.5 (2.9) | 45.0 (46.7) |
+| `wiki-hi`               |   4.0 |        398,000 |        37.1 (38.0) | 16.1 (16.5) |  55.7 (58.1) | 21.3 (21.5) |    1.9 (2.1) | 65.6 (67.2) |
+| `wiki-sv`               |   4.0 |        331,000 |        12.3 (12.5) |   8.6 (8.8) |  28.8 (29.9) | 18.1 (18.7) |    1.9 (2.2) | 30.0 (30.6) |
+| `enwik8`                |  95.4 |        270,000 |        15.6 (16.0) | 14.9 (15.2) |  26.2 (26.4) | 20.0 (20.8) |    1.4 (1.6) | 44.3 (44.6) |
+| `enwik9`                | 953.7 |        287,000 |        15.8 (15.8) | 15.1 (15.1) |  26.0 (26.0) | 21.1 (21.2) |              | 51.5 (52.2) |
 
 o200k and Llama 3, the other encoders only:
 
-| Corpus | o200k tiktoken | o200k Hugging Face | o200k bpe | Llama 3 tiktoken | Llama 3 Hugging Face |
-|---|---:|---:|---:|---:|---:|
-| `twitter.json` | 26.9 (27.9) | 2.9 (3.6) | 66.3 (69.0) | 25.8 (26.7) | 3.4 (3.8) |
-| `munch-python@15b2863c` | 34.9 (35.7) | 3.4 (3.6) | 61.0 (63.2) | 31.3 (32.8) | 3.5 (4.0) |
-| `munch-cpp@15b2863c` | 34.3 (35.4) | 2.2 (2.7) | 64.2 (65.7) | 29.9 (31.6) | 2.4 (2.6) |
-| `gutenberg` | 40.7 (41.9) | 2.0 (2.4) | 53.9 (54.9) | 32.0 (32.9) | 2.2 (2.3) |
-| `wiki-zh` | 21.1 (21.4) | 2.8 (3.0) | 42.7 (43.9) | 21.5 (22.3) | 2.6 (3.2) |
-| `wiki-ar` | 28.9 (30.1) | 2.6 (3.0) | 50.3 (51.6) | 27.4 (27.9) | 2.4 (2.7) |
-| `wiki-ru` | 26.3 (27.0) | 2.8 (3.1) | 48.8 (50.0) | 24.8 (25.3) | 2.7 (2.9) |
-| `wiki-hi` | 39.0 (39.5) | 3.5 (3.9) | 76.6 (79.9) | 43.2 (46.3) | 2.9 (3.1) |
-| `wiki-sv` | 25.8 (26.5) | 2.1 (2.4) | 31.9 (33.3) | 21.6 (22.8) | 1.9 (2.2) |
-| `enwik8` | 32.4 (32.7) | 1.7 (2.0) | 35.9 (39.0) | 27.7 (28.4) | 1.6 (1.8) |
+| Corpus                  | o200k tiktoken | o200k Hugging Face |   o200k bpe | Llama 3 tiktoken | Llama 3 Hugging Face |
+|-------------------------|---------------:|-------------------:|------------:|-----------------:|---------------------:|
+| `twitter.json`          |    26.9 (27.9) |          2.9 (3.6) | 66.3 (69.0) |      25.8 (26.7) |            3.4 (3.8) |
+| `munch-python@15b2863c` |    34.9 (35.7) |          3.4 (3.6) | 61.0 (63.2) |      31.3 (32.8) |            3.5 (4.0) |
+| `munch-cpp@15b2863c`    |    34.3 (35.4) |          2.2 (2.7) | 64.2 (65.7) |      29.9 (31.6) |            2.4 (2.6) |
+| `gutenberg`             |    40.7 (41.9) |          2.0 (2.4) | 53.9 (54.9) |      32.0 (32.9) |            2.2 (2.3) |
+| `wiki-zh`               |    21.1 (21.4) |          2.8 (3.0) | 42.7 (43.9) |      21.5 (22.3) |            2.6 (3.2) |
+| `wiki-ar`               |    28.9 (30.1) |          2.6 (3.0) | 50.3 (51.6) |      27.4 (27.9) |            2.4 (2.7) |
+| `wiki-ru`               |    26.3 (27.0) |          2.8 (3.1) | 48.8 (50.0) |      24.8 (25.3) |            2.7 (2.9) |
+| `wiki-hi`               |    39.0 (39.5) |          3.5 (3.9) | 76.6 (79.9) |      43.2 (46.3) |            2.9 (3.1) |
+| `wiki-sv`               |    25.8 (26.5) |          2.1 (2.4) | 31.9 (33.3) |      21.6 (22.8) |            1.9 (2.2) |
+| `enwik8`                |    32.4 (32.7) |          1.7 (2.0) | 35.9 (39.0) |      27.7 (28.4) |            1.6 (1.8) |
 
 On one core matisse's `encode()` runs at 9.0 to 37.1 MiB/s. Against tiktoken it is 1.3 times faster on `twitter.json`
 and 1.6 and 1.7 times faster on Hindi, level on munch's C++ sources at 1.02 and 1.14, at 0.85 and 1.06 on its Python,
@@ -287,21 +313,21 @@ tokens per second of the median pass, and the latency of a call in microseconds 
 median pass and the order statistics at the 50th, 90th and 99th percentile. tiktoken's and Hugging Face's calls include
 Python's call and the list or `Encoding` each returns.
 
-| Encoder | Tokenizer | MiB/s | M tokens/s | mean | p50 | p90 | p99 |
-|---|---|---:|---:|---:|---:|---:|---:|
-| matisse `encode()` | gpt2 | 10.7 | 5.79 | 93.59 | 88.61 | 176.17 | 240.50 |
-| matisse `encode()` | cl100k | 8.7 | 3.12 | 115.59 | 104.86 | 212.94 | 278.80 |
-| tiktoken `encode_ordinary()` | gpt2 | 17.4 | 9.41 | 57.54 | 54.07 | 93.40 | 133.66 |
-| tiktoken `encode_ordinary()` | cl100k | 15.8 | 5.69 | 63.34 | 59.84 | 101.32 | 139.17 |
-| tiktoken `encode_ordinary()` | o200k | 18.7 | 4.27 | 53.50 | 48.49 | 91.43 | 133.59 |
-| tiktoken `encode_ordinary()` | llama3 | 19.9 | 5.12 | 50.26 | 44.75 | 85.81 | 122.36 |
-| Hugging Face `encode()` | gpt2 | 2.9 | 1.59 | 341.38 | 340.22 | 581.45 | 740.27 |
-| Hugging Face `encode()` | cl100k | 3.1 | 1.13 | 319.83 | 313.47 | 544.83 | 714.93 |
-| Hugging Face `encode()` | o200k | 3.2 | 0.74 | 310.61 | 304.02 | 541.15 | 725.32 |
-| Hugging Face `encode()` | llama3 | 3.5 | 0.91 | 282.53 | 274.05 | 484.63 | 643.22 |
-| bpe `encode()` | gpt2 | 38.1 | 20.61 | 26.28 | 24.86 | 45.03 | 66.57 |
-| bpe `encode()` | cl100k | 39.6 | 14.26 | 25.25 | 23.86 | 43.10 | 68.01 |
-| bpe `encode()` | o200k | 33.8 | 7.72 | 29.57 | 27.09 | 50.84 | 80.07 |
+| Encoder                      | Tokenizer | MiB/s | M tokens/s |   mean |    p50 |    p90 |    p99 |
+|------------------------------|-----------|------:|-----------:|-------:|-------:|-------:|-------:|
+| matisse `encode()`           | gpt2      |  10.7 |       5.79 |  93.59 |  88.61 | 176.17 | 240.50 |
+| matisse `encode()`           | cl100k    |   8.7 |       3.12 | 115.59 | 104.86 | 212.94 | 278.80 |
+| tiktoken `encode_ordinary()` | gpt2      |  17.4 |       9.41 |  57.54 |  54.07 |  93.40 | 133.66 |
+| tiktoken `encode_ordinary()` | cl100k    |  15.8 |       5.69 |  63.34 |  59.84 | 101.32 | 139.17 |
+| tiktoken `encode_ordinary()` | o200k     |  18.7 |       4.27 |  53.50 |  48.49 |  91.43 | 133.59 |
+| tiktoken `encode_ordinary()` | llama3    |  19.9 |       5.12 |  50.26 |  44.75 |  85.81 | 122.36 |
+| Hugging Face `encode()`      | gpt2      |   2.9 |       1.59 | 341.38 | 340.22 | 581.45 | 740.27 |
+| Hugging Face `encode()`      | cl100k    |   3.1 |       1.13 | 319.83 | 313.47 | 544.83 | 714.93 |
+| Hugging Face `encode()`      | o200k     |   3.2 |       0.74 | 310.61 | 304.02 | 541.15 | 725.32 |
+| Hugging Face `encode()`      | llama3    |   3.5 |       0.91 | 282.53 | 274.05 | 484.63 | 643.22 |
+| bpe `encode()`               | gpt2      |  38.1 |      20.61 |  26.28 |  24.86 |  45.03 |  66.57 |
+| bpe `encode()`               | cl100k    |  39.6 |      14.26 |  25.25 |  23.86 |  43.10 |  68.01 |
+| bpe `encode()`               | o200k     |  33.8 |       7.72 |  29.57 |  27.09 |  50.84 |  80.07 |
 
 A call of `encode()` on a kilobyte costs matisse a mean of 94 microseconds under GPT-2 and 116 under cl100k, about half
 its rate on the texts the prompts are cut from, since every call builds its classes, its segmentation and its piece
@@ -315,16 +341,16 @@ bytes, not of equal work, which shows on the mixed file under cl100k: its first 
 Wikipedia samples and munch's sources repeated, among them the Chinese that cl100k encodes at 9.0 MiB/s against 15.8 on
 enwik9.
 
-| Workers | gpt2 on enwik9 | cl100k on enwik9 | gpt2 on the mixed file | cl100k on the mixed file |
-|---:|---:|---:|---:|---:|
-| `encode()` | 14.5 | 15.9 | 14.1 | 12.4 |
-| 1 | 14.5 (1.00x) | 15.3 (0.96x) | 13.8 (0.97x) | 11.8 (0.96x) |
-| 2 | 27.8 (1.92x) | 30.1 (1.89x) | 26.8 (1.90x) | 19.5 (1.57x) |
-| 4 | 53.7 (3.70x) | 56.5 (3.55x) | 50.5 (3.58x) | 37.4 (3.02x) |
-| 8 | 92.3 (6.36x) | 100.8 (6.33x) | 86.2 (6.11x) | 68.6 (5.55x) |
-| 12 | 113.9 (7.86x) | 125.1 (7.85x) | 109.3 (7.75x) | 89.8 (7.26x) |
-| 16 | 139.4 (9.61x) | 141.7 (8.90x) | 118.4 (8.39x) | 107.8 (8.71x) |
-| 24 | 162.7 (11.22x) | 177.9 (11.16x) | 151.5 (10.74x) | 133.9 (10.82x) |
+|    Workers | gpt2 on enwik9 | cl100k on enwik9 | gpt2 on the mixed file | cl100k on the mixed file |
+|-----------:|---------------:|-----------------:|-----------------------:|-------------------------:|
+| `encode()` |           14.5 |             15.9 |                   14.1 |                     12.4 |
+|          1 |   14.5 (1.00x) |     15.3 (0.96x) |           13.8 (0.97x) |             11.8 (0.96x) |
+|          2 |   27.8 (1.92x) |     30.1 (1.89x) |           26.8 (1.90x) |             19.5 (1.57x) |
+|          4 |   53.7 (3.70x) |     56.5 (3.55x) |           50.5 (3.58x) |             37.4 (3.02x) |
+|          8 |   92.3 (6.36x) |    100.8 (6.33x) |           86.2 (6.11x) |             68.6 (5.55x) |
+|         12 |  113.9 (7.86x) |    125.1 (7.85x) |          109.3 (7.75x) |             89.8 (7.26x) |
+|         16 |  139.4 (9.61x) |    141.7 (8.90x) |          118.4 (8.39x) |            107.8 (8.71x) |
+|         24 | 162.7 (11.22x) |   177.9 (11.16x) |         151.5 (10.74x) |           133.9 (10.82x) |
 
 The other encoders' calls timed here encode one text on the thread that calls them. Across documents all four run in
 parallel, and this table puts them on the same documents, enwik9's pages, in MiB/s of the median pass (three timed
@@ -334,12 +360,12 @@ threads that take the next document from a shared counter, the calling thread on
 list, and it reaches about four times its rate on one thread; Hugging Face encodes the documents with Rayon's pool of
 `RAYON_NUM_THREADS` threads inside one call.
 
-| Encoder | gpt2, 1 thread | gpt2, 24 threads | cl100k, 1 thread | cl100k, 24 threads |
-|---|---:|---:|---:|---:|
-| matisse `encode()` per document | 8.3 | 134.0 | 13.9 | 204.3 |
-| tiktoken `encode_ordinary_batch()` | 12.3 | 46.1 | 12.0 | 47.0 |
-| Hugging Face `encode_batch()` | 3.6, 1 pass | 18.5 | 3.6, 1 pass | 19.1 |
-| bpe `encode()` per document | 48.6 | 456.7 | 47.7 | 466.7 |
+| Encoder                            | gpt2, 1 thread | gpt2, 24 threads | cl100k, 1 thread | cl100k, 24 threads |
+|------------------------------------|---------------:|-----------------:|-----------------:|-------------------:|
+| matisse `encode()` per document    |            8.3 |            134.0 |             13.9 |              204.3 |
+| tiktoken `encode_ordinary_batch()` |           12.3 |             46.1 |             12.0 |               47.0 |
+| Hugging Face `encode_batch()`      |    3.6, 1 pass |             18.5 |      3.6, 1 pass |               19.1 |
+| bpe `encode()` per document        |           48.6 |            456.7 |             47.7 |              466.7 |
 
 matisse's batch on one thread is slower than its long-text encoding under GPT-2, 8.3 against 14.2 MiB/s, since GPT-2
 looks no piece up whole and every document starts a piece cache of its own and merges every piece again; cl100k looks
@@ -355,17 +381,17 @@ WSL2's perf is built without the libraries that name symbols, so the shares are 
 `Encoder::encode_parallel` are kept, and each is assigned to the first component met from the leaf outward. Per cent of
 those samples:
 
-| Component | gpt2 `gutenberg` | gpt2 `munch-cpp@15b2863c` | gpt2 `wiki-zh` | cl100k `gutenberg` | cl100k `munch-cpp@15b2863c` | cl100k `wiki-zh` |
-|---|---:|---:|---:|---:|---:|---:|
-| classes_of | 35.4 | 41.4 | 20.0 | 49.6 | 57.5 | 11.4 |
-| segmenter loop | 19.0 | 25.2 | 7.5 | 11.7 | 14.5 | 2.0 |
-| DFA walk | 8.2 | 11.0 | 2.4 | 4.8 | 7.0 | 0.5 |
-| gate check | 0.5 | 0.6 | 0.2 | 0.4 | 0.4 | 0.1 |
-| merge | 19.8 | 4.6 | 51.6 | 26.8 | 14.8 | 76.3 |
-| whole-piece lookup | 1.8 | 2.1 | 1.4 | 1.6 | 2.2 | 0.6 |
-| piece cache | 7.3 | 6.0 | 5.2 | 2.0 | 1.0 | 3.1 |
-| id output | 6.6 | 8.5 | 7.0 | 2.2 | 2.2 | 3.2 |
-| allocation | 1.5 | 0.6 | 4.7 | 0.8 | 0.4 | 2.7 |
+| Component          | gpt2 `gutenberg` | gpt2 `munch-cpp@15b2863c` | gpt2 `wiki-zh` | cl100k `gutenberg` | cl100k `munch-cpp@15b2863c` | cl100k `wiki-zh` |
+|--------------------|-----------------:|--------------------------:|---------------:|-------------------:|----------------------------:|-----------------:|
+| classes_of         |             35.4 |                      41.4 |           20.0 |               49.6 |                        57.5 |             11.4 |
+| segmenter loop     |             19.0 |                      25.2 |            7.5 |               11.7 |                        14.5 |              2.0 |
+| DFA walk           |              8.2 |                      11.0 |            2.4 |                4.8 |                         7.0 |              0.5 |
+| gate check         |              0.5 |                       0.6 |            0.2 |                0.4 |                         0.4 |              0.1 |
+| merge              |             19.8 |                       4.6 |           51.6 |               26.8 |                        14.8 |             76.3 |
+| whole-piece lookup |              1.8 |                       2.1 |            1.4 |                1.6 |                         2.2 |              0.6 |
+| piece cache        |              7.3 |                       6.0 |            5.2 |                2.0 |                         1.0 |              3.1 |
+| id output          |              6.6 |                       8.5 |            7.0 |                2.2 |                         2.2 |              3.2 |
+| allocation         |              1.5 |                       0.6 |            4.7 |                0.8 |                         0.4 |              2.7 |
 
 The components: `classes_of` decodes UTF-8 and finds every code point's class by a binary search in each Unicode set in
 turn and the class symbol's index by a search of the symbols; the segmenter loop is the `Segmenter`'s walk of the class
@@ -399,47 +425,47 @@ those digests. A cell is the median MiB/s, and the gain is the after over the be
 `Class_table` reads an ASCII byte's class symbol in one load and every other code point's in two, a block index and a
 cell, where `classes_of()` searched every set of the alphabet in turn. `encode()`:
 
-| Corpus | gpt2 before | gpt2 after | gain | cl100k before | cl100k after | gain |
-|---|---:|---:|---:|---:|---:|---:|
-| `twitter.json` | 22.6 | 33.4 | 1.48x | 22.9 | 40.7 | 1.78x |
-| `munch-python@15b2863c` | 20.4 | 31.7 | 1.55x | 23.1 | 42.9 | 1.86x |
-| `munch-cpp@15b2863c` | 20.5 | 34.6 | 1.69x | 21.5 | 48.1 | 2.24x |
-| `gutenberg` | 16.5 | 24.2 | 1.47x | 18.4 | 30.9 | 1.68x |
-| `wiki-zh` | 16.7 | 17.3 | 1.04x | 8.4 | 8.1 | 0.96x |
-| `wiki-ar` | 21.2 | 26.4 | 1.25x | 15.3 | 16.6 | 1.08x |
-| `wiki-ru` | 20.7 | 25.4 | 1.23x | 11.6 | 12.2 | 1.05x |
-| `wiki-hi` | 28.7 | 41.1 | 1.43x | 32.9 | 52.0 | 1.58x |
-| `wiki-sv` | 13.5 | 17.1 | 1.27x | 11.5 | 13.6 | 1.18x |
-| `enwik8` | 13.1 | 17.8 | 1.36x | 13.8 | 25.0 | 1.81x |
+| Corpus                  | gpt2 before | gpt2 after |  gain | cl100k before | cl100k after |  gain |
+|-------------------------|------------:|-----------:|------:|--------------:|-------------:|------:|
+| `twitter.json`          |        22.6 |       33.4 | 1.48x |          22.9 |         40.7 | 1.78x |
+| `munch-python@15b2863c` |        20.4 |       31.7 | 1.55x |          23.1 |         42.9 | 1.86x |
+| `munch-cpp@15b2863c`    |        20.5 |       34.6 | 1.69x |          21.5 |         48.1 | 2.24x |
+| `gutenberg`             |        16.5 |       24.2 | 1.47x |          18.4 |         30.9 | 1.68x |
+| `wiki-zh`               |        16.7 |       17.3 | 1.04x |           8.4 |          8.1 | 0.96x |
+| `wiki-ar`               |        21.2 |       26.4 | 1.25x |          15.3 |         16.6 | 1.08x |
+| `wiki-ru`               |        20.7 |       25.4 | 1.23x |          11.6 |         12.2 | 1.05x |
+| `wiki-hi`               |        28.7 |       41.1 | 1.43x |          32.9 |         52.0 | 1.58x |
+| `wiki-sv`               |        13.5 |       17.1 | 1.27x |          11.5 |         13.6 | 1.18x |
+| `enwik8`                |        13.1 |       17.8 | 1.36x |          13.8 |         25.0 | 1.81x |
 
 The segmentation alone:
 
-| Corpus | gpt2 before | gpt2 after | gain | cl100k before | cl100k after | gain |
-|---|---:|---:|---:|---:|---:|---:|
-| `twitter.json` | 30.5 | 65.5 | 2.15x | 31.3 | 109.8 | 3.51x |
-| `munch-python@15b2863c` | 27.1 | 62.4 | 2.30x | 27.8 | 104.7 | 3.77x |
-| `munch-cpp@15b2863c` | 25.4 | 56.1 | 2.21x | 26.8 | 101.7 | 3.79x |
-| `gutenberg` | 26.2 | 63.2 | 2.41x | 27.7 | 115.4 | 4.17x |
-| `wiki-zh` | 59.7 | 153.0 | 2.56x | 65.1 | 259.8 | 3.99x |
-| `wiki-ar` | 44.4 | 97.2 | 2.19x | 50.4 | 155.0 | 3.08x |
-| `wiki-ru` | 46.7 | 107.3 | 2.30x | 51.3 | 157.2 | 3.06x |
-| `wiki-hi` | 41.1 | 68.7 | 1.67x | 55.1 | 154.8 | 2.81x |
-| `wiki-sv` | 27.6 | 75.8 | 2.75x | 28.1 | 122.5 | 4.36x |
-| `enwik8` | 23.1 | 58.3 | 2.52x | 24.4 | 99.5 | 4.08x |
+| Corpus                  | gpt2 before | gpt2 after |  gain | cl100k before | cl100k after |  gain |
+|-------------------------|------------:|-----------:|------:|--------------:|-------------:|------:|
+| `twitter.json`          |        30.5 |       65.5 | 2.15x |          31.3 |        109.8 | 3.51x |
+| `munch-python@15b2863c` |        27.1 |       62.4 | 2.30x |          27.8 |        104.7 | 3.77x |
+| `munch-cpp@15b2863c`    |        25.4 |       56.1 | 2.21x |          26.8 |        101.7 | 3.79x |
+| `gutenberg`             |        26.2 |       63.2 | 2.41x |          27.7 |        115.4 | 4.17x |
+| `wiki-zh`               |        59.7 |      153.0 | 2.56x |          65.1 |        259.8 | 3.99x |
+| `wiki-ar`               |        44.4 |       97.2 | 2.19x |          50.4 |        155.0 | 3.08x |
+| `wiki-ru`               |        46.7 |      107.3 | 2.30x |          51.3 |        157.2 | 3.06x |
+| `wiki-hi`               |        41.1 |       68.7 | 1.67x |          55.1 |        154.8 | 2.81x |
+| `wiki-sv`               |        27.6 |       75.8 | 2.75x |          28.1 |        122.5 | 4.36x |
+| `enwik8`                |        23.1 |       58.3 | 2.52x |          24.4 |         99.5 | 4.08x |
 
 A prompt and the batch of enwik9's pages:
 
-| Tokenizer | Row before | Row after | MiB/s before | MiB/s after | gain | mean before | mean after | p99 before | p99 after |
-|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| gpt2 | prompts | prompts | 9.7 | 11.2 | 1.15x | 103.31 | 89.58 | 256.95 | 219.08 |
-| cl100k | prompts | prompts | 8.0 | 9.2 | 1.15x | 125.37 | 108.72 | 301.36 | 283.65 |
+| Tokenizer | Row before | Row after | MiB/s before | MiB/s after |  gain | mean before | mean after | p99 before | p99 after |
+|-----------|------------|-----------|-------------:|------------:|------:|------------:|-----------:|-----------:|----------:|
+| gpt2      | prompts    | prompts   |          9.7 |        11.2 | 1.15x |      103.31 |      89.58 |     256.95 |    219.08 |
+| cl100k    | prompts    | prompts   |          8.0 |         9.2 | 1.15x |      125.37 |     108.72 |     301.36 |    283.65 |
 
-| Tokenizer | Threads | Before | After | gain |
-|---|---:|---:|---:|---:|
-| gpt2 | 1 | 7.9 | 10.2 | 1.29x |
-| cl100k | 1 | 13.0 | 23.6 | 1.82x |
-| gpt2 | 24 | 133.5 | 168.1 | 1.26x |
-| cl100k | 24 | 160.5 | 342.0 | 2.13x |
+| Tokenizer | Threads | Before | After |  gain |
+|-----------|--------:|-------:|------:|------:|
+| gpt2      |       1 |    7.9 |  10.2 | 1.29x |
+| cl100k    |       1 |   13.0 |  23.6 | 1.82x |
+| gpt2      |      24 |  133.5 | 168.1 | 1.26x |
+| cl100k    |      24 |  160.5 | 342.0 | 2.13x |
 
 The segmentation runs 1.67 to 2.75 times faster under GPT-2 and 2.81 to 4.36 times under cl100k, and `encode()` 1.04 to
 1.69 and 0.96 to 2.24 times; on Chinese, Arabic and Russian under cl100k, where the merge holds the time, `encode()`
@@ -451,47 +477,47 @@ Each alternative is compiled as the DFA of its language followed by one symbol o
 segmenter appends to the class string, and munch's `run()` gives its longest gate-passing accept in one scan, where the
 segmenter stepped the DFA a symbol at a time and tested the gate at every accept. `encode()`:
 
-| Corpus | gpt2 before | gpt2 after | gain | cl100k before | cl100k after | gain |
-|---|---:|---:|---:|---:|---:|---:|
-| `twitter.json` | 33.4 | 55.6 | 1.66x | 40.7 | 64.6 | 1.59x |
-| `munch-python@15b2863c` | 31.7 | 50.4 | 1.59x | 42.9 | 60.7 | 1.41x |
-| `munch-cpp@15b2863c` | 34.6 | 55.7 | 1.61x | 48.1 | 63.9 | 1.33x |
-| `gutenberg` | 24.2 | 33.4 | 1.38x | 30.9 | 41.7 | 1.35x |
-| `wiki-zh` | 17.3 | 21.2 | 1.23x | 8.1 | 8.9 | 1.10x |
-| `wiki-ar` | 26.4 | 33.2 | 1.26x | 16.6 | 18.8 | 1.13x |
-| `wiki-ru` | 25.4 | 29.8 | 1.17x | 12.2 | 13.7 | 1.12x |
-| `wiki-hi` | 41.1 | 63.8 | 1.55x | 52.0 | 61.3 | 1.18x |
-| `wiki-sv` | 17.1 | 22.0 | 1.29x | 13.6 | 17.6 | 1.29x |
-| `enwik8` | 17.8 | 23.1 | 1.30x | 25.0 | 28.7 | 1.15x |
+| Corpus                  | gpt2 before | gpt2 after |  gain | cl100k before | cl100k after |  gain |
+|-------------------------|------------:|-----------:|------:|--------------:|-------------:|------:|
+| `twitter.json`          |        33.4 |       55.6 | 1.66x |          40.7 |         64.6 | 1.59x |
+| `munch-python@15b2863c` |        31.7 |       50.4 | 1.59x |          42.9 |         60.7 | 1.41x |
+| `munch-cpp@15b2863c`    |        34.6 |       55.7 | 1.61x |          48.1 |         63.9 | 1.33x |
+| `gutenberg`             |        24.2 |       33.4 | 1.38x |          30.9 |         41.7 | 1.35x |
+| `wiki-zh`               |        17.3 |       21.2 | 1.23x |           8.1 |          8.9 | 1.10x |
+| `wiki-ar`               |        26.4 |       33.2 | 1.26x |          16.6 |         18.8 | 1.13x |
+| `wiki-ru`               |        25.4 |       29.8 | 1.17x |          12.2 |         13.7 | 1.12x |
+| `wiki-hi`               |        41.1 |       63.8 | 1.55x |          52.0 |         61.3 | 1.18x |
+| `wiki-sv`               |        17.1 |       22.0 | 1.29x |          13.6 |         17.6 | 1.29x |
+| `enwik8`                |        17.8 |       23.1 | 1.30x |          25.0 |         28.7 | 1.15x |
 
 The segmentation alone:
 
-| Corpus | gpt2 before | gpt2 after | gain | cl100k before | cl100k after | gain |
-|---|---:|---:|---:|---:|---:|---:|
-| `twitter.json` | 65.5 | 175.8 | 2.68x | 109.8 | 242.0 | 2.20x |
-| `munch-python@15b2863c` | 62.4 | 152.5 | 2.44x | 104.7 | 170.1 | 1.62x |
-| `munch-cpp@15b2863c` | 56.1 | 134.2 | 2.39x | 101.7 | 168.1 | 1.65x |
-| `gutenberg` | 63.2 | 139.4 | 2.21x | 115.4 | 174.5 | 1.51x |
-| `wiki-zh` | 153.0 | 308.7 | 2.02x | 259.8 | 373.0 | 1.44x |
-| `wiki-ar` | 97.2 | 182.4 | 1.88x | 155.0 | 199.6 | 1.29x |
-| `wiki-ru` | 107.3 | 197.6 | 1.84x | 157.2 | 215.7 | 1.37x |
-| `wiki-hi` | 68.7 | 156.8 | 2.28x | 154.8 | 219.3 | 1.42x |
-| `wiki-sv` | 75.8 | 155.8 | 2.06x | 122.5 | 178.2 | 1.45x |
-| `enwik8` | 58.3 | 123.2 | 2.11x | 99.5 | 147.4 | 1.48x |
+| Corpus                  | gpt2 before | gpt2 after |  gain | cl100k before | cl100k after |  gain |
+|-------------------------|------------:|-----------:|------:|--------------:|-------------:|------:|
+| `twitter.json`          |        65.5 |      175.8 | 2.68x |         109.8 |        242.0 | 2.20x |
+| `munch-python@15b2863c` |        62.4 |      152.5 | 2.44x |         104.7 |        170.1 | 1.62x |
+| `munch-cpp@15b2863c`    |        56.1 |      134.2 | 2.39x |         101.7 |        168.1 | 1.65x |
+| `gutenberg`             |        63.2 |      139.4 | 2.21x |         115.4 |        174.5 | 1.51x |
+| `wiki-zh`               |       153.0 |      308.7 | 2.02x |         259.8 |        373.0 | 1.44x |
+| `wiki-ar`               |        97.2 |      182.4 | 1.88x |         155.0 |        199.6 | 1.29x |
+| `wiki-ru`               |       107.3 |      197.6 | 1.84x |         157.2 |        215.7 | 1.37x |
+| `wiki-hi`               |        68.7 |      156.8 | 2.28x |         154.8 |        219.3 | 1.42x |
+| `wiki-sv`               |        75.8 |      155.8 | 2.06x |         122.5 |        178.2 | 1.45x |
+| `enwik8`                |        58.3 |      123.2 | 2.11x |          99.5 |        147.4 | 1.48x |
 
 A prompt and the batch of enwik9's pages:
 
-| Tokenizer | Row before | Row after | MiB/s before | MiB/s after | gain | mean before | mean after | p99 before | p99 after |
-|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| gpt2 | prompts | prompts | 11.2 | 12.1 | 1.08x | 89.58 | 82.70 | 219.08 | 204.85 |
-| cl100k | prompts | prompts | 9.2 | 9.4 | 1.02x | 108.72 | 106.82 | 283.65 | 270.73 |
+| Tokenizer | Row before | Row after | MiB/s before | MiB/s after |  gain | mean before | mean after | p99 before | p99 after |
+|-----------|------------|-----------|-------------:|------------:|------:|------------:|-----------:|-----------:|----------:|
+| gpt2      | prompts    | prompts   |         11.2 |        12.1 | 1.08x |       89.58 |      82.70 |     219.08 |    204.85 |
+| cl100k    | prompts    | prompts   |          9.2 |         9.4 | 1.02x |      108.72 |     106.82 |     283.65 |    270.73 |
 
-| Tokenizer | Threads | Before | After | gain |
-|---|---:|---:|---:|---:|
-| gpt2 | 1 | 10.2 | 11.5 | 1.13x |
-| cl100k | 1 | 23.6 | 25.6 | 1.08x |
-| gpt2 | 24 | 168.1 | 189.5 | 1.13x |
-| cl100k | 24 | 342.0 | 382.4 | 1.12x |
+| Tokenizer | Threads | Before | After |  gain |
+|-----------|--------:|-------:|------:|------:|
+| gpt2      |       1 |   10.2 |  11.5 | 1.13x |
+| cl100k    |       1 |   23.6 |  25.6 | 1.08x |
+| gpt2      |      24 |  168.1 | 189.5 | 1.13x |
+| cl100k    |      24 |  342.0 | 382.4 | 1.12x |
 
 With both changes the segmentation runs at 123 to 309 MiB/s under GPT-2 and 147 to 373 under cl100k, against 23 to 65
 before them.
@@ -504,19 +530,19 @@ the timed passes find it full with the pieces of the first prompts and merge the
 pool thread across the documents it takes, and both are held to `encode()` called with a cache of its own. The before of
 the kept row is the plain row of the build before. Latencies are in microseconds.
 
-| Tokenizer | Row before | Row after | MiB/s before | MiB/s after | gain | mean before | mean after | p99 before | p99 after |
-|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| gpt2 | prompts | prompts | 12.1 | 12.0 | 0.99x | 82.70 | 83.56 | 204.85 | 209.30 |
-| gpt2 | prompts | prompts kept | 12.1 | 18.5 | 1.53x | 82.70 | 53.96 | 204.85 | 142.93 |
-| cl100k | prompts | prompts | 9.4 | 9.3 | 0.99x | 106.82 | 107.29 | 270.73 | 280.08 |
-| cl100k | prompts | prompts kept | 9.4 | 13.0 | 1.38x | 106.82 | 76.76 | 270.73 | 228.30 |
+| Tokenizer | Row before | Row after    | MiB/s before | MiB/s after |  gain | mean before | mean after | p99 before | p99 after |
+|-----------|------------|--------------|-------------:|------------:|------:|------------:|-----------:|-----------:|----------:|
+| gpt2      | prompts    | prompts      |         12.1 |        12.0 | 0.99x |       82.70 |      83.56 |     204.85 |    209.30 |
+| gpt2      | prompts    | prompts kept |         12.1 |        18.5 | 1.53x |       82.70 |      53.96 |     204.85 |    142.93 |
+| cl100k    | prompts    | prompts      |          9.4 |         9.3 | 0.99x |      106.82 |     107.29 |     270.73 |    280.08 |
+| cl100k    | prompts    | prompts kept |          9.4 |        13.0 | 1.38x |      106.82 |      76.76 |     270.73 |    228.30 |
 
-| Tokenizer | Threads | Before | After | gain |
-|---|---:|---:|---:|---:|
-| gpt2 | 1 | 11.5 | 19.7 | 1.71x |
-| cl100k | 1 | 25.6 | 27.6 | 1.08x |
-| gpt2 | 24 | 189.5 | 295.0 | 1.56x |
-| cl100k | 24 | 382.4 | 410.7 | 1.07x |
+| Tokenizer | Threads | Before | After |  gain |
+|-----------|--------:|-------:|------:|------:|
+| gpt2      |       1 |   11.5 |  19.7 | 1.71x |
+| cl100k    |       1 |   25.6 |  27.6 | 1.08x |
+| gpt2      |      24 |  189.5 | 295.0 | 1.56x |
+| cl100k    |      24 |  382.4 | 410.7 | 1.07x |
 
 A kilobyte prompt costs 54 microseconds under GPT-2 and 77 under cl100k with a kept cache, against 84 and 107 without,
 and the batch on one thread under GPT-2, which looks no piece up whole, runs 1.71 times faster; cl100k, which looks most
@@ -529,49 +555,49 @@ construction with every split of a spelling into two spellings, 233,378 pairs on
 bytes of the parts' concatenation; GPT-2's pair rule is unchanged. The single rows of the builds before and after ran
 back to back:
 
-| Corpus | gpt2 before | gpt2 after | gain | cl100k before | cl100k after | gain |
-|---|---:|---:|---:|---:|---:|---:|
-| `twitter.json` | 59.6 | 57.0 | 0.96x | 64.9 | 68.7 | 1.06x |
-| `munch-python@15b2863c` | 52.6 | 52.6 | 1.00x | 65.3 | 64.6 | 0.99x |
-| `munch-cpp@15b2863c` | 59.4 | 59.1 | 0.99x | 68.4 | 65.1 | 0.95x |
-| `gutenberg` | 34.9 | 34.8 | 1.00x | 40.2 | 40.0 | 1.00x |
-| `wiki-zh` | 21.6 | 22.3 | 1.03x | 9.8 | 12.5 | 1.28x |
-| `wiki-ar` | 34.0 | 33.4 | 0.98x | 20.3 | 24.4 | 1.20x |
-| `wiki-ru` | 32.0 | 32.2 | 1.01x | 15.4 | 18.1 | 1.18x |
-| `wiki-hi` | 65.9 | 66.4 | 1.01x | 64.2 | 63.4 | 0.99x |
-| `wiki-sv` | 23.2 | 23.0 | 0.99x | 18.3 | 18.4 | 1.01x |
-| `enwik8` | 24.5 | 24.4 | 1.00x | 28.9 | 27.6 | 0.96x |
+| Corpus                  | gpt2 before | gpt2 after |  gain | cl100k before | cl100k after |  gain |
+|-------------------------|------------:|-----------:|------:|--------------:|-------------:|------:|
+| `twitter.json`          |        59.6 |       57.0 | 0.96x |          64.9 |         68.7 | 1.06x |
+| `munch-python@15b2863c` |        52.6 |       52.6 | 1.00x |          65.3 |         64.6 | 0.99x |
+| `munch-cpp@15b2863c`    |        59.4 |       59.1 | 0.99x |          68.4 |         65.1 | 0.95x |
+| `gutenberg`             |        34.9 |       34.8 | 1.00x |          40.2 |         40.0 | 1.00x |
+| `wiki-zh`               |        21.6 |       22.3 | 1.03x |           9.8 |         12.5 | 1.28x |
+| `wiki-ar`               |        34.0 |       33.4 | 0.98x |          20.3 |         24.4 | 1.20x |
+| `wiki-ru`               |        32.0 |       32.2 | 1.01x |          15.4 |         18.1 | 1.18x |
+| `wiki-hi`               |        65.9 |       66.4 | 1.01x |          64.2 |         63.4 | 0.99x |
+| `wiki-sv`               |        23.2 |       23.0 | 0.99x |          18.3 |         18.4 | 1.01x |
+| `enwik8`                |        24.5 |       24.4 | 1.00x |          28.9 |         27.6 | 0.96x |
 
 The encoding with no cache:
 
-| Corpus | gpt2 before | gpt2 after | gain | cl100k before | cl100k after | gain |
-|---|---:|---:|---:|---:|---:|---:|
-| `twitter.json` | 21.0 | 20.2 | 0.96x | 35.5 | 46.0 | 1.30x |
-| `munch-python@15b2863c` | 17.2 | 17.1 | 0.99x | 39.2 | 42.8 | 1.09x |
-| `munch-cpp@15b2863c` | 17.6 | 17.4 | 0.99x | 44.1 | 46.4 | 1.05x |
-| `gutenberg` | 13.9 | 13.7 | 0.99x | 34.0 | 32.3 | 0.95x |
-| `wiki-zh` | 22.4 | 22.5 | 1.00x | 10.3 | 13.0 | 1.26x |
-| `wiki-ar` | 21.6 | 21.3 | 0.99x | 12.2 | 16.0 | 1.31x |
-| `wiki-ru` | 22.0 | 21.6 | 0.98x | 9.5 | 12.0 | 1.26x |
-| `wiki-hi` | 27.5 | 28.0 | 1.02x | 19.4 | 25.5 | 1.31x |
-| `wiki-sv` | 13.2 | 13.1 | 0.99x | 11.1 | 11.5 | 1.04x |
-| `enwik8` | 13.4 | 13.3 | 0.99x | 27.3 | 27.0 | 0.99x |
+| Corpus                  | gpt2 before | gpt2 after |  gain | cl100k before | cl100k after |  gain |
+|-------------------------|------------:|-----------:|------:|--------------:|-------------:|------:|
+| `twitter.json`          |        21.0 |       20.2 | 0.96x |          35.5 |         46.0 | 1.30x |
+| `munch-python@15b2863c` |        17.2 |       17.1 | 0.99x |          39.2 |         42.8 | 1.09x |
+| `munch-cpp@15b2863c`    |        17.6 |       17.4 | 0.99x |          44.1 |         46.4 | 1.05x |
+| `gutenberg`             |        13.9 |       13.7 | 0.99x |          34.0 |         32.3 | 0.95x |
+| `wiki-zh`               |        22.4 |       22.5 | 1.00x |          10.3 |         13.0 | 1.26x |
+| `wiki-ar`               |        21.6 |       21.3 | 0.99x |          12.2 |         16.0 | 1.31x |
+| `wiki-ru`               |        22.0 |       21.6 | 0.98x |           9.5 |         12.0 | 1.26x |
+| `wiki-hi`               |        27.5 |       28.0 | 1.02x |          19.4 |         25.5 | 1.31x |
+| `wiki-sv`               |        13.2 |       13.1 | 0.99x |          11.1 |         11.5 | 1.04x |
+| `enwik8`                |        13.4 |       13.3 | 0.99x |          27.3 |         27.0 | 0.99x |
 
 A prompt and the batch of enwik9's pages:
 
-| Tokenizer | Row before | Row after | MiB/s before | MiB/s after | gain | mean before | mean after | p99 before | p99 after |
-|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| gpt2 | prompts | prompts | 12.0 | 12.7 | 1.06x | 83.56 | 78.84 | 209.30 | 191.89 |
-| gpt2 | prompts kept | prompts kept | 18.5 | 20.7 | 1.12x | 53.96 | 48.37 | 142.93 | 128.97 |
-| cl100k | prompts | prompts | 9.3 | 10.6 | 1.14x | 107.29 | 94.03 | 280.08 | 238.33 |
-| cl100k | prompts kept | prompts kept | 13.0 | 14.9 | 1.15x | 76.76 | 67.10 | 228.30 | 194.96 |
+| Tokenizer | Row before   | Row after    | MiB/s before | MiB/s after |  gain | mean before | mean after | p99 before | p99 after |
+|-----------|--------------|--------------|-------------:|------------:|------:|------------:|-----------:|-----------:|----------:|
+| gpt2      | prompts      | prompts      |         12.0 |        12.7 | 1.06x |       83.56 |      78.84 |     209.30 |    191.89 |
+| gpt2      | prompts kept | prompts kept |         18.5 |        20.7 | 1.12x |       53.96 |      48.37 |     142.93 |    128.97 |
+| cl100k    | prompts      | prompts      |          9.3 |        10.6 | 1.14x |      107.29 |      94.03 |     280.08 |    238.33 |
+| cl100k    | prompts kept | prompts kept |         13.0 |        14.9 | 1.15x |       76.76 |      67.10 |     228.30 |    194.96 |
 
-| Tokenizer | Threads | Before | After | gain |
-|---|---:|---:|---:|---:|
-| gpt2 | 1 | 19.7 | 20.2 | 1.03x |
-| cl100k | 1 | 27.6 | 26.8 | 0.97x |
-| gpt2 | 24 | 295.0 | 290.6 | 0.99x |
-| cl100k | 24 | 410.7 | 391.8 | 0.95x |
+| Tokenizer | Threads | Before | After |  gain |
+|-----------|--------:|-------:|------:|------:|
+| gpt2      |       1 |   19.7 |  20.2 | 1.03x |
+| cl100k    |       1 |   27.6 |  26.8 | 0.97x |
+| gpt2      |      24 |  295.0 | 290.6 | 0.99x |
+| cl100k    |      24 |  410.7 | 391.8 | 0.95x |
 
 The merge-bound texts under cl100k gain most: `encode()` on Chinese, Arabic and Russian runs 1.18 to 1.28 times faster,
 and with no cache they, Hindi and `twitter.json` 1.26 to 1.31 times. Where nearly every piece is looked up whole or
@@ -587,12 +613,12 @@ the prompts, which bounds the noise of a single run.
 `encode_parallel()` reserves the sum of the chunks' ids before it joins them, so the serial join copies them once. Its
 rows at 24 workers on enwik9, the builds before and after alternated twice:
 
-| Tokenizer | Threads | Run | Before | After | gain |
-|---|---:|---|---:|---:|---:|
-| gpt2 | 24 | first | 232.4 | 271.3 | 1.17x |
-| gpt2 | 24 | second | 232.9 | 266.2 | 1.14x |
-| cl100k | 24 | first | 282.2 | 343.0 | 1.22x |
-| cl100k | 24 | second | 284.5 | 339.9 | 1.19x |
+| Tokenizer | Threads | Run    | Before | After |  gain |
+|-----------|--------:|--------|-------:|------:|------:|
+| gpt2      |      24 | first  |  232.4 | 271.3 | 1.17x |
+| gpt2      |      24 | second |  232.9 | 266.2 | 1.14x |
+| cl100k    |      24 | first  |  282.2 | 343.0 | 1.22x |
+| cl100k    |      24 | second |  284.5 | 339.9 | 1.19x |
 
 The serial join of the 1.2 and 1.1 GB of ids under GPT-2 and cl100k is a larger share of the parallel time now that the
 workers finish sooner, and reserving its vector makes the rows 1.14 to 1.22 times faster.
@@ -604,35 +630,35 @@ the best in parentheses, and matisse's `encode()` over each:
 
 gpt2:
 
-| Corpus | matisse `encode()` | no cache | segmentation | tiktoken | bpe | Hugging Face, 2026-10-20 | over tiktoken | over bpe |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|
-| `twitter.json` | 57.3 (60.0) | 20.2 (20.7) | 173.3 (176.2) | 16.9 (18.0) | 49.7 (50.6) | 2.1 (2.8) | 3.39x | 1.15x |
-| `munch-python@15b2863c` | 49.7 (51.4) | 16.5 (16.9) | 143.1 (145.1) | 21.6 (22.2) | 55.9 (57.8) | 2.9 (3.4) | 2.30x | 0.89x |
-| `munch-cpp@15b2863c` | 56.5 (58.0) | 15.8 (16.3) | 126.7 (128.6) | 20.1 (20.6) | 56.1 (57.7) | 1.9 (2.3) | 2.81x | 1.01x |
-| `gutenberg` | 34.4 (35.0) | 13.4 (13.6) | 136.6 (139.6) | 24.6 (25.2) | 56.9 (58.1) | 1.9 (2.3) | 1.40x | 0.60x |
-| `wiki-zh` | 21.4 (21.6) | 21.6 (21.9) | 296.7 (303.0) | 24.6 (24.8) | 38.7 (39.6) | 2.2 (2.6) | 0.87x | 0.55x |
-| `wiki-ar` | 32.5 (33.1) | 20.7 (21.0) | 172.6 (176.3) | 23.5 (23.7) | 46.2 (47.4) | 2.0 (2.3) | 1.38x | 0.70x |
-| `wiki-ru` | 31.3 (32.2) | 21.3 (21.5) | 189.7 (191.8) | 25.1 (25.7) | 46.9 (48.3) | 2.2 (2.5) | 1.25x | 0.67x |
-| `wiki-hi` | 66.3 (67.0) | 27.7 (27.9) | 151.9 (156.8) | 18.0 (18.4) | 53.2 (54.0) | 1.8 (2.2) | 3.68x | 1.25x |
-| `wiki-sv` | 22.7 (23.0) | 12.9 (13.1) | 160.7 (162.5) | 19.9 (20.1) | 30.4 (30.9) | 2.0 (2.3) | 1.14x | 0.75x |
-| `enwik8` | 23.7 (24.0) | 13.0 (13.1) | 121.2 (121.6) | 22.9 (23.1) | 50.2 (50.4) | 1.6 (1.9) | 1.03x | 0.47x |
-| `enwik9` | 24.9 (25.2) | 13.6 (13.6) | 114.1 (115.8) | 21.4 (21.4) | 49.3 (49.6) |  | 1.16x | 0.51x |
+| Corpus                  | matisse `encode()` |    no cache |  segmentation |    tiktoken |         bpe | Hugging Face, 2026-10-20 | over tiktoken | over bpe |
+|-------------------------|-------------------:|------------:|--------------:|------------:|------------:|-------------------------:|--------------:|---------:|
+| `twitter.json`          |        57.3 (60.0) | 20.2 (20.7) | 173.3 (176.2) | 16.9 (18.0) | 49.7 (50.6) |                2.1 (2.8) |         3.39x |    1.15x |
+| `munch-python@15b2863c` |        49.7 (51.4) | 16.5 (16.9) | 143.1 (145.1) | 21.6 (22.2) | 55.9 (57.8) |                2.9 (3.4) |         2.30x |    0.89x |
+| `munch-cpp@15b2863c`    |        56.5 (58.0) | 15.8 (16.3) | 126.7 (128.6) | 20.1 (20.6) | 56.1 (57.7) |                1.9 (2.3) |         2.81x |    1.01x |
+| `gutenberg`             |        34.4 (35.0) | 13.4 (13.6) | 136.6 (139.6) | 24.6 (25.2) | 56.9 (58.1) |                1.9 (2.3) |         1.40x |    0.60x |
+| `wiki-zh`               |        21.4 (21.6) | 21.6 (21.9) | 296.7 (303.0) | 24.6 (24.8) | 38.7 (39.6) |                2.2 (2.6) |         0.87x |    0.55x |
+| `wiki-ar`               |        32.5 (33.1) | 20.7 (21.0) | 172.6 (176.3) | 23.5 (23.7) | 46.2 (47.4) |                2.0 (2.3) |         1.38x |    0.70x |
+| `wiki-ru`               |        31.3 (32.2) | 21.3 (21.5) | 189.7 (191.8) | 25.1 (25.7) | 46.9 (48.3) |                2.2 (2.5) |         1.25x |    0.67x |
+| `wiki-hi`               |        66.3 (67.0) | 27.7 (27.9) | 151.9 (156.8) | 18.0 (18.4) | 53.2 (54.0) |                1.8 (2.2) |         3.68x |    1.25x |
+| `wiki-sv`               |        22.7 (23.0) | 12.9 (13.1) | 160.7 (162.5) | 19.9 (20.1) | 30.4 (30.9) |                2.0 (2.3) |         1.14x |    0.75x |
+| `enwik8`                |        23.7 (24.0) | 13.0 (13.1) | 121.2 (121.6) | 22.9 (23.1) | 50.2 (50.4) |                1.6 (1.9) |         1.03x |    0.47x |
+| `enwik9`                |        24.9 (25.2) | 13.6 (13.6) | 114.1 (115.8) | 21.4 (21.4) | 49.3 (49.6) |                          |         1.16x |    0.51x |
 
 cl100k:
 
-| Corpus | matisse `encode()` | no cache | segmentation | tiktoken | bpe | Hugging Face, 2026-10-20 | over tiktoken | over bpe |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|
-| `twitter.json` | 68.5 (70.2) | 46.8 (49.4) | 223.6 (229.3) | 17.4 (17.8) | 67.8 (69.5) | 2.7 (3.7) | 3.94x | 1.01x |
-| `munch-python@15b2863c` | 60.4 (62.2) | 41.5 (42.7) | 170.1 (172.5) | 21.0 (21.6) | 60.7 (63.0) | 3.4 (4.2) | 2.88x | 1.00x |
-| `munch-cpp@15b2863c` | 61.9 (63.4) | 44.7 (46.7) | 170.3 (174.3) | 20.3 (20.8) | 62.7 (65.5) | 2.0 (2.3) | 3.05x | 0.99x |
-| `gutenberg` | 38.1 (39.4) | 31.8 (33.0) | 177.5 (179.2) | 24.8 (25.4) | 51.0 (54.7) | 1.9 (2.1) | 1.54x | 0.75x |
-| `wiki-zh` | 12.0 (12.3) | 12.8 (13.2) | 373.3 (377.2) | 20.6 (21.0) | 43.0 (43.8) | 2.6 (3.0) | 0.58x | 0.28x |
-| `wiki-ar` | 23.6 (24.3) | 14.6 (14.8) | 197.5 (199.3) | 20.5 (20.7) | 50.6 (52.3) | 2.1 (2.4) | 1.15x | 0.47x |
-| `wiki-ru` | 17.5 (17.9) | 11.9 (12.1) | 219.5 (222.1) | 19.3 (19.5) | 44.0 (45.0) | 2.5 (2.9) | 0.91x | 0.40x |
-| `wiki-hi` | 61.6 (62.9) | 24.9 (25.2) | 202.7 (207.0) | 19.8 (20.2) | 60.7 (62.7) | 1.9 (2.1) | 3.11x | 1.01x |
-| `wiki-sv` | 17.9 (18.5) | 11.7 (11.8) | 187.0 (189.8) | 18.1 (18.5) | 29.6 (30.2) | 1.9 (2.2) | 0.99x | 0.60x |
-| `enwik8` | 27.1 (27.3) | 26.6 (27.0) | 147.5 (148.0) | 21.3 (21.4) | 47.5 (47.8) | 1.4 (1.6) | 1.27x | 0.57x |
-| `enwik9` | 30.0 (30.0) | 28.1 (28.4) | 140.5 (142.4) | 19.3 (19.3) | 47.7 (47.7) |  | 1.55x | 0.63x |
+| Corpus                  | matisse `encode()` |    no cache |  segmentation |    tiktoken |         bpe | Hugging Face, 2026-10-20 | over tiktoken | over bpe |
+|-------------------------|-------------------:|------------:|--------------:|------------:|------------:|-------------------------:|--------------:|---------:|
+| `twitter.json`          |        68.5 (70.2) | 46.8 (49.4) | 223.6 (229.3) | 17.4 (17.8) | 67.8 (69.5) |                2.7 (3.7) |         3.94x |    1.01x |
+| `munch-python@15b2863c` |        60.4 (62.2) | 41.5 (42.7) | 170.1 (172.5) | 21.0 (21.6) | 60.7 (63.0) |                3.4 (4.2) |         2.88x |    1.00x |
+| `munch-cpp@15b2863c`    |        61.9 (63.4) | 44.7 (46.7) | 170.3 (174.3) | 20.3 (20.8) | 62.7 (65.5) |                2.0 (2.3) |         3.05x |    0.99x |
+| `gutenberg`             |        38.1 (39.4) | 31.8 (33.0) | 177.5 (179.2) | 24.8 (25.4) | 51.0 (54.7) |                1.9 (2.1) |         1.54x |    0.75x |
+| `wiki-zh`               |        12.0 (12.3) | 12.8 (13.2) | 373.3 (377.2) | 20.6 (21.0) | 43.0 (43.8) |                2.6 (3.0) |         0.58x |    0.28x |
+| `wiki-ar`               |        23.6 (24.3) | 14.6 (14.8) | 197.5 (199.3) | 20.5 (20.7) | 50.6 (52.3) |                2.1 (2.4) |         1.15x |    0.47x |
+| `wiki-ru`               |        17.5 (17.9) | 11.9 (12.1) | 219.5 (222.1) | 19.3 (19.5) | 44.0 (45.0) |                2.5 (2.9) |         0.91x |    0.40x |
+| `wiki-hi`               |        61.6 (62.9) | 24.9 (25.2) | 202.7 (207.0) | 19.8 (20.2) | 60.7 (62.7) |                1.9 (2.1) |         3.11x |    1.01x |
+| `wiki-sv`               |        17.9 (18.5) | 11.7 (11.8) | 187.0 (189.8) | 18.1 (18.5) | 29.6 (30.2) |                1.9 (2.2) |         0.99x |    0.60x |
+| `enwik8`                |        27.1 (27.3) | 26.6 (27.0) | 147.5 (148.0) | 21.3 (21.4) | 47.5 (47.8) |                1.4 (1.6) |         1.27x |    0.57x |
+| `enwik9`                |        30.0 (30.0) | 28.1 (28.4) | 140.5 (142.4) | 19.3 (19.3) | 47.7 (47.7) |                          |         1.55x |    0.63x |
 
 On one core `encode()` runs at 21.4 to 66.3 MiB/s under GPT-2 and 12.0 to 68.5 under cl100k, against 9.0 to 37.1 at
 97aa503. It is faster than tiktoken on every corpus but Chinese under both tokenizers and Russian and Swedish under
@@ -642,43 +668,43 @@ the bpe crate's rate, and the bpe crate is 1.3 to 3.6 times faster on the prose,
 
 Short prompts:
 
-| Encoder | Tokenizer | MiB/s | M tokens/s | mean | p50 | p90 | p99 |
-|---|---|---:|---:|---:|---:|---:|---:|
-| matisse `encode()` | gpt2 | 12.1 | 6.55 | 82.72 | 74.37 | 145.82 | 202.92 |
-| matisse `encode()` | cl100k | 10.8 | 3.88 | 92.76 | 82.60 | 173.41 | 234.31 |
-| matisse `encode()`, kept cache | gpt2 | 20.8 | 11.28 | 48.04 | 43.47 | 89.04 | 130.28 |
-| matisse `encode()`, kept cache | cl100k | 15.3 | 5.50 | 65.42 | 53.92 | 131.88 | 182.40 |
-| tiktoken `encode_ordinary()` | gpt2 | 16.9 | 9.13 | 59.34 | 56.19 | 96.74 | 135.84 |
-| tiktoken `encode_ordinary()` | cl100k | 15.1 | 5.45 | 66.04 | 62.22 | 105.56 | 157.21 |
-| bpe `encode()` | gpt2 | 35.5 | 19.23 | 28.16 | 26.94 | 48.70 | 72.57 |
-| bpe `encode()` | cl100k | 36.4 | 13.10 | 27.50 | 25.74 | 46.61 | 74.56 |
-| Hugging Face `encode()`, 2026-10-20 | gpt2 | 2.9 | 1.59 | 341.38 | 340.22 | 581.45 | 740.27 |
-| Hugging Face `encode()`, 2026-10-20 | cl100k | 3.1 | 1.13 | 319.83 | 313.47 | 544.83 | 714.93 |
+| Encoder                             | Tokenizer | MiB/s | M tokens/s |   mean |    p50 |    p90 |    p99 |
+|-------------------------------------|-----------|------:|-----------:|-------:|-------:|-------:|-------:|
+| matisse `encode()`                  | gpt2      |  12.1 |       6.55 |  82.72 |  74.37 | 145.82 | 202.92 |
+| matisse `encode()`                  | cl100k    |  10.8 |       3.88 |  92.76 |  82.60 | 173.41 | 234.31 |
+| matisse `encode()`, kept cache      | gpt2      |  20.8 |      11.28 |  48.04 |  43.47 |  89.04 | 130.28 |
+| matisse `encode()`, kept cache      | cl100k    |  15.3 |       5.50 |  65.42 |  53.92 | 131.88 | 182.40 |
+| tiktoken `encode_ordinary()`        | gpt2      |  16.9 |       9.13 |  59.34 |  56.19 |  96.74 | 135.84 |
+| tiktoken `encode_ordinary()`        | cl100k    |  15.1 |       5.45 |  66.04 |  62.22 | 105.56 | 157.21 |
+| bpe `encode()`                      | gpt2      |  35.5 |      19.23 |  28.16 |  26.94 |  48.70 |  72.57 |
+| bpe `encode()`                      | cl100k    |  36.4 |      13.10 |  27.50 |  25.74 |  46.61 |  74.56 |
+| Hugging Face `encode()`, 2026-10-20 | gpt2      |   2.9 |       1.59 | 341.38 | 340.22 | 581.45 | 740.27 |
+| Hugging Face `encode()`, 2026-10-20 | cl100k    |   3.1 |       1.13 | 319.83 | 313.47 | 544.83 | 714.93 |
 
 A call on a kilobyte costs a mean of 83 microseconds under GPT-2 and 93 under cl100k with a cache of its own, and 48 and
 65 with a kept cache, against tiktoken's 59 and 66 and the bpe crate's 28.
 
 `encode_parallel()`:
 
-| Workers | gpt2 on enwik9 | cl100k on enwik9 | gpt2 on the mixed file | cl100k on the mixed file |
-|---:|---:|---:|---:|---:|
-| `encode()` | 25.3 | 30.2 | 21.1 | 19.9 |
-| 1 | 25.1 (0.99x) | 29.9 (0.99x) | 20.7 (0.98x) | 19.6 (0.98x) |
-| 2 | 46.9 (1.86x) | 58.9 (1.95x) | 35.9 (1.70x) | 29.7 (1.50x) |
-| 4 | 91.2 (3.61x) | 111.0 (3.68x) | 69.1 (3.27x) | 57.5 (2.89x) |
-| 8 | 161.3 (6.39x) | 195.9 (6.48x) | 119.6 (5.66x) | 107.5 (5.40x) |
-| 12 | 198.8 (7.87x) | 245.5 (8.13x) | 151.4 (7.17x) | 141.5 (7.11x) |
-| 16 | 234.2 (9.27x) | 288.7 (9.56x) | 177.0 (8.37x) | 170.1 (8.55x) |
-| 24 | 281.9 (11.16x) | 362.3 (12.00x) | 212.1 (10.04x) | 218.0 (10.96x) |
+|    Workers | gpt2 on enwik9 | cl100k on enwik9 | gpt2 on the mixed file | cl100k on the mixed file |
+|-----------:|---------------:|-----------------:|-----------------------:|-------------------------:|
+| `encode()` |           25.3 |             30.2 |                   21.1 |                     19.9 |
+|          1 |   25.1 (0.99x) |     29.9 (0.99x) |           20.7 (0.98x) |             19.6 (0.98x) |
+|          2 |   46.9 (1.86x) |     58.9 (1.95x) |           35.9 (1.70x) |             29.7 (1.50x) |
+|          4 |   91.2 (3.61x) |    111.0 (3.68x) |           69.1 (3.27x) |             57.5 (2.89x) |
+|          8 |  161.3 (6.39x) |    195.9 (6.48x) |          119.6 (5.66x) |            107.5 (5.40x) |
+|         12 |  198.8 (7.87x) |    245.5 (8.13x) |          151.4 (7.17x) |            141.5 (7.11x) |
+|         16 |  234.2 (9.27x) |    288.7 (9.56x) |          177.0 (8.37x) |            170.1 (8.55x) |
+|         24 | 281.9 (11.16x) |   362.3 (12.00x) |         212.1 (10.04x) |           218.0 (10.96x) |
 
 The batch of enwik9's pages:
 
-| Encoder | gpt2, 1 thread | gpt2, 24 threads | cl100k, 1 thread | cl100k, 24 threads |
-|---|---:|---:|---:|---:|
-| matisse `encode()` per document, a cache per thread | 20.3 | 291.0 | 26.8 | 410.1 |
-| tiktoken `encode_ordinary_batch()` | 12.5 | 46.7 | 12.2 | 46.9 |
-| bpe `encode()` per document | 50.3 | 461.3 | 48.8 | 437.8 |
-| Hugging Face `encode_batch()`, 2026-10-20 | 3.6, 1 pass | 18.5 | 3.6, 1 pass | 19.1 |
+| Encoder                                             | gpt2, 1 thread | gpt2, 24 threads | cl100k, 1 thread | cl100k, 24 threads |
+|-----------------------------------------------------|---------------:|-----------------:|-----------------:|-------------------:|
+| matisse `encode()` per document, a cache per thread |           20.3 |            291.0 |             26.8 |              410.1 |
+| tiktoken `encode_ordinary_batch()`                  |           12.5 |             46.7 |             12.2 |               46.9 |
+| bpe `encode()` per document                         |           50.3 |            461.3 |             48.8 |              437.8 |
+| Hugging Face `encode_batch()`, 2026-10-20           |    3.6, 1 pass |             18.5 |      3.6, 1 pass |               19.1 |
 
 `encode_parallel()` encodes enwik9 at 281.9 and 362.3 MiB/s with 24 workers, 11.2 and 12.0 times `encode()`, against
 162.7 and 177.9 at 97aa503; the batch at 24 threads runs at 291.0 and 410.1 MiB/s, 0.63 and 0.94 times the bpe crate's.
@@ -711,51 +737,51 @@ built from that map and holds exactly its entries, and its test holds it to the 
 that drops one pair or does not walk past a full slot fails it and the merge's references, 11 and 10 tests in all, and
 one that walks two slots at a time fails 3 and then does not end. `encode()`:
 
-| Corpus | gpt2 before | gpt2 after | gain | cl100k before | cl100k after | gain |
-|---|---:|---:|---:|---:|---:|---:|
-| `twitter.json` | 57.1 | 59.2 | 1.04x | 65.3 | 72.3 | 1.11x |
-| `munch-python@15b2863c` | 52.4 | 52.0 | 0.99x | 63.2 | 64.1 | 1.01x |
-| `munch-cpp@15b2863c` | 56.4 | 60.7 | 1.08x | 63.0 | 69.3 | 1.10x |
-| `gutenberg` | 35.3 | 36.9 | 1.05x | 38.8 | 41.5 | 1.07x |
-| `wiki-zh` | 22.4 | 24.5 | 1.09x | 12.3 | 14.0 | 1.14x |
-| `wiki-ar` | 34.3 | 35.5 | 1.03x | 24.2 | 26.7 | 1.10x |
-| `wiki-ru` | 31.8 | 33.6 | 1.06x | 18.1 | 20.9 | 1.15x |
-| `wiki-hi` | 64.4 | 63.9 | 0.99x | 62.5 | 65.0 | 1.04x |
-| `wiki-sv` | 23.1 | 24.4 | 1.06x | 17.9 | 19.7 | 1.10x |
-| `enwik8` | 24.1 | 25.8 | 1.07x | 26.2 | 29.9 | 1.14x |
+| Corpus                  | gpt2 before | gpt2 after |  gain | cl100k before | cl100k after |  gain |
+|-------------------------|------------:|-----------:|------:|--------------:|-------------:|------:|
+| `twitter.json`          |        57.1 |       59.2 | 1.04x |          65.3 |         72.3 | 1.11x |
+| `munch-python@15b2863c` |        52.4 |       52.0 | 0.99x |          63.2 |         64.1 | 1.01x |
+| `munch-cpp@15b2863c`    |        56.4 |       60.7 | 1.08x |          63.0 |         69.3 | 1.10x |
+| `gutenberg`             |        35.3 |       36.9 | 1.05x |          38.8 |         41.5 | 1.07x |
+| `wiki-zh`               |        22.4 |       24.5 | 1.09x |          12.3 |         14.0 | 1.14x |
+| `wiki-ar`               |        34.3 |       35.5 | 1.03x |          24.2 |         26.7 | 1.10x |
+| `wiki-ru`               |        31.8 |       33.6 | 1.06x |          18.1 |         20.9 | 1.15x |
+| `wiki-hi`               |        64.4 |       63.9 | 0.99x |          62.5 |         65.0 | 1.04x |
+| `wiki-sv`               |        23.1 |       24.4 | 1.06x |          17.9 |         19.7 | 1.10x |
+| `enwik8`                |        24.1 |       25.8 | 1.07x |          26.2 |         29.9 | 1.14x |
 
 The encoding with no cache:
 
-| Corpus | gpt2 before | gpt2 after | gain | cl100k before | cl100k after | gain |
-|---|---:|---:|---:|---:|---:|---:|
-| `twitter.json` | 20.1 | 22.6 | 1.12x | 42.5 | 51.5 | 1.21x |
-| `munch-python@15b2863c` | 17.1 | 18.6 | 1.09x | 41.8 | 44.4 | 1.06x |
-| `munch-cpp@15b2863c` | 17.4 | 19.6 | 1.13x | 45.5 | 52.5 | 1.15x |
-| `gutenberg` | 13.9 | 15.5 | 1.12x | 32.2 | 35.1 | 1.09x |
-| `wiki-zh` | 22.3 | 23.8 | 1.07x | 13.0 | 15.1 | 1.16x |
-| `wiki-ar` | 21.7 | 22.6 | 1.04x | 15.9 | 17.8 | 1.12x |
-| `wiki-ru` | 21.7 | 24.0 | 1.11x | 12.0 | 13.8 | 1.15x |
-| `wiki-hi` | 28.1 | 27.4 | 0.98x | 24.0 | 25.5 | 1.06x |
-| `wiki-sv` | 13.1 | 14.5 | 1.11x | 11.5 | 13.1 | 1.14x |
-| `enwik8` | 13.2 | 14.8 | 1.12x | 25.1 | 30.3 | 1.21x |
+| Corpus                  | gpt2 before | gpt2 after |  gain | cl100k before | cl100k after |  gain |
+|-------------------------|------------:|-----------:|------:|--------------:|-------------:|------:|
+| `twitter.json`          |        20.1 |       22.6 | 1.12x |          42.5 |         51.5 | 1.21x |
+| `munch-python@15b2863c` |        17.1 |       18.6 | 1.09x |          41.8 |         44.4 | 1.06x |
+| `munch-cpp@15b2863c`    |        17.4 |       19.6 | 1.13x |          45.5 |         52.5 | 1.15x |
+| `gutenberg`             |        13.9 |       15.5 | 1.12x |          32.2 |         35.1 | 1.09x |
+| `wiki-zh`               |        22.3 |       23.8 | 1.07x |          13.0 |         15.1 | 1.16x |
+| `wiki-ar`               |        21.7 |       22.6 | 1.04x |          15.9 |         17.8 | 1.12x |
+| `wiki-ru`               |        21.7 |       24.0 | 1.11x |          12.0 |         13.8 | 1.15x |
+| `wiki-hi`               |        28.1 |       27.4 | 0.98x |          24.0 |         25.5 | 1.06x |
+| `wiki-sv`               |        13.1 |       14.5 | 1.11x |          11.5 |         13.1 | 1.14x |
+| `enwik8`                |        13.2 |       14.8 | 1.12x |          25.1 |         30.3 | 1.21x |
 
 A prompt, the batch of enwik9's pages and `encode_parallel()` on enwik9, the latencies in microseconds:
 
-| Tokenizer | Row | MiB/s before | MiB/s after | gain | mean before | mean after | p99 before | p99 after |
-|---|---|---:|---:|---:|---:|---:|---:|---:|
-| gpt2 | prompts | 12.8 | 14.1 | 1.10x | 77.95 | 70.75 | 190.22 | 170.57 |
-| gpt2 | prompts kept | 20.0 | 22.8 | 1.14x | 50.10 | 43.93 | 136.07 | 113.27 |
-| cl100k | prompts | 9.7 | 12.6 | 1.30x | 103.44 | 79.56 | 259.98 | 186.44 |
-| cl100k | prompts kept | 14.4 | 17.4 | 1.21x | 69.62 | 57.41 | 202.60 | 152.37 |
+| Tokenizer | Row          | MiB/s before | MiB/s after |  gain | mean before | mean after | p99 before | p99 after |
+|-----------|--------------|-------------:|------------:|------:|------------:|-----------:|-----------:|----------:|
+| gpt2      | prompts      |         12.8 |        14.1 | 1.10x |       77.95 |      70.75 |     190.22 |    170.57 |
+| gpt2      | prompts kept |         20.0 |        22.8 | 1.14x |       50.10 |      43.93 |     136.07 |    113.27 |
+| cl100k    | prompts      |          9.7 |        12.6 | 1.30x |      103.44 |      79.56 |     259.98 |    186.44 |
+| cl100k    | prompts kept |         14.4 |        17.4 | 1.21x |       69.62 |      57.41 |     202.60 |    152.37 |
 
-| Tokenizer | Row | Before | After | gain |
-|---|---|---:|---:|---:|
-| gpt2 | batch at 1 | 20.6 | 22.5 | 1.09x |
-| cl100k | batch at 1 | 26.4 | 30.7 | 1.16x |
-| gpt2 | batch at 24 | 284.1 | 303.9 | 1.07x |
-| cl100k | batch at 24 | 388.9 | 437.2 | 1.12x |
-| gpt2 | parallel at 24 | 281.6 | 307.4 | 1.09x |
-| cl100k | parallel at 24 | 333.8 | 383.4 | 1.15x |
+| Tokenizer | Row            | Before | After |  gain |
+|-----------|----------------|-------:|------:|------:|
+| gpt2      | batch at 1     |   20.6 |  22.5 | 1.09x |
+| cl100k    | batch at 1     |   26.4 |  30.7 | 1.16x |
+| gpt2      | batch at 24    |  284.1 | 303.9 | 1.07x |
+| cl100k    | batch at 24    |  388.9 | 437.2 | 1.12x |
+| gpt2      | parallel at 24 |  281.6 | 307.4 | 1.09x |
+| cl100k    | parallel at 24 |  333.8 | 383.4 | 1.15x |
 
 `encode()` runs 0.99 to 1.09 times as fast under GPT-2, whose pair rule reads the same table, and 1.01 to 1.15 times
 under cl100k, where iteration 1's lookup by the parts' ids had cost up to 5 per cent on munch's C++ sources and enwik8;
@@ -771,51 +797,51 @@ their size, and the merge refuses a piece of 2^32 bytes or more. The references 
 20,000 random pieces of every vocabulary cut at 100 to 300 bytes and every random table with one piece of 100 to 160
 symbols, and a scan that takes the rightmost of a tie fails seven of the merge's tests. `encode()`:
 
-| Corpus | gpt2 before | gpt2 after | gain | cl100k before | cl100k after | gain |
-|---|---:|---:|---:|---:|---:|---:|
-| `twitter.json` | 59.2 | 68.0 | 1.15x | 72.3 | 84.6 | 1.17x |
-| `munch-python@15b2863c` | 52.0 | 66.6 | 1.28x | 64.1 | 76.2 | 1.19x |
-| `munch-cpp@15b2863c` | 60.7 | 66.1 | 1.09x | 69.3 | 70.0 | 1.01x |
-| `gutenberg` | 36.9 | 50.0 | 1.36x | 41.5 | 54.4 | 1.31x |
-| `wiki-zh` | 24.5 | 30.8 | 1.26x | 14.0 | 17.4 | 1.24x |
-| `wiki-ar` | 35.5 | 46.3 | 1.30x | 26.7 | 32.0 | 1.20x |
-| `wiki-ru` | 33.6 | 42.7 | 1.27x | 20.9 | 27.4 | 1.31x |
-| `wiki-hi` | 63.9 | 69.5 | 1.09x | 65.0 | 67.7 | 1.04x |
-| `wiki-sv` | 24.4 | 38.3 | 1.57x | 19.7 | 30.6 | 1.55x |
-| `enwik8` | 25.8 | 38.4 | 1.49x | 29.9 | 41.4 | 1.38x |
+| Corpus                  | gpt2 before | gpt2 after |  gain | cl100k before | cl100k after |  gain |
+|-------------------------|------------:|-----------:|------:|--------------:|-------------:|------:|
+| `twitter.json`          |        59.2 |       68.0 | 1.15x |          72.3 |         84.6 | 1.17x |
+| `munch-python@15b2863c` |        52.0 |       66.6 | 1.28x |          64.1 |         76.2 | 1.19x |
+| `munch-cpp@15b2863c`    |        60.7 |       66.1 | 1.09x |          69.3 |         70.0 | 1.01x |
+| `gutenberg`             |        36.9 |       50.0 | 1.36x |          41.5 |         54.4 | 1.31x |
+| `wiki-zh`               |        24.5 |       30.8 | 1.26x |          14.0 |         17.4 | 1.24x |
+| `wiki-ar`               |        35.5 |       46.3 | 1.30x |          26.7 |         32.0 | 1.20x |
+| `wiki-ru`               |        33.6 |       42.7 | 1.27x |          20.9 |         27.4 | 1.31x |
+| `wiki-hi`               |        63.9 |       69.5 | 1.09x |          65.0 |         67.7 | 1.04x |
+| `wiki-sv`               |        24.4 |       38.3 | 1.57x |          19.7 |         30.6 | 1.55x |
+| `enwik8`                |        25.8 |       38.4 | 1.49x |          29.9 |         41.4 | 1.38x |
 
 The encoding with no cache:
 
-| Corpus | gpt2 before | gpt2 after | gain | cl100k before | cl100k after | gain |
-|---|---:|---:|---:|---:|---:|---:|
-| `twitter.json` | 22.6 | 38.5 | 1.70x | 51.5 | 59.7 | 1.16x |
-| `munch-python@15b2863c` | 18.6 | 38.3 | 2.06x | 44.4 | 61.8 | 1.39x |
-| `munch-cpp@15b2863c` | 19.6 | 36.3 | 1.85x | 52.5 | 65.6 | 1.25x |
-| `gutenberg` | 15.5 | 31.2 | 2.01x | 35.1 | 51.4 | 1.46x |
-| `wiki-zh` | 23.8 | 32.5 | 1.37x | 15.1 | 18.6 | 1.23x |
-| `wiki-ar` | 22.6 | 34.7 | 1.54x | 17.8 | 25.3 | 1.42x |
-| `wiki-ru` | 24.0 | 33.8 | 1.41x | 13.8 | 19.5 | 1.41x |
-| `wiki-hi` | 27.4 | 43.5 | 1.59x | 25.5 | 38.9 | 1.53x |
-| `wiki-sv` | 14.5 | 27.7 | 1.91x | 13.1 | 22.9 | 1.75x |
-| `enwik8` | 14.8 | 29.5 | 1.99x | 30.3 | 42.9 | 1.42x |
+| Corpus                  | gpt2 before | gpt2 after |  gain | cl100k before | cl100k after |  gain |
+|-------------------------|------------:|-----------:|------:|--------------:|-------------:|------:|
+| `twitter.json`          |        22.6 |       38.5 | 1.70x |          51.5 |         59.7 | 1.16x |
+| `munch-python@15b2863c` |        18.6 |       38.3 | 2.06x |          44.4 |         61.8 | 1.39x |
+| `munch-cpp@15b2863c`    |        19.6 |       36.3 | 1.85x |          52.5 |         65.6 | 1.25x |
+| `gutenberg`             |        15.5 |       31.2 | 2.01x |          35.1 |         51.4 | 1.46x |
+| `wiki-zh`               |        23.8 |       32.5 | 1.37x |          15.1 |         18.6 | 1.23x |
+| `wiki-ar`               |        22.6 |       34.7 | 1.54x |          17.8 |         25.3 | 1.42x |
+| `wiki-ru`               |        24.0 |       33.8 | 1.41x |          13.8 |         19.5 | 1.41x |
+| `wiki-hi`               |        27.4 |       43.5 | 1.59x |          25.5 |         38.9 | 1.53x |
+| `wiki-sv`               |        14.5 |       27.7 | 1.91x |          13.1 |         22.9 | 1.75x |
+| `enwik8`                |        14.8 |       29.5 | 1.99x |          30.3 |         42.9 | 1.42x |
 
 A prompt, the batch of enwik9's pages and `encode_parallel()` on enwik9:
 
-| Tokenizer | Row | MiB/s before | MiB/s after | gain | mean before | mean after | p99 before | p99 after |
-|---|---|---:|---:|---:|---:|---:|---:|---:|
-| gpt2 | prompts | 14.1 | 20.1 | 1.43x | 70.75 | 49.86 | 170.57 | 113.34 |
-| gpt2 | prompts kept | 22.8 | 30.8 | 1.35x | 43.93 | 32.45 | 113.27 | 78.81 |
-| cl100k | prompts | 12.6 | 16.5 | 1.31x | 79.56 | 60.43 | 186.44 | 142.41 |
-| cl100k | prompts kept | 17.4 | 22.4 | 1.29x | 57.41 | 44.71 | 152.37 | 119.78 |
+| Tokenizer | Row          | MiB/s before | MiB/s after |  gain | mean before | mean after | p99 before | p99 after |
+|-----------|--------------|-------------:|------------:|------:|------------:|-----------:|-----------:|----------:|
+| gpt2      | prompts      |         14.1 |        20.1 | 1.43x |       70.75 |      49.86 |     170.57 |    113.34 |
+| gpt2      | prompts kept |         22.8 |        30.8 | 1.35x |       43.93 |      32.45 |     113.27 |     78.81 |
+| cl100k    | prompts      |         12.6 |        16.5 | 1.31x |       79.56 |      60.43 |     186.44 |    142.41 |
+| cl100k    | prompts kept |         17.4 |        22.4 | 1.29x |       57.41 |      44.71 |     152.37 |    119.78 |
 
-| Tokenizer | Row | Before | After | gain |
-|---|---|---:|---:|---:|
-| gpt2 | batch at 1 | 22.5 | 30.6 | 1.36x |
-| cl100k | batch at 1 | 30.7 | 39.2 | 1.28x |
-| gpt2 | batch at 24 | 303.9 | 412.0 | 1.36x |
-| cl100k | batch at 24 | 437.2 | 571.3 | 1.31x |
-| gpt2 | parallel at 24 | 307.4 | 386.7 | 1.26x |
-| cl100k | parallel at 24 | 383.4 | 456.9 | 1.19x |
+| Tokenizer | Row            | Before | After |  gain |
+|-----------|----------------|-------:|------:|------:|
+| gpt2      | batch at 1     |   22.5 |  30.6 | 1.36x |
+| cl100k    | batch at 1     |   30.7 |  39.2 | 1.28x |
+| gpt2      | batch at 24    |  303.9 | 412.0 | 1.36x |
+| cl100k    | batch at 24    |  437.2 | 571.3 | 1.31x |
+| gpt2      | parallel at 24 |  307.4 | 386.7 | 1.26x |
+| cl100k    | parallel at 24 |  383.4 | 456.9 | 1.19x |
 
 The threshold was chosen by timing the encoding with no cache at 16 to 256 bytes on six corpora and at 64 to 1,024 on
 four. Russian gains 12 and 20 per cent under GPT-2 and cl100k from 16 to 32 bytes, Chinese 6 to 9 per cent from 64 to
@@ -833,51 +859,51 @@ exactly where it does, so munch's `run()` of the product gives that alternative'
 states for GPT-2's twelve alternatives and 33 for cl100k's eight, and the segmentation fixture and the corpus digests
 hold it. `encode()`:
 
-| Corpus | gpt2 before | gpt2 after | gain | cl100k before | cl100k after | gain |
-|---|---:|---:|---:|---:|---:|---:|
-| `twitter.json` | 68.0 | 84.6 | 1.24x | 84.6 | 91.8 | 1.09x |
-| `munch-python@15b2863c` | 66.6 | 72.7 | 1.09x | 76.2 | 80.4 | 1.06x |
-| `munch-cpp@15b2863c` | 66.1 | 75.3 | 1.14x | 70.0 | 75.3 | 1.08x |
-| `gutenberg` | 50.0 | 53.8 | 1.08x | 54.4 | 54.1 | 0.99x |
-| `wiki-zh` | 30.8 | 32.7 | 1.06x | 17.4 | 17.7 | 1.02x |
-| `wiki-ar` | 46.3 | 46.3 | 1.00x | 32.0 | 33.5 | 1.05x |
-| `wiki-ru` | 42.7 | 46.0 | 1.08x | 27.4 | 27.6 | 1.01x |
-| `wiki-hi` | 69.5 | 81.0 | 1.17x | 67.7 | 67.4 | 1.00x |
-| `wiki-sv` | 38.3 | 40.9 | 1.07x | 30.6 | 31.7 | 1.04x |
-| `enwik8` | 38.4 | 40.9 | 1.07x | 41.4 | 41.4 | 1.00x |
+| Corpus                  | gpt2 before | gpt2 after |  gain | cl100k before | cl100k after |  gain |
+|-------------------------|------------:|-----------:|------:|--------------:|-------------:|------:|
+| `twitter.json`          |        68.0 |       84.6 | 1.24x |          84.6 |         91.8 | 1.09x |
+| `munch-python@15b2863c` |        66.6 |       72.7 | 1.09x |          76.2 |         80.4 | 1.06x |
+| `munch-cpp@15b2863c`    |        66.1 |       75.3 | 1.14x |          70.0 |         75.3 | 1.08x |
+| `gutenberg`             |        50.0 |       53.8 | 1.08x |          54.4 |         54.1 | 0.99x |
+| `wiki-zh`               |        30.8 |       32.7 | 1.06x |          17.4 |         17.7 | 1.02x |
+| `wiki-ar`               |        46.3 |       46.3 | 1.00x |          32.0 |         33.5 | 1.05x |
+| `wiki-ru`               |        42.7 |       46.0 | 1.08x |          27.4 |         27.6 | 1.01x |
+| `wiki-hi`               |        69.5 |       81.0 | 1.17x |          67.7 |         67.4 | 1.00x |
+| `wiki-sv`               |        38.3 |       40.9 | 1.07x |          30.6 |         31.7 | 1.04x |
+| `enwik8`                |        38.4 |       40.9 | 1.07x |          41.4 |         41.4 | 1.00x |
 
 The segmentation alone:
 
-| Corpus | gpt2 before | gpt2 after | gain | cl100k before | cl100k after | gain |
-|---|---:|---:|---:|---:|---:|---:|
-| `twitter.json` | 171.8 | 294.2 | 1.71x | 236.5 | 301.2 | 1.27x |
-| `munch-python@15b2863c` | 151.0 | 205.8 | 1.36x | 170.0 | 213.4 | 1.26x |
-| `munch-cpp@15b2863c` | 137.2 | 189.3 | 1.38x | 175.4 | 192.3 | 1.10x |
-| `gutenberg` | 140.4 | 180.5 | 1.29x | 166.5 | 194.3 | 1.17x |
-| `wiki-zh` | 297.1 | 376.2 | 1.27x | 382.2 | 381.6 | 1.00x |
-| `wiki-ar` | 174.8 | 224.0 | 1.28x | 212.4 | 227.6 | 1.07x |
-| `wiki-ru` | 204.3 | 242.6 | 1.19x | 214.8 | 239.9 | 1.12x |
-| `wiki-hi` | 160.3 | 211.9 | 1.32x | 210.3 | 237.0 | 1.13x |
-| `wiki-sv` | 163.5 | 204.7 | 1.25x | 189.7 | 209.8 | 1.11x |
-| `enwik8` | 122.7 | 156.9 | 1.28x | 142.1 | 165.4 | 1.16x |
+| Corpus                  | gpt2 before | gpt2 after |  gain | cl100k before | cl100k after |  gain |
+|-------------------------|------------:|-----------:|------:|--------------:|-------------:|------:|
+| `twitter.json`          |       171.8 |      294.2 | 1.71x |         236.5 |        301.2 | 1.27x |
+| `munch-python@15b2863c` |       151.0 |      205.8 | 1.36x |         170.0 |        213.4 | 1.26x |
+| `munch-cpp@15b2863c`    |       137.2 |      189.3 | 1.38x |         175.4 |        192.3 | 1.10x |
+| `gutenberg`             |       140.4 |      180.5 | 1.29x |         166.5 |        194.3 | 1.17x |
+| `wiki-zh`               |       297.1 |      376.2 | 1.27x |         382.2 |        381.6 | 1.00x |
+| `wiki-ar`               |       174.8 |      224.0 | 1.28x |         212.4 |        227.6 | 1.07x |
+| `wiki-ru`               |       204.3 |      242.6 | 1.19x |         214.8 |        239.9 | 1.12x |
+| `wiki-hi`               |       160.3 |      211.9 | 1.32x |         210.3 |        237.0 | 1.13x |
+| `wiki-sv`               |       163.5 |      204.7 | 1.25x |         189.7 |        209.8 | 1.11x |
+| `enwik8`                |       122.7 |      156.9 | 1.28x |         142.1 |        165.4 | 1.16x |
 
 A prompt, the batch of enwik9's pages and `encode_parallel()` on enwik9:
 
-| Tokenizer | Row | MiB/s before | MiB/s after | gain | mean before | mean after | p99 before | p99 after |
-|---|---|---:|---:|---:|---:|---:|---:|---:|
-| gpt2 | prompts | 20.1 | 19.4 | 0.97x | 49.86 | 51.61 | 113.34 | 124.10 |
-| gpt2 | prompts kept | 30.8 | 33.8 | 1.10x | 32.45 | 29.62 | 78.81 | 69.12 |
-| cl100k | prompts | 16.5 | 15.2 | 0.92x | 60.43 | 65.72 | 142.41 | 161.53 |
-| cl100k | prompts kept | 22.4 | 22.6 | 1.01x | 44.71 | 44.25 | 119.78 | 120.94 |
+| Tokenizer | Row          | MiB/s before | MiB/s after |  gain | mean before | mean after | p99 before | p99 after |
+|-----------|--------------|-------------:|------------:|------:|------------:|-----------:|-----------:|----------:|
+| gpt2      | prompts      |         20.1 |        19.4 | 0.97x |       49.86 |      51.61 |     113.34 |    124.10 |
+| gpt2      | prompts kept |         30.8 |        33.8 | 1.10x |       32.45 |      29.62 |      78.81 |     69.12 |
+| cl100k    | prompts      |         16.5 |        15.2 | 0.92x |       60.43 |      65.72 |     142.41 |    161.53 |
+| cl100k    | prompts kept |         22.4 |        22.6 | 1.01x |       44.71 |      44.25 |     119.78 |    120.94 |
 
-| Tokenizer | Row | Before | After | gain |
-|---|---|---:|---:|---:|
-| gpt2 | batch at 1 | 30.6 | 32.8 | 1.07x |
-| cl100k | batch at 1 | 39.2 | 41.0 | 1.05x |
-| gpt2 | batch at 24 | 412.0 | 450.5 | 1.09x |
-| cl100k | batch at 24 | 571.3 | 589.0 | 1.03x |
-| gpt2 | parallel at 24 | 386.7 | 433.4 | 1.12x |
-| cl100k | parallel at 24 | 456.9 | 470.2 | 1.03x |
+| Tokenizer | Row            | Before | After |  gain |
+|-----------|----------------|-------:|------:|------:|
+| gpt2      | batch at 1     |   30.6 |  32.8 | 1.07x |
+| cl100k    | batch at 1     |   39.2 |  41.0 | 1.05x |
+| gpt2      | batch at 24    |  412.0 | 450.5 | 1.09x |
+| cl100k    | batch at 24    |  571.3 | 589.0 | 1.03x |
+| gpt2      | parallel at 24 |  386.7 | 433.4 | 1.12x |
+| cl100k    | parallel at 24 |  456.9 | 470.2 | 1.03x |
 
 The segmentation runs 1.19 to 1.71 times as fast under GPT-2, whose seven contractions were each tried and failed at the
 first symbol of nearly every piece, and 1.00 to 1.27 times under cl100k; `encode()` gains up to 1.24 times on
@@ -891,28 +917,28 @@ kept cache's at 0.96 to 1.06.
 at `-O3`, with link-time optimization (`CMAKE_INTERPROCEDURAL_OPTIMIZATION`), and with both, each build's ids equal to
 the digests on the five corpora:
 
-| Corpus | Tokenizer | Release, `-O2` | `-O3` | gain | LTO | gain | `-O3` and LTO | gain |
-|---|---|---:|---:|---:|---:|---:|---:|---:|
-| `twitter.json` | gpt2 | 83.6 | 85.3 | 1.02x | 83.3 | 1.00x | 91.3 | 1.09x |
-| `twitter.json` | cl100k | 88.0 | 85.2 | 0.97x | 88.9 | 1.01x | 87.1 | 0.99x |
-| `munch-python@15b2863c` | gpt2 | 72.7 | 76.0 | 1.05x | 68.7 | 0.94x | 72.0 | 0.99x |
-| `munch-python@15b2863c` | cl100k | 80.1 | 81.4 | 1.02x | 77.7 | 0.97x | 78.8 | 0.98x |
-| `munch-cpp@15b2863c` | gpt2 | 76.2 | 77.5 | 1.02x | 70.1 | 0.92x | 79.4 | 1.04x |
-| `munch-cpp@15b2863c` | cl100k | 79.2 | 79.4 | 1.00x | 74.7 | 0.94x | 79.4 | 1.00x |
-| `gutenberg` | gpt2 | 55.7 | 58.0 | 1.04x | 53.0 | 0.95x | 57.3 | 1.03x |
-| `gutenberg` | cl100k | 55.1 | 56.6 | 1.03x | 54.7 | 0.99x | 54.4 | 0.99x |
-| `wiki-zh` | gpt2 | 32.2 | 32.4 | 1.01x | 31.6 | 0.98x | 31.8 | 0.99x |
-| `wiki-zh` | cl100k | 17.6 | 17.8 | 1.01x | 17.2 | 0.98x | 17.5 | 0.99x |
-| `wiki-ar` | gpt2 | 49.3 | 51.1 | 1.04x | 48.6 | 0.99x | 52.6 | 1.07x |
-| `wiki-ar` | cl100k | 34.4 | 34.8 | 1.01x | 33.9 | 0.99x | 35.4 | 1.03x |
-| `wiki-ru` | gpt2 | 45.5 | 46.8 | 1.03x | 45.3 | 1.00x | 46.3 | 1.02x |
-| `wiki-ru` | cl100k | 27.5 | 27.7 | 1.01x | 27.2 | 0.99x | 27.2 | 0.99x |
-| `wiki-hi` | gpt2 | 80.2 | 85.9 | 1.07x | 76.4 | 0.95x | 90.5 | 1.13x |
-| `wiki-hi` | cl100k | 70.3 | 73.6 | 1.05x | 69.4 | 0.99x | 77.7 | 1.11x |
-| `wiki-sv` | gpt2 | 41.3 | 42.3 | 1.02x | 39.9 | 0.97x | 41.3 | 1.00x |
-| `wiki-sv` | cl100k | 31.4 | 32.0 | 1.02x | 30.6 | 0.97x | 30.9 | 0.98x |
-| `enwik8` | gpt2 | 42.1 | 43.2 | 1.03x | 40.3 | 0.96x | 41.7 | 0.99x |
-| `enwik8` | cl100k | 43.1 | 43.4 | 1.01x | 42.3 | 0.98x | 42.8 | 0.99x |
+| Corpus                  | Tokenizer | Release, `-O2` | `-O3` |  gain |  LTO |  gain | `-O3` and LTO |  gain |
+|-------------------------|-----------|---------------:|------:|------:|-----:|------:|--------------:|------:|
+| `twitter.json`          | gpt2      |           83.6 |  85.3 | 1.02x | 83.3 | 1.00x |          91.3 | 1.09x |
+| `twitter.json`          | cl100k    |           88.0 |  85.2 | 0.97x | 88.9 | 1.01x |          87.1 | 0.99x |
+| `munch-python@15b2863c` | gpt2      |           72.7 |  76.0 | 1.05x | 68.7 | 0.94x |          72.0 | 0.99x |
+| `munch-python@15b2863c` | cl100k    |           80.1 |  81.4 | 1.02x | 77.7 | 0.97x |          78.8 | 0.98x |
+| `munch-cpp@15b2863c`    | gpt2      |           76.2 |  77.5 | 1.02x | 70.1 | 0.92x |          79.4 | 1.04x |
+| `munch-cpp@15b2863c`    | cl100k    |           79.2 |  79.4 | 1.00x | 74.7 | 0.94x |          79.4 | 1.00x |
+| `gutenberg`             | gpt2      |           55.7 |  58.0 | 1.04x | 53.0 | 0.95x |          57.3 | 1.03x |
+| `gutenberg`             | cl100k    |           55.1 |  56.6 | 1.03x | 54.7 | 0.99x |          54.4 | 0.99x |
+| `wiki-zh`               | gpt2      |           32.2 |  32.4 | 1.01x | 31.6 | 0.98x |          31.8 | 0.99x |
+| `wiki-zh`               | cl100k    |           17.6 |  17.8 | 1.01x | 17.2 | 0.98x |          17.5 | 0.99x |
+| `wiki-ar`               | gpt2      |           49.3 |  51.1 | 1.04x | 48.6 | 0.99x |          52.6 | 1.07x |
+| `wiki-ar`               | cl100k    |           34.4 |  34.8 | 1.01x | 33.9 | 0.99x |          35.4 | 1.03x |
+| `wiki-ru`               | gpt2      |           45.5 |  46.8 | 1.03x | 45.3 | 1.00x |          46.3 | 1.02x |
+| `wiki-ru`               | cl100k    |           27.5 |  27.7 | 1.01x | 27.2 | 0.99x |          27.2 | 0.99x |
+| `wiki-hi`               | gpt2      |           80.2 |  85.9 | 1.07x | 76.4 | 0.95x |          90.5 | 1.13x |
+| `wiki-hi`               | cl100k    |           70.3 |  73.6 | 1.05x | 69.4 | 0.99x |          77.7 | 1.11x |
+| `wiki-sv`               | gpt2      |           41.3 |  42.3 | 1.02x | 39.9 | 0.97x |          41.3 | 1.00x |
+| `wiki-sv`               | cl100k    |           31.4 |  32.0 | 1.02x | 30.6 | 0.97x |          30.9 | 0.98x |
+| `enwik8`                | gpt2      |           42.1 |  43.2 | 1.03x | 40.3 | 0.96x |          41.7 | 0.99x |
+| `enwik8`                | cl100k    |           43.1 |  43.4 | 1.01x | 42.3 | 0.98x |          42.8 | 0.99x |
 
 Link-time optimization is slower on most corpora, by up to 8 per cent on munch's C++ sources under GPT-2, and with `-O3`
 beside it measures 0.98 to 1.13, gaining 7 to 13 per cent on Hindi under both tokenizers and on `twitter.json` and
@@ -927,51 +953,51 @@ Every part of a piece is a byte to begin with, so the merge reads its first pair
 bytes, from a table of the joins of all 65,536 pairs of bytes, 512 KiB filled from the join table at construction, and
 looks only the pairs the joins make up in the join table. The scan and the heap both read it. `encode()`:
 
-| Corpus | gpt2 before | gpt2 after | gain | cl100k before | cl100k after | gain |
-|---|---:|---:|---:|---:|---:|---:|
-| `twitter.json` | 84.6 | 87.2 | 1.03x | 91.8 | 92.6 | 1.01x |
-| `munch-python@15b2863c` | 72.7 | 75.2 | 1.03x | 80.4 | 79.6 | 0.99x |
-| `munch-cpp@15b2863c` | 75.3 | 76.4 | 1.01x | 75.3 | 79.8 | 1.06x |
-| `gutenberg` | 53.8 | 57.4 | 1.07x | 54.1 | 54.8 | 1.01x |
-| `wiki-zh` | 32.7 | 39.2 | 1.20x | 17.7 | 20.6 | 1.16x |
-| `wiki-ar` | 46.3 | 56.2 | 1.21x | 33.5 | 36.8 | 1.10x |
-| `wiki-ru` | 46.0 | 51.9 | 1.13x | 27.6 | 30.0 | 1.09x |
-| `wiki-hi` | 81.0 | 81.1 | 1.00x | 67.4 | 71.4 | 1.06x |
-| `wiki-sv` | 40.9 | 44.5 | 1.09x | 31.7 | 33.5 | 1.06x |
-| `enwik8` | 40.9 | 44.5 | 1.09x | 41.4 | 43.8 | 1.06x |
+| Corpus                  | gpt2 before | gpt2 after |  gain | cl100k before | cl100k after |  gain |
+|-------------------------|------------:|-----------:|------:|--------------:|-------------:|------:|
+| `twitter.json`          |        84.6 |       87.2 | 1.03x |          91.8 |         92.6 | 1.01x |
+| `munch-python@15b2863c` |        72.7 |       75.2 | 1.03x |          80.4 |         79.6 | 0.99x |
+| `munch-cpp@15b2863c`    |        75.3 |       76.4 | 1.01x |          75.3 |         79.8 | 1.06x |
+| `gutenberg`             |        53.8 |       57.4 | 1.07x |          54.1 |         54.8 | 1.01x |
+| `wiki-zh`               |        32.7 |       39.2 | 1.20x |          17.7 |         20.6 | 1.16x |
+| `wiki-ar`               |        46.3 |       56.2 | 1.21x |          33.5 |         36.8 | 1.10x |
+| `wiki-ru`               |        46.0 |       51.9 | 1.13x |          27.6 |         30.0 | 1.09x |
+| `wiki-hi`               |        81.0 |       81.1 | 1.00x |          67.4 |         71.4 | 1.06x |
+| `wiki-sv`               |        40.9 |       44.5 | 1.09x |          31.7 |         33.5 | 1.06x |
+| `enwik8`                |        40.9 |       44.5 | 1.09x |          41.4 |         43.8 | 1.06x |
 
 The encoding with no cache:
 
-| Corpus | gpt2 before | gpt2 after | gain | cl100k before | cl100k after | gain |
-|---|---:|---:|---:|---:|---:|---:|
-| `twitter.json` | 45.3 | 51.8 | 1.14x | 66.0 | 69.6 | 1.05x |
-| `munch-python@15b2863c` | 40.4 | 48.4 | 1.20x | 68.6 | 72.3 | 1.05x |
-| `munch-cpp@15b2863c` | 40.4 | 43.2 | 1.07x | 65.4 | 71.2 | 1.09x |
-| `gutenberg` | 31.6 | 37.2 | 1.18x | 53.1 | 54.7 | 1.03x |
-| `wiki-zh` | 34.9 | 45.2 | 1.30x | 18.6 | 21.7 | 1.17x |
-| `wiki-ar` | 35.2 | 44.8 | 1.27x | 25.5 | 28.4 | 1.11x |
-| `wiki-ru` | 35.0 | 42.5 | 1.21x | 19.9 | 22.7 | 1.14x |
-| `wiki-hi` | 46.9 | 53.3 | 1.14x | 39.5 | 46.4 | 1.17x |
-| `wiki-sv` | 28.8 | 34.8 | 1.21x | 24.6 | 27.4 | 1.11x |
-| `enwik8` | 30.9 | 35.7 | 1.16x | 45.3 | 47.6 | 1.05x |
+| Corpus                  | gpt2 before | gpt2 after |  gain | cl100k before | cl100k after |  gain |
+|-------------------------|------------:|-----------:|------:|--------------:|-------------:|------:|
+| `twitter.json`          |        45.3 |       51.8 | 1.14x |          66.0 |         69.6 | 1.05x |
+| `munch-python@15b2863c` |        40.4 |       48.4 | 1.20x |          68.6 |         72.3 | 1.05x |
+| `munch-cpp@15b2863c`    |        40.4 |       43.2 | 1.07x |          65.4 |         71.2 | 1.09x |
+| `gutenberg`             |        31.6 |       37.2 | 1.18x |          53.1 |         54.7 | 1.03x |
+| `wiki-zh`               |        34.9 |       45.2 | 1.30x |          18.6 |         21.7 | 1.17x |
+| `wiki-ar`               |        35.2 |       44.8 | 1.27x |          25.5 |         28.4 | 1.11x |
+| `wiki-ru`               |        35.0 |       42.5 | 1.21x |          19.9 |         22.7 | 1.14x |
+| `wiki-hi`               |        46.9 |       53.3 | 1.14x |          39.5 |         46.4 | 1.17x |
+| `wiki-sv`               |        28.8 |       34.8 | 1.21x |          24.6 |         27.4 | 1.11x |
+| `enwik8`                |        30.9 |       35.7 | 1.16x |          45.3 |         47.6 | 1.05x |
 
 A prompt, the batch of enwik9's pages and `encode_parallel()` on enwik9:
 
-| Tokenizer | Row | MiB/s before | MiB/s after | gain | mean before | mean after | p99 before | p99 after |
-|---|---|---:|---:|---:|---:|---:|---:|---:|
-| gpt2 | prompts | 19.4 | 23.8 | 1.23x | 51.61 | 42.03 | 124.10 | 96.94 |
-| gpt2 | prompts kept | 33.8 | 38.9 | 1.15x | 29.62 | 25.74 | 69.12 | 62.57 |
-| cl100k | prompts | 15.2 | 18.2 | 1.20x | 65.72 | 54.99 | 161.53 | 130.61 |
-| cl100k | prompts kept | 22.6 | 25.7 | 1.14x | 44.25 | 38.91 | 120.94 | 100.32 |
+| Tokenizer | Row          | MiB/s before | MiB/s after |  gain | mean before | mean after | p99 before | p99 after |
+|-----------|--------------|-------------:|------------:|------:|------------:|-----------:|-----------:|----------:|
+| gpt2      | prompts      |         19.4 |        23.8 | 1.23x |       51.61 |      42.03 |     124.10 |     96.94 |
+| gpt2      | prompts kept |         33.8 |        38.9 | 1.15x |       29.62 |      25.74 |      69.12 |     62.57 |
+| cl100k    | prompts      |         15.2 |        18.2 | 1.20x |       65.72 |      54.99 |     161.53 |    130.61 |
+| cl100k    | prompts kept |         22.6 |        25.7 | 1.14x |       44.25 |      38.91 |     120.94 |    100.32 |
 
-| Tokenizer | Row | Before | After | gain |
-|---|---|---:|---:|---:|
-| gpt2 | batch at 1 | 32.8 | 34.3 | 1.05x |
-| cl100k | batch at 1 | 41.0 | 42.9 | 1.05x |
-| gpt2 | batch at 24 | 450.5 | 462.8 | 1.03x |
-| cl100k | batch at 24 | 589.0 | 625.8 | 1.06x |
-| gpt2 | parallel at 24 | 433.4 | 438.9 | 1.01x |
-| cl100k | parallel at 24 | 470.2 | 483.8 | 1.03x |
+| Tokenizer | Row            | Before | After |  gain |
+|-----------|----------------|-------:|------:|------:|
+| gpt2      | batch at 1     |   32.8 |  34.3 | 1.05x |
+| cl100k    | batch at 1     |   41.0 |  42.9 | 1.05x |
+| gpt2      | batch at 24    |  450.5 | 462.8 | 1.03x |
+| cl100k    | batch at 24    |  589.0 | 625.8 | 1.06x |
+| gpt2      | parallel at 24 |  433.4 | 438.9 | 1.01x |
+| cl100k    | parallel at 24 |  470.2 | 483.8 | 1.03x |
 
 On Chinese, where nearly every piece is merged, `encode()` runs 1.20 and 1.16 times as fast under GPT-2 and cl100k, and
 the encoding with no cache 1.07 to 1.30 times under GPT-2 and 1.03 to 1.17 under cl100k.
@@ -985,36 +1011,36 @@ when the pieces fill half of them, so a call that stores nothing takes no memory
 compares bytes only in a slot of the same hash and length. A piece's ids are valid until the next store, which every
 caller reads before. `encode()`:
 
-| Corpus | gpt2 before | gpt2 after | gain | cl100k before | cl100k after | gain |
-|---|---:|---:|---:|---:|---:|---:|
-| `twitter.json` | 87.2 | 103.0 | 1.18x | 92.6 | 96.2 | 1.04x |
-| `munch-python@15b2863c` | 75.2 | 86.1 | 1.14x | 79.6 | 84.9 | 1.07x |
-| `munch-cpp@15b2863c` | 76.4 | 85.8 | 1.12x | 79.8 | 76.1 | 0.95x |
-| `gutenberg` | 57.4 | 66.5 | 1.16x | 54.8 | 56.3 | 1.03x |
-| `wiki-zh` | 39.2 | 44.4 | 1.13x | 20.6 | 21.7 | 1.05x |
-| `wiki-ar` | 56.2 | 63.1 | 1.12x | 36.8 | 37.1 | 1.01x |
-| `wiki-ru` | 51.9 | 57.7 | 1.11x | 30.0 | 32.0 | 1.07x |
-| `wiki-hi` | 81.1 | 92.0 | 1.13x | 71.4 | 75.3 | 1.05x |
-| `wiki-sv` | 44.5 | 50.3 | 1.13x | 33.5 | 36.0 | 1.07x |
-| `enwik8` | 44.5 | 50.8 | 1.14x | 43.8 | 46.7 | 1.07x |
+| Corpus                  | gpt2 before | gpt2 after |  gain | cl100k before | cl100k after |  gain |
+|-------------------------|------------:|-----------:|------:|--------------:|-------------:|------:|
+| `twitter.json`          |        87.2 |      103.0 | 1.18x |          92.6 |         96.2 | 1.04x |
+| `munch-python@15b2863c` |        75.2 |       86.1 | 1.14x |          79.6 |         84.9 | 1.07x |
+| `munch-cpp@15b2863c`    |        76.4 |       85.8 | 1.12x |          79.8 |         76.1 | 0.95x |
+| `gutenberg`             |        57.4 |       66.5 | 1.16x |          54.8 |         56.3 | 1.03x |
+| `wiki-zh`               |        39.2 |       44.4 | 1.13x |          20.6 |         21.7 | 1.05x |
+| `wiki-ar`               |        56.2 |       63.1 | 1.12x |          36.8 |         37.1 | 1.01x |
+| `wiki-ru`               |        51.9 |       57.7 | 1.11x |          30.0 |         32.0 | 1.07x |
+| `wiki-hi`               |        81.1 |       92.0 | 1.13x |          71.4 |         75.3 | 1.05x |
+| `wiki-sv`               |        44.5 |       50.3 | 1.13x |          33.5 |         36.0 | 1.07x |
+| `enwik8`                |        44.5 |       50.8 | 1.14x |          43.8 |         46.7 | 1.07x |
 
 A prompt, the batch of enwik9's pages and `encode_parallel()` on enwik9:
 
-| Tokenizer | Row | MiB/s before | MiB/s after | gain | mean before | mean after | p99 before | p99 after |
-|---|---|---:|---:|---:|---:|---:|---:|---:|
-| gpt2 | prompts | 23.8 | 33.1 | 1.39x | 42.03 | 30.25 | 96.94 | 69.22 |
-| gpt2 | prompts kept | 38.9 | 45.8 | 1.18x | 25.74 | 21.86 | 62.57 | 51.45 |
-| cl100k | prompts | 18.2 | 22.5 | 1.24x | 54.99 | 44.37 | 130.61 | 107.54 |
-| cl100k | prompts kept | 25.7 | 26.7 | 1.04x | 38.91 | 37.52 | 100.32 | 102.43 |
+| Tokenizer | Row          | MiB/s before | MiB/s after |  gain | mean before | mean after | p99 before | p99 after |
+|-----------|--------------|-------------:|------------:|------:|------------:|-----------:|-----------:|----------:|
+| gpt2      | prompts      |         23.8 |        33.1 | 1.39x |       42.03 |      30.25 |      96.94 |     69.22 |
+| gpt2      | prompts kept |         38.9 |        45.8 | 1.18x |       25.74 |      21.86 |      62.57 |     51.45 |
+| cl100k    | prompts      |         18.2 |        22.5 | 1.24x |       54.99 |      44.37 |     130.61 |    107.54 |
+| cl100k    | prompts kept |         25.7 |        26.7 | 1.04x |       38.91 |      37.52 |     100.32 |    102.43 |
 
-| Tokenizer | Row | Before | After | gain |
-|---|---|---:|---:|---:|
-| gpt2 | batch at 1 | 34.3 | 56.9 | 1.66x |
-| cl100k | batch at 1 | 42.9 | 52.5 | 1.22x |
-| gpt2 | batch at 24 | 462.8 | 782.3 | 1.69x |
-| cl100k | batch at 24 | 625.8 | 722.1 | 1.15x |
-| gpt2 | parallel at 24 | 438.9 | 570.0 | 1.30x |
-| cl100k | parallel at 24 | 483.8 | 520.6 | 1.08x |
+| Tokenizer | Row            | Before | After |  gain |
+|-----------|----------------|-------:|------:|------:|
+| gpt2      | batch at 1     |   34.3 |  56.9 | 1.66x |
+| cl100k    | batch at 1     |   42.9 |  52.5 | 1.22x |
+| gpt2      | batch at 24    |  462.8 | 782.3 | 1.69x |
+| cl100k    | batch at 24    |  625.8 | 722.1 | 1.15x |
+| gpt2      | parallel at 24 |  438.9 | 570.0 | 1.30x |
+| cl100k    | parallel at 24 |  483.8 | 520.6 | 1.08x |
 
 GPT-2, which looks no piece up whole and so finds every repeated piece in the cache, runs `encode()` 1.11 to 1.18 times
 as fast, its batch 1.66 and 1.69 times on 1 and 24 threads, and a prompt with a cache of its own 1.39 times, a call's
@@ -1029,51 +1055,51 @@ where it was a `std::unordered_map` of strings to ids. The whole-piece lookup an
 read it, and its test holds it to a map that keeps the first id of every spelling on 20,000 random spellings.
 `encode()`:
 
-| Corpus | gpt2 before | gpt2 after | gain | cl100k before | cl100k after | gain |
-|---|---:|---:|---:|---:|---:|---:|
-| `twitter.json` | 103.0 | 98.2 | 0.95x | 96.2 | 103.5 | 1.08x |
-| `munch-python@15b2863c` | 86.1 | 85.3 | 0.99x | 84.9 | 96.8 | 1.14x |
-| `munch-cpp@15b2863c` | 85.8 | 86.3 | 1.01x | 76.1 | 89.4 | 1.17x |
-| `gutenberg` | 66.5 | 65.0 | 0.98x | 56.3 | 72.0 | 1.28x |
-| `wiki-zh` | 44.4 | 44.1 | 0.99x | 21.7 | 23.7 | 1.09x |
-| `wiki-ar` | 63.1 | 63.4 | 1.00x | 37.1 | 43.7 | 1.18x |
-| `wiki-ru` | 57.7 | 58.2 | 1.01x | 32.0 | 35.8 | 1.12x |
-| `wiki-hi` | 92.0 | 97.7 | 1.06x | 75.3 | 89.4 | 1.19x |
-| `wiki-sv` | 50.3 | 48.7 | 0.97x | 36.0 | 42.1 | 1.17x |
-| `enwik8` | 50.8 | 48.9 | 0.96x | 46.7 | 57.1 | 1.22x |
+| Corpus                  | gpt2 before | gpt2 after |  gain | cl100k before | cl100k after |  gain |
+|-------------------------|------------:|-----------:|------:|--------------:|-------------:|------:|
+| `twitter.json`          |       103.0 |       98.2 | 0.95x |          96.2 |        103.5 | 1.08x |
+| `munch-python@15b2863c` |        86.1 |       85.3 | 0.99x |          84.9 |         96.8 | 1.14x |
+| `munch-cpp@15b2863c`    |        85.8 |       86.3 | 1.01x |          76.1 |         89.4 | 1.17x |
+| `gutenberg`             |        66.5 |       65.0 | 0.98x |          56.3 |         72.0 | 1.28x |
+| `wiki-zh`               |        44.4 |       44.1 | 0.99x |          21.7 |         23.7 | 1.09x |
+| `wiki-ar`               |        63.1 |       63.4 | 1.00x |          37.1 |         43.7 | 1.18x |
+| `wiki-ru`               |        57.7 |       58.2 | 1.01x |          32.0 |         35.8 | 1.12x |
+| `wiki-hi`               |        92.0 |       97.7 | 1.06x |          75.3 |         89.4 | 1.19x |
+| `wiki-sv`               |        50.3 |       48.7 | 0.97x |          36.0 |         42.1 | 1.17x |
+| `enwik8`                |        50.8 |       48.9 | 0.96x |          46.7 |         57.1 | 1.22x |
 
 The encoding with no cache:
 
-| Corpus | gpt2 before | gpt2 after | gain | cl100k before | cl100k after | gain |
-|---|---:|---:|---:|---:|---:|---:|
-| `twitter.json` | 51.5 | 51.8 | 1.01x | 70.9 | 76.6 | 1.08x |
-| `munch-python@15b2863c` | 47.0 | 47.9 | 1.02x | 72.8 | 83.3 | 1.14x |
-| `munch-cpp@15b2863c` | 45.4 | 45.0 | 0.99x | 72.7 | 80.4 | 1.11x |
-| `gutenberg` | 38.3 | 37.5 | 0.98x | 50.6 | 62.5 | 1.24x |
-| `wiki-zh` | 45.1 | 46.7 | 1.04x | 22.0 | 24.0 | 1.09x |
-| `wiki-ar` | 46.2 | 45.9 | 0.99x | 27.2 | 32.8 | 1.21x |
-| `wiki-ru` | 40.3 | 43.2 | 1.07x | 22.1 | 24.4 | 1.10x |
-| `wiki-hi` | 51.0 | 53.3 | 1.05x | 45.7 | 50.7 | 1.11x |
-| `wiki-sv` | 34.0 | 34.8 | 1.02x | 27.7 | 31.7 | 1.14x |
-| `enwik8` | 35.1 | 35.2 | 1.00x | 46.6 | 55.7 | 1.20x |
+| Corpus                  | gpt2 before | gpt2 after |  gain | cl100k before | cl100k after |  gain |
+|-------------------------|------------:|-----------:|------:|--------------:|-------------:|------:|
+| `twitter.json`          |        51.5 |       51.8 | 1.01x |          70.9 |         76.6 | 1.08x |
+| `munch-python@15b2863c` |        47.0 |       47.9 | 1.02x |          72.8 |         83.3 | 1.14x |
+| `munch-cpp@15b2863c`    |        45.4 |       45.0 | 0.99x |          72.7 |         80.4 | 1.11x |
+| `gutenberg`             |        38.3 |       37.5 | 0.98x |          50.6 |         62.5 | 1.24x |
+| `wiki-zh`               |        45.1 |       46.7 | 1.04x |          22.0 |         24.0 | 1.09x |
+| `wiki-ar`               |        46.2 |       45.9 | 0.99x |          27.2 |         32.8 | 1.21x |
+| `wiki-ru`               |        40.3 |       43.2 | 1.07x |          22.1 |         24.4 | 1.10x |
+| `wiki-hi`               |        51.0 |       53.3 | 1.05x |          45.7 |         50.7 | 1.11x |
+| `wiki-sv`               |        34.0 |       34.8 | 1.02x |          27.7 |         31.7 | 1.14x |
+| `enwik8`                |        35.1 |       35.2 | 1.00x |          46.6 |         55.7 | 1.20x |
 
 A prompt, the batch of enwik9's pages and `encode_parallel()` on enwik9:
 
-| Tokenizer | Row | MiB/s before | MiB/s after | gain | mean before | mean after | p99 before | p99 after |
-|---|---|---:|---:|---:|---:|---:|---:|---:|
-| gpt2 | prompts | 33.1 | 33.6 | 1.02x | 30.25 | 29.74 | 69.22 | 67.13 |
-| gpt2 | prompts kept | 45.8 | 46.3 | 1.01x | 21.86 | 21.62 | 51.45 | 50.98 |
-| cl100k | prompts | 22.5 | 25.5 | 1.13x | 44.37 | 39.24 | 107.54 | 98.59 |
-| cl100k | prompts kept | 26.7 | 31.9 | 1.19x | 37.52 | 31.38 | 102.43 | 89.66 |
+| Tokenizer | Row          | MiB/s before | MiB/s after |  gain | mean before | mean after | p99 before | p99 after |
+|-----------|--------------|-------------:|------------:|------:|------------:|-----------:|-----------:|----------:|
+| gpt2      | prompts      |         33.1 |        33.6 | 1.02x |       30.25 |      29.74 |      69.22 |     67.13 |
+| gpt2      | prompts kept |         45.8 |        46.3 | 1.01x |       21.86 |      21.62 |      51.45 |     50.98 |
+| cl100k    | prompts      |         22.5 |        25.5 | 1.13x |       44.37 |      39.24 |     107.54 |     98.59 |
+| cl100k    | prompts kept |         26.7 |        31.9 | 1.19x |       37.52 |      31.38 |     102.43 |     89.66 |
 
-| Tokenizer | Row | Before | After | gain |
-|---|---|---:|---:|---:|
-| gpt2 | batch at 1 | 56.9 | 59.2 | 1.04x |
-| cl100k | batch at 1 | 52.5 | 63.9 | 1.22x |
-| gpt2 | batch at 24 | 782.3 | 775.3 | 0.99x |
-| cl100k | batch at 24 | 722.1 | 855.9 | 1.19x |
-| gpt2 | parallel at 24 | 570.0 | 543.5 | 0.95x |
-| cl100k | parallel at 24 | 520.6 | 602.0 | 1.16x |
+| Tokenizer | Row            | Before | After |  gain |
+|-----------|----------------|-------:|------:|------:|
+| gpt2      | batch at 1     |   56.9 |  59.2 | 1.04x |
+| cl100k    | batch at 1     |   52.5 |  63.9 | 1.22x |
+| gpt2      | batch at 24    |  782.3 | 775.3 | 0.99x |
+| cl100k    | batch at 24    |  722.1 | 855.9 | 1.19x |
+| gpt2      | parallel at 24 |  570.0 | 543.5 | 0.95x |
+| cl100k    | parallel at 24 |  520.6 | 602.0 | 1.16x |
 
 cl100k, which looks most pieces up whole, runs `encode()` 1.08 to 1.28 times as fast and its batch 1.22 and 1.19 times;
 GPT-2's `encode()`, which looks no piece up whole, moves by 0.95 to 1.06.
@@ -1084,16 +1110,16 @@ The profile of the standing build, recorded as the profile section's, per cent o
 merge counts the join table and both merge paths with it, the whole-piece lookup the spelling table, and the classes
 `Class_table`:
 
-| Component | gpt2 `gutenberg` | gpt2 `munch-cpp@15b2863c` | gpt2 `wiki-zh` | cl100k `gutenberg` | cl100k `munch-cpp@15b2863c` | cl100k `wiki-zh` |
-|---|---:|---:|---:|---:|---:|---:|
-| merge | 26.1 | 7.5 | 72.0 | 20.3 | 8.8 | 80.0 |
-| piece cache | 18.7 | 19.2 | 6.6 | 4.2 | 2.6 | 1.5 |
-| whole-piece lookup | 5.7 | 8.6 | 1.2 | 29.2 | 32.2 | 8.1 |
-| DFA walk | 19.3 | 25.7 | 3.0 | 19.3 | 25.9 | 1.3 |
-| segmenter loop | 8.1 | 8.3 | 3.1 | 8.4 | 8.7 | 1.8 |
-| classes | 6.3 | 7.7 | 5.2 | 6.9 | 8.4 | 2.7 |
-| id output | 14.7 | 22.8 | 7.5 | 11.2 | 13.3 | 3.6 |
-| allocation | 1.0 | 0.3 | 1.4 | 0.5 | 0.1 | 1.0 |
+| Component          | gpt2 `gutenberg` | gpt2 `munch-cpp@15b2863c` | gpt2 `wiki-zh` | cl100k `gutenberg` | cl100k `munch-cpp@15b2863c` | cl100k `wiki-zh` |
+|--------------------|-----------------:|--------------------------:|---------------:|-------------------:|----------------------------:|-----------------:|
+| merge              |             26.1 |                       7.5 |           72.0 |               20.3 |                         8.8 |             80.0 |
+| piece cache        |             18.7 |                      19.2 |            6.6 |                4.2 |                         2.6 |              1.5 |
+| whole-piece lookup |              5.7 |                       8.6 |            1.2 |               29.2 |                        32.2 |              8.1 |
+| DFA walk           |             19.3 |                      25.7 |            3.0 |               19.3 |                        25.9 |              1.3 |
+| segmenter loop     |              8.1 |                       8.3 |            3.1 |                8.4 |                         8.7 |              1.8 |
+| classes            |              6.3 |                       7.7 |            5.2 |                6.9 |                         8.4 |              2.7 |
+| id output          |             14.7 |                      22.8 |            7.5 |               11.2 |                        13.3 |              3.6 |
+| allocation         |              1.0 |                       0.3 |            1.4 |                0.5 |                         0.1 |              1.0 |
 
 The merge holds Chinese, 72 and 80 per cent, most of it the join table's lookups and the scan; on the prose and the code
 the automaton's walk takes 19 to 26 per cent, the whole-piece lookup under cl100k 29 to 32 and the piece cache under
@@ -1106,35 +1132,35 @@ the best in parentheses, and matisse's `encode()` over each:
 
 gpt2:
 
-| Corpus | matisse `encode()` | no cache | segmentation | tiktoken | bpe | Hugging Face, 2026-10-20 | over tiktoken | over bpe |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|
-| `twitter.json` | 101.5 (105.1) | 51.2 (52.1) | 277.6 (285.1) | 17.9 (18.5) | 50.5 (52.0) | 2.1 (2.8) | 5.67x | 2.01x |
-| `munch-python@15b2863c` | 80.6 (83.5) | 46.2 (46.9) | 192.4 (198.7) | 21.6 (22.0) | 56.1 (57.2) | 2.9 (3.4) | 3.73x | 1.44x |
-| `munch-cpp@15b2863c` | 82.0 (84.0) | 44.0 (44.7) | 182.2 (185.7) | 19.7 (20.3) | 52.6 (53.7) | 1.9 (2.3) | 4.16x | 1.56x |
-| `gutenberg` | 64.9 (65.7) | 37.3 (38.5) | 180.8 (183.4) | 23.9 (24.7) | 53.8 (55.5) | 1.9 (2.3) | 2.72x | 1.21x |
-| `wiki-zh` | 44.1 (45.3) | 45.2 (46.3) | 371.8 (377.8) | 23.4 (23.9) | 37.8 (38.8) | 2.2 (2.6) | 1.88x | 1.17x |
-| `wiki-ar` | 60.8 (61.6) | 44.3 (45.5) | 205.6 (207.5) | 22.8 (23.5) | 45.5 (46.0) | 2.0 (2.3) | 2.67x | 1.34x |
-| `wiki-ru` | 57.0 (58.0) | 42.3 (43.3) | 226.9 (230.2) | 25.1 (25.5) | 46.7 (47.6) | 2.2 (2.5) | 2.27x | 1.22x |
-| `wiki-hi` | 95.3 (97.7) | 52.1 (52.6) | 200.9 (203.0) | 18.5 (18.8) | 52.8 (53.7) | 1.8 (2.2) | 5.15x | 1.80x |
-| `wiki-sv` | 48.7 (51.0) | 34.8 (35.3) | 200.0 (203.9) | 20.4 (21.0) | 30.7 (31.5) | 2.0 (2.3) | 2.39x | 1.59x |
-| `enwik8` | 48.9 (50.3) | 34.9 (35.1) | 154.9 (157.1) | 22.7 (23.5) | 47.3 (49.8) | 1.6 (1.9) | 2.15x | 1.03x |
-| `enwik9` | 52.5 (52.6) | 36.3 (36.8) | 158.4 (162.2) | 20.5 (20.6) | 46.9 (48.5) |  | 2.56x | 1.12x |
+| Corpus                  | matisse `encode()` |    no cache |  segmentation |    tiktoken |         bpe | Hugging Face, 2026-10-20 | over tiktoken | over bpe |
+|-------------------------|-------------------:|------------:|--------------:|------------:|------------:|-------------------------:|--------------:|---------:|
+| `twitter.json`          |      101.5 (105.1) | 51.2 (52.1) | 277.6 (285.1) | 17.9 (18.5) | 50.5 (52.0) |                2.1 (2.8) |         5.67x |    2.01x |
+| `munch-python@15b2863c` |        80.6 (83.5) | 46.2 (46.9) | 192.4 (198.7) | 21.6 (22.0) | 56.1 (57.2) |                2.9 (3.4) |         3.73x |    1.44x |
+| `munch-cpp@15b2863c`    |        82.0 (84.0) | 44.0 (44.7) | 182.2 (185.7) | 19.7 (20.3) | 52.6 (53.7) |                1.9 (2.3) |         4.16x |    1.56x |
+| `gutenberg`             |        64.9 (65.7) | 37.3 (38.5) | 180.8 (183.4) | 23.9 (24.7) | 53.8 (55.5) |                1.9 (2.3) |         2.72x |    1.21x |
+| `wiki-zh`               |        44.1 (45.3) | 45.2 (46.3) | 371.8 (377.8) | 23.4 (23.9) | 37.8 (38.8) |                2.2 (2.6) |         1.88x |    1.17x |
+| `wiki-ar`               |        60.8 (61.6) | 44.3 (45.5) | 205.6 (207.5) | 22.8 (23.5) | 45.5 (46.0) |                2.0 (2.3) |         2.67x |    1.34x |
+| `wiki-ru`               |        57.0 (58.0) | 42.3 (43.3) | 226.9 (230.2) | 25.1 (25.5) | 46.7 (47.6) |                2.2 (2.5) |         2.27x |    1.22x |
+| `wiki-hi`               |        95.3 (97.7) | 52.1 (52.6) | 200.9 (203.0) | 18.5 (18.8) | 52.8 (53.7) |                1.8 (2.2) |         5.15x |    1.80x |
+| `wiki-sv`               |        48.7 (51.0) | 34.8 (35.3) | 200.0 (203.9) | 20.4 (21.0) | 30.7 (31.5) |                2.0 (2.3) |         2.39x |    1.59x |
+| `enwik8`                |        48.9 (50.3) | 34.9 (35.1) | 154.9 (157.1) | 22.7 (23.5) | 47.3 (49.8) |                1.6 (1.9) |         2.15x |    1.03x |
+| `enwik9`                |        52.5 (52.6) | 36.3 (36.8) | 158.4 (162.2) | 20.5 (20.6) | 46.9 (48.5) |                          |         2.56x |    1.12x |
 
 cl100k:
 
-| Corpus | matisse `encode()` | no cache | segmentation | tiktoken | bpe | Hugging Face, 2026-10-20 | over tiktoken | over bpe |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|
-| `twitter.json` | 103.5 (108.7) | 73.8 (78.0) | 281.0 (287.2) | 18.3 (18.8) | 68.7 (70.6) | 2.7 (3.7) | 5.66x | 1.51x |
-| `munch-python@15b2863c` | 87.7 (95.1) | 79.9 (83.0) | 200.3 (204.4) | 20.6 (21.1) | 57.9 (61.0) | 3.4 (4.2) | 4.26x | 1.51x |
-| `munch-cpp@15b2863c` | 88.8 (92.9) | 78.3 (81.7) | 194.2 (200.4) | 19.8 (20.6) | 58.5 (59.6) | 2.0 (2.3) | 4.48x | 1.52x |
-| `gutenberg` | 68.0 (70.0) | 60.4 (62.9) | 184.4 (186.7) | 23.6 (24.3) | 51.3 (52.6) | 1.9 (2.1) | 2.88x | 1.33x |
-| `wiki-zh` | 22.4 (22.9) | 22.1 (22.6) | 379.1 (387.4) | 20.0 (20.6) | 41.9 (43.0) | 2.6 (3.0) | 1.12x | 0.53x |
-| `wiki-ar` | 45.0 (46.4) | 31.8 (32.4) | 213.6 (215.7) | 19.8 (20.0) | 51.2 (52.7) | 2.1 (2.4) | 2.27x | 0.88x |
-| `wiki-ru` | 34.8 (35.7) | 24.0 (24.4) | 228.8 (231.7) | 19.0 (19.2) | 43.4 (44.0) | 2.5 (2.9) | 1.83x | 0.80x |
-| `wiki-hi` | 88.6 (90.3) | 49.4 (51.6) | 234.8 (240.9) | 20.1 (20.5) | 61.2 (62.6) | 1.9 (2.1) | 4.41x | 1.45x |
-| `wiki-sv` | 42.1 (42.6) | 30.8 (31.4) | 198.1 (201.2) | 18.4 (18.8) | 29.4 (30.3) | 1.9 (2.2) | 2.29x | 1.43x |
-| `enwik8` | 53.0 (53.7) | 52.3 (52.8) | 158.1 (159.8) | 21.1 (21.3) | 44.8 (45.0) | 1.4 (1.6) | 2.51x | 1.18x |
-| `enwik9` | 51.1 (53.6) | 51.7 (52.5) | 159.7 (162.5) | 19.2 (19.2) | 45.6 (46.3) |  | 2.66x | 1.12x |
+| Corpus                  | matisse `encode()` |    no cache |  segmentation |    tiktoken |         bpe | Hugging Face, 2026-10-20 | over tiktoken | over bpe |
+|-------------------------|-------------------:|------------:|--------------:|------------:|------------:|-------------------------:|--------------:|---------:|
+| `twitter.json`          |      103.5 (108.7) | 73.8 (78.0) | 281.0 (287.2) | 18.3 (18.8) | 68.7 (70.6) |                2.7 (3.7) |         5.66x |    1.51x |
+| `munch-python@15b2863c` |        87.7 (95.1) | 79.9 (83.0) | 200.3 (204.4) | 20.6 (21.1) | 57.9 (61.0) |                3.4 (4.2) |         4.26x |    1.51x |
+| `munch-cpp@15b2863c`    |        88.8 (92.9) | 78.3 (81.7) | 194.2 (200.4) | 19.8 (20.6) | 58.5 (59.6) |                2.0 (2.3) |         4.48x |    1.52x |
+| `gutenberg`             |        68.0 (70.0) | 60.4 (62.9) | 184.4 (186.7) | 23.6 (24.3) | 51.3 (52.6) |                1.9 (2.1) |         2.88x |    1.33x |
+| `wiki-zh`               |        22.4 (22.9) | 22.1 (22.6) | 379.1 (387.4) | 20.0 (20.6) | 41.9 (43.0) |                2.6 (3.0) |         1.12x |    0.53x |
+| `wiki-ar`               |        45.0 (46.4) | 31.8 (32.4) | 213.6 (215.7) | 19.8 (20.0) | 51.2 (52.7) |                2.1 (2.4) |         2.27x |    0.88x |
+| `wiki-ru`               |        34.8 (35.7) | 24.0 (24.4) | 228.8 (231.7) | 19.0 (19.2) | 43.4 (44.0) |                2.5 (2.9) |         1.83x |    0.80x |
+| `wiki-hi`               |        88.6 (90.3) | 49.4 (51.6) | 234.8 (240.9) | 20.1 (20.5) | 61.2 (62.6) |                1.9 (2.1) |         4.41x |    1.45x |
+| `wiki-sv`               |        42.1 (42.6) | 30.8 (31.4) | 198.1 (201.2) | 18.4 (18.8) | 29.4 (30.3) |                1.9 (2.2) |         2.29x |    1.43x |
+| `enwik8`                |        53.0 (53.7) | 52.3 (52.8) | 158.1 (159.8) | 21.1 (21.3) | 44.8 (45.0) |                1.4 (1.6) |         2.51x |    1.18x |
+| `enwik9`                |        51.1 (53.6) | 51.7 (52.5) | 159.7 (162.5) | 19.2 (19.2) | 45.6 (46.3) |                          |         2.66x |    1.12x |
 
 On one core `encode()` runs at 44.1 to 101.5 MiB/s under GPT-2 and 22.4 to 103.5 under cl100k, against 21.4 to 66.3 and
 12.0 to 68.5 after iteration 1. It is faster than tiktoken on every corpus, 1.88 to 5.67 times under GPT-2 and 1.12 to
@@ -1147,18 +1173,18 @@ GPT-2 and 1.09 to 5.26 times under cl100k.
 
 Short prompts:
 
-| Encoder | Tokenizer | MiB/s | M tokens/s | mean | p50 | p90 | p99 |
-|---|---|---:|---:|---:|---:|---:|---:|
-| matisse `encode()` | gpt2 | 32.5 | 17.59 | 30.79 | 29.17 | 52.81 | 70.81 |
-| matisse `encode()` | cl100k | 24.2 | 8.73 | 41.25 | 36.20 | 75.76 | 103.60 |
-| matisse `encode()`, kept cache | gpt2 | 44.6 | 24.17 | 22.41 | 20.63 | 40.02 | 55.88 |
-| matisse `encode()`, kept cache | cl100k | 30.2 | 10.89 | 33.07 | 27.60 | 64.54 | 98.48 |
-| tiktoken `encode_ordinary()` | gpt2 | 16.2 | 8.77 | 61.73 | 57.63 | 100.12 | 148.11 |
-| tiktoken `encode_ordinary()` | cl100k | 12.6 | 4.55 | 79.23 | 72.37 | 128.17 | 217.29 |
-| bpe `encode()` | gpt2 | 31.3 | 16.97 | 31.91 | 29.38 | 54.87 | 97.20 |
-| bpe `encode()` | cl100k | 32.5 | 11.70 | 30.77 | 28.16 | 53.18 | 102.88 |
-| Hugging Face `encode()`, 2026-10-20 | gpt2 | 2.9 | 1.59 | 341.38 | 340.22 | 581.45 | 740.27 |
-| Hugging Face `encode()`, 2026-10-20 | cl100k | 3.1 | 1.13 | 319.83 | 313.47 | 544.83 | 714.93 |
+| Encoder                             | Tokenizer | MiB/s | M tokens/s |   mean |    p50 |    p90 |    p99 |
+|-------------------------------------|-----------|------:|-----------:|-------:|-------:|-------:|-------:|
+| matisse `encode()`                  | gpt2      |  32.5 |      17.59 |  30.79 |  29.17 |  52.81 |  70.81 |
+| matisse `encode()`                  | cl100k    |  24.2 |       8.73 |  41.25 |  36.20 |  75.76 | 103.60 |
+| matisse `encode()`, kept cache      | gpt2      |  44.6 |      24.17 |  22.41 |  20.63 |  40.02 |  55.88 |
+| matisse `encode()`, kept cache      | cl100k    |  30.2 |      10.89 |  33.07 |  27.60 |  64.54 |  98.48 |
+| tiktoken `encode_ordinary()`        | gpt2      |  16.2 |       8.77 |  61.73 |  57.63 | 100.12 | 148.11 |
+| tiktoken `encode_ordinary()`        | cl100k    |  12.6 |       4.55 |  79.23 |  72.37 | 128.17 | 217.29 |
+| bpe `encode()`                      | gpt2      |  31.3 |      16.97 |  31.91 |  29.38 |  54.87 |  97.20 |
+| bpe `encode()`                      | cl100k    |  32.5 |      11.70 |  30.77 |  28.16 |  53.18 | 102.88 |
+| Hugging Face `encode()`, 2026-10-20 | gpt2      |   2.9 |       1.59 | 341.38 | 340.22 | 581.45 | 740.27 |
+| Hugging Face `encode()`, 2026-10-20 | cl100k    |   3.1 |       1.13 | 319.83 | 313.47 | 544.83 | 714.93 |
 
 A call on a kilobyte costs a mean of 31 microseconds under GPT-2 and 41 under cl100k with a cache of its own, and 22 and
 33 with a kept cache, against tiktoken's 62 and 79 and the bpe crate's 32 and 31. With every competitor in its fastest
@@ -1168,25 +1194,25 @@ from Python, `encode_to_numpy()`, 52 and 61.
 
 `encode_parallel()`:
 
-| Workers | gpt2 on enwik9 | cl100k on enwik9 | gpt2 on the mixed file | cl100k on the mixed file |
-|---:|---:|---:|---:|---:|
-| `encode()` | 53.1 | 55.8 | 44.1 | 38.9 |
-| 1 | 52.2 (0.98x) | 54.9 (0.98x) | 42.3 (0.96x) | 37.9 (0.97x) |
-| 2 | 98.5 (1.85x) | 109.8 (1.97x) | 72.0 (1.63x) | 58.0 (1.49x) |
-| 4 | 187.2 (3.53x) | 202.7 (3.64x) | 141.9 (3.22x) | 113.9 (2.93x) |
-| 8 | 317.5 (5.98x) | 353.7 (6.34x) | 239.2 (5.42x) | 216.4 (5.57x) |
-| 12 | 386.5 (7.28x) | 433.2 (7.77x) | 301.4 (6.83x) | 278.2 (7.15x) |
-| 16 | 464.6 (8.75x) | 509.3 (9.13x) | 337.0 (7.64x) | 328.7 (8.45x) |
-| 24 | 550.8 (10.37x) | 607.2 (10.89x) | 383.5 (8.70x) | 405.7 (10.43x) |
+|    Workers | gpt2 on enwik9 | cl100k on enwik9 | gpt2 on the mixed file | cl100k on the mixed file |
+|-----------:|---------------:|-----------------:|-----------------------:|-------------------------:|
+| `encode()` |           53.1 |             55.8 |                   44.1 |                     38.9 |
+|          1 |   52.2 (0.98x) |     54.9 (0.98x) |           42.3 (0.96x) |             37.9 (0.97x) |
+|          2 |   98.5 (1.85x) |    109.8 (1.97x) |           72.0 (1.63x) |             58.0 (1.49x) |
+|          4 |  187.2 (3.53x) |    202.7 (3.64x) |          141.9 (3.22x) |            113.9 (2.93x) |
+|          8 |  317.5 (5.98x) |    353.7 (6.34x) |          239.2 (5.42x) |            216.4 (5.57x) |
+|         12 |  386.5 (7.28x) |    433.2 (7.77x) |          301.4 (6.83x) |            278.2 (7.15x) |
+|         16 |  464.6 (8.75x) |    509.3 (9.13x) |          337.0 (7.64x) |            328.7 (8.45x) |
+|         24 | 550.8 (10.37x) |   607.2 (10.89x) |          383.5 (8.70x) |           405.7 (10.43x) |
 
 The batch of enwik9's pages:
 
-| Encoder | gpt2, 1 thread | gpt2, 24 threads | cl100k, 1 thread | cl100k, 24 threads |
-|---|---:|---:|---:|---:|
-| matisse `encode()` per document, a cache per thread | 59.0 | 795.0 | 62.1 | 896.4 |
-| tiktoken `encode_ordinary_batch()` | 12.5 | 46.8 | 12.0 | 46.5 |
-| bpe `encode()` per document | 50.6 | 474.4 | 47.6 | 473.9 |
-| Hugging Face `encode_batch()`, 2026-10-20 | 3.6, 1 pass | 18.5 | 3.6, 1 pass | 19.1 |
+| Encoder                                             | gpt2, 1 thread | gpt2, 24 threads | cl100k, 1 thread | cl100k, 24 threads |
+|-----------------------------------------------------|---------------:|-----------------:|-----------------:|-------------------:|
+| matisse `encode()` per document, a cache per thread |           59.0 |            795.0 |             62.1 |              896.4 |
+| tiktoken `encode_ordinary_batch()`                  |           12.5 |             46.8 |             12.0 |               46.5 |
+| bpe `encode()` per document                         |           50.6 |            474.4 |             47.6 |              473.9 |
+| Hugging Face `encode_batch()`, 2026-10-20           |    3.6, 1 pass |             18.5 |      3.6, 1 pass |               19.1 |
 
 `encode_parallel()` encodes enwik9 at 550.8 and 607.2 MiB/s with 24 workers, 10.4 and 10.9 times `encode()`, against
 281.9 and 362.3 after iteration 1; the batch at 24 threads runs at 795.0 and 896.4 MiB/s, 1.68 and 1.89 times the bpe
@@ -1262,9 +1288,9 @@ as tiktoken does, and in a scouting run it gave the same ids on every corpus und
 published files are used:
 
 | Tokenizer | Corpora | Equal ids | `ignore_merges` over the published file |
-|---|---:|---:|---:|
-| gpt2 | 9 | 9 | 0.95x to 1.10x |
-| cl100k | 9 | 9 | 0.94x to 1.10x |
+|-----------|--------:|----------:|----------------------------------------:|
+| gpt2      |       9 |         9 |                          0.95x to 1.10x |
+| cl100k    |       9 |         9 |                          0.94x to 1.10x |
 
 The cache each encoder keeps: matisse's `encode()` in the single rows makes a piece cache of its own in every call, the
 prompts are timed both so and with one cache kept across every call and pass, the batch makes one cache per pool thread
@@ -1282,14 +1308,14 @@ flags.make confirms. Every engine built from source was also built for this proc
 added to its flags, the Rust harness with `-C target-cpu=native` and its C parts with `-march=native`, and timed in a
 scouting run on five corpora, three for Hugging Face's crate; the native build's median over the portable build's:
 
-| Encoder | Corpora | gpt2 | cl100k |
-|---|---:|---:|---:|
-| matisse `encode()` | 5 | 0.97x to 1.02x | 0.98x to 1.03x |
-| bpe `Tokenizer::encode()` | 5 | 1.01x to 1.05x | 0.88x to 1.02x |
-| bpe, its pieces by `encode_via_backtracking()` | 5 | 0.98x to 1.05x | 0.87x to 1.02x |
-| tiktoken's core `encode_ordinary()` | 5 | 1.00x to 1.02x | 0.91x to 1.02x |
-| tiktoken-rs `encode_ordinary()` | 5 | 1.00x to 1.03x | 0.97x to 1.04x |
-| Hugging Face's crate `encode_fast()` | 3 | 0.96x to 1.00x | 0.96x to 1.00x |
+| Encoder                                        | Corpora |           gpt2 |         cl100k |
+|------------------------------------------------|--------:|---------------:|---------------:|
+| matisse `encode()`                             |       5 | 0.97x to 1.02x | 0.98x to 1.03x |
+| bpe `Tokenizer::encode()`                      |       5 | 1.01x to 1.05x | 0.88x to 1.02x |
+| bpe, its pieces by `encode_via_backtracking()` |       5 | 0.98x to 1.05x | 0.87x to 1.02x |
+| tiktoken's core `encode_ordinary()`            |       5 | 1.00x to 1.02x | 0.91x to 1.02x |
+| tiktoken-rs `encode_ordinary()`                |       5 | 1.00x to 1.03x | 0.97x to 1.04x |
+| Hugging Face's crate `encode_fast()`           |       3 | 0.96x to 1.00x | 0.96x to 1.00x |
 
 The native builds measure 0.96 to 1.05 times the portable ones but on `twitter.json` under cl100k, where three of the
 native harness's encoders measured 0.87 to 0.91 in the same run; no build gains beyond 5 per cent, so every figure below
@@ -1301,68 +1327,68 @@ The configurations among which each competitor's was chosen, with the geometric 
 corpora under 10 MB under both tokenizers and the cells, of 18, on which each is the fastest of its competitor's
 configurations:
 
-| Competitor | Configuration | Geometric mean, MiB/s | Fastest on |
-|---|---|---:|---:|
-| bpe | bpe `Tokenizer::encode()` | 47.9 | 2 of 18 |
-| bpe | bpe, its pieces by `encode_via_backtracking()` | 49.9 | 16 of 18 |
-| bpe | bpe, its pieces by `encode_via_bitfield()` | 18.8 | 0 of 18 |
-| bpe | bpe, its pieces by `encode_via_table()` | 36.0 | 0 of 18 |
-| tiktoken | tiktoken `encode_to_numpy()` | 21.1 | 18 of 18 |
-| tiktoken | tiktoken `encode_ordinary()` | 18.6 | 0 of 18 |
-| tiktoken's core | tiktoken's core `encode_ordinary()` | 22.2 | 18 of 18 |
-| tiktoken-rs | tiktoken-rs `encode_ordinary()` | 22.4 | 18 of 18 |
-| Hugging Face | Hugging Face `encode()` | 2.0 | 0 of 18 |
-| Hugging Face | Hugging Face `encode_batch_fast()` | 3.0 | 18 of 18 |
-| Hugging Face's crate | Hugging Face's crate `encode_fast()` | 4.7 | 18 of 18 |
+| Competitor           | Configuration                                  | Geometric mean, MiB/s | Fastest on |
+|----------------------|------------------------------------------------|----------------------:|-----------:|
+| bpe                  | bpe `Tokenizer::encode()`                      |                  47.9 |    2 of 18 |
+| bpe                  | bpe, its pieces by `encode_via_backtracking()` |                  49.9 |   16 of 18 |
+| bpe                  | bpe, its pieces by `encode_via_bitfield()`     |                  18.8 |    0 of 18 |
+| bpe                  | bpe, its pieces by `encode_via_table()`        |                  36.0 |    0 of 18 |
+| tiktoken             | tiktoken `encode_to_numpy()`                   |                  21.1 |   18 of 18 |
+| tiktoken             | tiktoken `encode_ordinary()`                   |                  18.6 |    0 of 18 |
+| tiktoken's core      | tiktoken's core `encode_ordinary()`            |                  22.2 |   18 of 18 |
+| tiktoken-rs          | tiktoken-rs `encode_ordinary()`                |                  22.4 |   18 of 18 |
+| Hugging Face         | Hugging Face `encode()`                        |                   2.0 |    0 of 18 |
+| Hugging Face         | Hugging Face `encode_batch_fast()`             |                   3.0 |   18 of 18 |
+| Hugging Face's crate | Hugging Face's crate `encode_fast()`           |                   4.7 |   18 of 18 |
 
 The bpe crate's encoders on each corpus under 10 MB, median MiB/s:
 
-| Corpus | gpt2 `Tokenizer::encode()` | gpt2 backtracking | gpt2 bitfield | gpt2 table | cl100k `Tokenizer::encode()` | cl100k backtracking | cl100k bitfield | cl100k table |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|
-| `twitter.json` | 48.0 | 51.3 | 22.0 | 41.1 | 65.3 | 68.9 | 17.6 | 44.9 |
-| `munch-python@15b2863c` | 54.5 | 57.5 | 17.8 | 38.6 | 58.1 | 57.9 | 14.6 | 36.6 |
-| `munch-cpp@15b2863c` | 52.6 | 53.9 | 17.7 | 40.1 | 58.8 | 61.5 | 15.7 | 40.4 |
-| `gutenberg` | 56.0 | 57.3 | 15.4 | 34.6 | 50.2 | 53.6 | 14.6 | 34.5 |
-| `wiki-zh` | 38.1 | 37.5 | 25.7 | 33.2 | 42.7 | 44.7 | 19.1 | 30.3 |
-| `wiki-ar` | 44.8 | 47.9 | 24.2 | 40.0 | 49.6 | 52.8 | 20.4 | 39.2 |
-| `wiki-ru` | 45.8 | 49.0 | 24.7 | 38.8 | 43.1 | 44.9 | 15.5 | 25.7 |
-| `wiki-hi` | 50.7 | 53.7 | 30.0 | 47.6 | 58.0 | 61.9 | 24.1 | 52.8 |
-| `wiki-sv` | 32.0 | 32.4 | 14.9 | 23.5 | 30.2 | 31.1 | 13.8 | 22.3 |
+| Corpus                  | gpt2 `Tokenizer::encode()` | gpt2 backtracking | gpt2 bitfield | gpt2 table | cl100k `Tokenizer::encode()` | cl100k backtracking | cl100k bitfield | cl100k table |
+|-------------------------|---------------------------:|------------------:|--------------:|-----------:|-----------------------------:|--------------------:|----------------:|-------------:|
+| `twitter.json`          |                       48.0 |              51.3 |          22.0 |       41.1 |                         65.3 |                68.9 |            17.6 |         44.9 |
+| `munch-python@15b2863c` |                       54.5 |              57.5 |          17.8 |       38.6 |                         58.1 |                57.9 |            14.6 |         36.6 |
+| `munch-cpp@15b2863c`    |                       52.6 |              53.9 |          17.7 |       40.1 |                         58.8 |                61.5 |            15.7 |         40.4 |
+| `gutenberg`             |                       56.0 |              57.3 |          15.4 |       34.6 |                         50.2 |                53.6 |            14.6 |         34.5 |
+| `wiki-zh`               |                       38.1 |              37.5 |          25.7 |       33.2 |                         42.7 |                44.7 |            19.1 |         30.3 |
+| `wiki-ar`               |                       44.8 |              47.9 |          24.2 |       40.0 |                         49.6 |                52.8 |            20.4 |         39.2 |
+| `wiki-ru`               |                       45.8 |              49.0 |          24.7 |       38.8 |                         43.1 |                44.9 |            15.5 |         25.7 |
+| `wiki-hi`               |                       50.7 |              53.7 |          30.0 |       47.6 |                         58.0 |                61.9 |            24.1 |         52.8 |
+| `wiki-sv`               |                       32.0 |              32.4 |          14.9 |       23.5 |                         30.2 |                31.1 |            13.8 |         22.3 |
 
 Every competitor in its fastest configuration on each corpus, MiB/s of the median pass with the best in parentheses, and
 matisse's `encode()` over the fastest of them:
 
 gpt2:
 
-| Corpus | matisse `encode()` | bpe | tiktoken | tiktoken's core | tiktoken-rs | Hugging Face | Hugging Face's crate | over the fastest |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|
-| `twitter.json` | 95.6 (100.2) | 51.3 (54.1) | 18.3 (18.8) | 20.2 (20.9) | 19.6 (20.2) | 3.4 (3.5) | 5.8 (6.0) | 1.86x |
-| `munch-python@15b2863c` | 82.3 (85.5) | 57.5 (59.8) | 22.0 (22.5) | 25.2 (26.2) | 24.8 (25.6) | 3.7 (3.8) | 6.2 (6.4) | 1.43x |
-| `munch-cpp@15b2863c` | 85.1 (88.2) | 53.9 (55.7) | 20.6 (20.9) | 22.6 (23.5) | 21.9 (22.2) | 2.2 (2.3) | 4.6 (4.8) | 1.58x |
-| `gutenberg` | 65.2 (69.1) | 57.3 (58.4) | 25.2 (25.8) | 28.0 (28.8) | 26.8 (28.5) | 2.1 (2.2) | 3.9 (4.0) | 1.14x |
-| `wiki-zh` | 44.6 (46.3) | 38.1 (39.5) | 24.4 (24.8) | 24.9 (26.2) | 26.4 (26.8) | 3.1 (3.1) | 4.7 (4.9) | 1.17x |
-| `wiki-ar` | 62.6 (63.6) | 47.9 (48.8) | 23.7 (24.1) | 24.7 (25.2) | 24.5 (25.0) | 2.8 (2.9) | 4.2 (4.3) | 1.31x |
-| `wiki-ru` | 58.3 (59.1) | 49.0 (50.2) | 25.0 (25.3) | 26.1 (26.6) | 26.5 (26.9) | 2.9 (3.1) | 4.6 (4.6) | 1.19x |
-| `wiki-hi` | 98.1 (99.5) | 53.7 (55.0) | 18.7 (19.0) | 21.5 (21.8) | 20.9 (21.3) | 2.0 (2.1) | 4.2 (4.4) | 1.83x |
-| `wiki-sv` | 50.6 (51.8) | 32.4 (33.3) | 21.1 (21.7) | 22.0 (22.6) | 21.1 (21.4) | 2.6 (2.7) | 4.4 (4.5) | 1.56x |
-| `enwik8` | 49.1 (50.5) | 47.4 (48.4) | 21.1 (21.2) | 25.3 (26.1) | 25.7 (26.7) | 3.8 (3.9) | 4.3 (4.4) | 1.04x |
-| `enwik9` | 50.9 (51.7) | 50.9 (51.0) | 22.0 (22.2) | 25.4 (25.4) | 24.8 (25.0) |  |  | 1.00x |
+| Corpus                  | matisse `encode()` |         bpe |    tiktoken | tiktoken's core | tiktoken-rs | Hugging Face | Hugging Face's crate | over the fastest |
+|-------------------------|-------------------:|------------:|------------:|----------------:|------------:|-------------:|---------------------:|-----------------:|
+| `twitter.json`          |       95.6 (100.2) | 51.3 (54.1) | 18.3 (18.8) |     20.2 (20.9) | 19.6 (20.2) |    3.4 (3.5) |            5.8 (6.0) |            1.86x |
+| `munch-python@15b2863c` |        82.3 (85.5) | 57.5 (59.8) | 22.0 (22.5) |     25.2 (26.2) | 24.8 (25.6) |    3.7 (3.8) |            6.2 (6.4) |            1.43x |
+| `munch-cpp@15b2863c`    |        85.1 (88.2) | 53.9 (55.7) | 20.6 (20.9) |     22.6 (23.5) | 21.9 (22.2) |    2.2 (2.3) |            4.6 (4.8) |            1.58x |
+| `gutenberg`             |        65.2 (69.1) | 57.3 (58.4) | 25.2 (25.8) |     28.0 (28.8) | 26.8 (28.5) |    2.1 (2.2) |            3.9 (4.0) |            1.14x |
+| `wiki-zh`               |        44.6 (46.3) | 38.1 (39.5) | 24.4 (24.8) |     24.9 (26.2) | 26.4 (26.8) |    3.1 (3.1) |            4.7 (4.9) |            1.17x |
+| `wiki-ar`               |        62.6 (63.6) | 47.9 (48.8) | 23.7 (24.1) |     24.7 (25.2) | 24.5 (25.0) |    2.8 (2.9) |            4.2 (4.3) |            1.31x |
+| `wiki-ru`               |        58.3 (59.1) | 49.0 (50.2) | 25.0 (25.3) |     26.1 (26.6) | 26.5 (26.9) |    2.9 (3.1) |            4.6 (4.6) |            1.19x |
+| `wiki-hi`               |        98.1 (99.5) | 53.7 (55.0) | 18.7 (19.0) |     21.5 (21.8) | 20.9 (21.3) |    2.0 (2.1) |            4.2 (4.4) |            1.83x |
+| `wiki-sv`               |        50.6 (51.8) | 32.4 (33.3) | 21.1 (21.7) |     22.0 (22.6) | 21.1 (21.4) |    2.6 (2.7) |            4.4 (4.5) |            1.56x |
+| `enwik8`                |        49.1 (50.5) | 47.4 (48.4) | 21.1 (21.2) |     25.3 (26.1) | 25.7 (26.7) |    3.8 (3.9) |            4.3 (4.4) |            1.04x |
+| `enwik9`                |        50.9 (51.7) | 50.9 (51.0) | 22.0 (22.2) |     25.4 (25.4) | 24.8 (25.0) |              |                      |            1.00x |
 
 cl100k:
 
-| Corpus | matisse `encode()` | bpe | tiktoken | tiktoken's core | tiktoken-rs | Hugging Face | Hugging Face's crate | over the fastest |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|
-| `twitter.json` | 104.1 (108.7) | 68.9 (70.7) | 18.9 (19.3) | 18.9 (19.5) | 19.8 (20.4) | 3.9 (4.2) | 6.2 (6.3) | 1.51x |
-| `munch-python@15b2863c` | 97.7 (100.7) | 58.1 (60.3) | 21.0 (21.9) | 22.1 (22.7) | 23.2 (23.6) | 4.3 (4.4) | 5.6 (5.8) | 1.68x |
-| `munch-cpp@15b2863c` | 92.8 (94.9) | 61.5 (63.6) | 20.4 (20.7) | 20.7 (21.2) | 21.4 (22.0) | 2.7 (2.8) | 4.3 (4.4) | 1.51x |
-| `gutenberg` | 75.7 (77.0) | 53.6 (54.6) | 23.8 (25.5) | 25.1 (25.7) | 26.3 (27.2) | 2.4 (2.4) | 3.9 (4.0) | 1.41x |
-| `wiki-zh` | 22.6 (23.8) | 44.7 (45.6) | 20.7 (20.9) | 20.5 (20.9) | 20.8 (21.3) | 3.9 (4.2) | 5.1 (5.3) | 0.51x |
-| `wiki-ar` | 43.5 (45.7) | 52.8 (53.7) | 20.8 (21.3) | 21.8 (22.1) | 21.6 (22.0) | 3.3 (3.3) | 4.6 (4.7) | 0.82x |
-| `wiki-ru` | 34.9 (35.8) | 44.9 (45.9) | 19.3 (19.8) | 19.3 (19.7) | 19.6 (20.2) | 3.5 (3.6) | 4.9 (5.0) | 0.78x |
-| `wiki-hi` | 89.8 (92.3) | 61.9 (62.6) | 20.2 (20.5) | 21.6 (22.3) | 21.1 (21.5) | 3.2 (3.3) | 4.8 (4.9) | 1.45x |
-| `wiki-sv` | 42.4 (44.5) | 31.1 (32.1) | 17.7 (18.7) | 17.7 (18.7) | 18.9 (19.4) | 2.7 (2.7) | 4.2 (4.2) | 1.36x |
-| `enwik8` | 54.1 (55.2) | 44.6 (44.9) | 21.1 (21.4) | 21.5 (21.7) | 23.1 (23.1) | 3.6 (3.7) | 4.2 (4.3) | 1.21x |
-| `enwik9` | 57.4 (59.8) | 47.5 (48.9) | 20.2 (20.3) | 21.7 (21.9) | 21.8 (21.8) |  |  | 1.21x |
+| Corpus                  | matisse `encode()` |         bpe |    tiktoken | tiktoken's core | tiktoken-rs | Hugging Face | Hugging Face's crate | over the fastest |
+|-------------------------|-------------------:|------------:|------------:|----------------:|------------:|-------------:|---------------------:|-----------------:|
+| `twitter.json`          |      104.1 (108.7) | 68.9 (70.7) | 18.9 (19.3) |     18.9 (19.5) | 19.8 (20.4) |    3.9 (4.2) |            6.2 (6.3) |            1.51x |
+| `munch-python@15b2863c` |       97.7 (100.7) | 58.1 (60.3) | 21.0 (21.9) |     22.1 (22.7) | 23.2 (23.6) |    4.3 (4.4) |            5.6 (5.8) |            1.68x |
+| `munch-cpp@15b2863c`    |        92.8 (94.9) | 61.5 (63.6) | 20.4 (20.7) |     20.7 (21.2) | 21.4 (22.0) |    2.7 (2.8) |            4.3 (4.4) |            1.51x |
+| `gutenberg`             |        75.7 (77.0) | 53.6 (54.6) | 23.8 (25.5) |     25.1 (25.7) | 26.3 (27.2) |    2.4 (2.4) |            3.9 (4.0) |            1.41x |
+| `wiki-zh`               |        22.6 (23.8) | 44.7 (45.6) | 20.7 (20.9) |     20.5 (20.9) | 20.8 (21.3) |    3.9 (4.2) |            5.1 (5.3) |            0.51x |
+| `wiki-ar`               |        43.5 (45.7) | 52.8 (53.7) | 20.8 (21.3) |     21.8 (22.1) | 21.6 (22.0) |    3.3 (3.3) |            4.6 (4.7) |            0.82x |
+| `wiki-ru`               |        34.9 (35.8) | 44.9 (45.9) | 19.3 (19.8) |     19.3 (19.7) | 19.6 (20.2) |    3.5 (3.6) |            4.9 (5.0) |            0.78x |
+| `wiki-hi`               |        89.8 (92.3) | 61.9 (62.6) | 20.2 (20.5) |     21.6 (22.3) | 21.1 (21.5) |    3.2 (3.3) |            4.8 (4.9) |            1.45x |
+| `wiki-sv`               |        42.4 (44.5) | 31.1 (32.1) | 17.7 (18.7) |     17.7 (18.7) | 18.9 (19.4) |    2.7 (2.7) |            4.2 (4.2) |            1.36x |
+| `enwik8`                |        54.1 (55.2) | 44.6 (44.9) | 21.1 (21.4) |     21.5 (21.7) | 23.1 (23.1) |    3.6 (3.7) |            4.2 (4.3) |            1.21x |
+| `enwik9`                |        57.4 (59.8) | 47.5 (48.9) | 20.2 (20.3) |     21.7 (21.9) | 21.8 (21.8) |              |                      |            1.21x |
 
 Under GPT-2 matisse's `encode()` runs at 1.00 to 1.86 times the fastest competitor, which is the bpe crate on every
 corpus, level with it on enwik9 and 1.04 times it on enwik8; the parallel stage's `encode()` row of the same session
@@ -1378,30 +1404,30 @@ on one long text the interpreter costs tiktoken little.
 `prompts`, each call timed alone, five timed passes after the first, every configuration of every competitor but the bpe
 crate's bitfield and table encoders; latencies in microseconds:
 
-| Encoder | Tokenizer | MiB/s | M tokens/s | mean | p50 | p90 | p99 |
-|---|---|---:|---:|---:|---:|---:|---:|
-| matisse `encode()` | gpt2 | 34.0 | 18.43 | 29.39 | 28.02 | 50.61 | 67.38 |
-| matisse `encode()` | cl100k | 25.9 | 9.34 | 38.57 | 34.09 | 71.30 | 95.09 |
-| matisse `encode()`, kept cache | gpt2 | 46.1 | 24.99 | 21.67 | 19.93 | 38.80 | 51.36 |
-| matisse `encode()`, kept cache | cl100k | 31.7 | 11.42 | 31.53 | 26.25 | 61.41 | 89.78 |
-| bpe `Tokenizer::encode()` | gpt2 | 34.4 | 18.65 | 29.05 | 28.00 | 50.07 | 74.55 |
-| bpe `Tokenizer::encode()` | cl100k | 36.9 | 13.30 | 27.08 | 25.76 | 46.35 | 72.66 |
-| bpe, its pieces by `encode_via_backtracking()` | gpt2 | 36.9 | 20.00 | 27.09 | 25.77 | 46.09 | 70.05 |
-| bpe, its pieces by `encode_via_backtracking()` | cl100k | 38.8 | 13.98 | 25.76 | 24.12 | 43.99 | 70.39 |
-| tiktoken `encode_to_numpy()` | gpt2 | 19.2 | 10.39 | 52.13 | 50.57 | 87.41 | 118.59 |
-| tiktoken `encode_to_numpy()` | cl100k | 16.3 | 5.88 | 61.23 | 59.51 | 100.62 | 137.54 |
-| tiktoken `encode_ordinary()` | gpt2 | 16.4 | 8.89 | 60.89 | 55.70 | 96.08 | 132.47 |
-| tiktoken `encode_ordinary()` | cl100k | 15.5 | 5.59 | 64.43 | 60.81 | 103.43 | 142.59 |
-| tiktoken's core `encode_ordinary()` | gpt2 | 22.5 | 12.21 | 44.37 | 43.79 | 76.09 | 103.09 |
-| tiktoken's core `encode_ordinary()` | cl100k | 19.2 | 6.91 | 52.14 | 51.11 | 87.62 | 116.45 |
-| tiktoken-rs `encode_ordinary()` | gpt2 | 22.6 | 12.26 | 44.17 | 43.46 | 75.74 | 102.70 |
-| tiktoken-rs `encode_ordinary()` | cl100k | 19.8 | 7.13 | 50.49 | 49.32 | 85.66 | 112.21 |
-| Hugging Face `encode()` | gpt2 | 2.9 | 1.59 | 341.35 | 329.75 | 583.12 | 773.16 |
-| Hugging Face `encode()` | cl100k | 2.6 | 0.94 | 381.46 | 372.62 | 646.68 | 852.68 |
-| Hugging Face `encode_batch_fast()` | gpt2 | 2.9 | 1.56 | 346.77 | 322.04 | 581.85 | 794.06 |
-| Hugging Face `encode_batch_fast()` | cl100k | 3.1 | 1.13 | 317.88 | 292.69 | 558.29 | 790.27 |
-| Hugging Face's crate `encode_fast()` | gpt2 | 4.5 | 2.44 | 222.09 | 213.10 | 384.89 | 501.74 |
-| Hugging Face's crate `encode_fast()` | cl100k | 4.6 | 1.65 | 217.91 | 210.52 | 373.42 | 509.90 |
+| Encoder                                        | Tokenizer | MiB/s | M tokens/s |   mean |    p50 |    p90 |    p99 |
+|------------------------------------------------|-----------|------:|-----------:|-------:|-------:|-------:|-------:|
+| matisse `encode()`                             | gpt2      |  34.0 |      18.43 |  29.39 |  28.02 |  50.61 |  67.38 |
+| matisse `encode()`                             | cl100k    |  25.9 |       9.34 |  38.57 |  34.09 |  71.30 |  95.09 |
+| matisse `encode()`, kept cache                 | gpt2      |  46.1 |      24.99 |  21.67 |  19.93 |  38.80 |  51.36 |
+| matisse `encode()`, kept cache                 | cl100k    |  31.7 |      11.42 |  31.53 |  26.25 |  61.41 |  89.78 |
+| bpe `Tokenizer::encode()`                      | gpt2      |  34.4 |      18.65 |  29.05 |  28.00 |  50.07 |  74.55 |
+| bpe `Tokenizer::encode()`                      | cl100k    |  36.9 |      13.30 |  27.08 |  25.76 |  46.35 |  72.66 |
+| bpe, its pieces by `encode_via_backtracking()` | gpt2      |  36.9 |      20.00 |  27.09 |  25.77 |  46.09 |  70.05 |
+| bpe, its pieces by `encode_via_backtracking()` | cl100k    |  38.8 |      13.98 |  25.76 |  24.12 |  43.99 |  70.39 |
+| tiktoken `encode_to_numpy()`                   | gpt2      |  19.2 |      10.39 |  52.13 |  50.57 |  87.41 | 118.59 |
+| tiktoken `encode_to_numpy()`                   | cl100k    |  16.3 |       5.88 |  61.23 |  59.51 | 100.62 | 137.54 |
+| tiktoken `encode_ordinary()`                   | gpt2      |  16.4 |       8.89 |  60.89 |  55.70 |  96.08 | 132.47 |
+| tiktoken `encode_ordinary()`                   | cl100k    |  15.5 |       5.59 |  64.43 |  60.81 | 103.43 | 142.59 |
+| tiktoken's core `encode_ordinary()`            | gpt2      |  22.5 |      12.21 |  44.37 |  43.79 |  76.09 | 103.09 |
+| tiktoken's core `encode_ordinary()`            | cl100k    |  19.2 |       6.91 |  52.14 |  51.11 |  87.62 | 116.45 |
+| tiktoken-rs `encode_ordinary()`                | gpt2      |  22.6 |      12.26 |  44.17 |  43.46 |  75.74 | 102.70 |
+| tiktoken-rs `encode_ordinary()`                | cl100k    |  19.8 |       7.13 |  50.49 |  49.32 |  85.66 | 112.21 |
+| Hugging Face `encode()`                        | gpt2      |   2.9 |       1.59 | 341.35 | 329.75 | 583.12 | 773.16 |
+| Hugging Face `encode()`                        | cl100k    |   2.6 |       0.94 | 381.46 | 372.62 | 646.68 | 852.68 |
+| Hugging Face `encode_batch_fast()`             | gpt2      |   2.9 |       1.56 | 346.77 | 322.04 | 581.85 | 794.06 |
+| Hugging Face `encode_batch_fast()`             | cl100k    |   3.1 |       1.13 | 317.88 | 292.69 | 558.29 | 790.27 |
+| Hugging Face's crate `encode_fast()`           | gpt2      |   4.5 |       2.44 | 222.09 | 213.10 | 384.89 | 501.74 |
+| Hugging Face's crate `encode_fast()`           | cl100k    |   4.6 |       1.65 | 217.91 | 210.52 | 373.42 | 509.90 |
 
 The bpe crate's backtracking is the fastest competitor's call on a kilobyte, a mean of 27.09 microseconds under GPT-2
 and 25.76 under cl100k, against matisse's 29.39 and 38.57 with a cache of its own and 21.67 and 31.53 with a kept cache,
@@ -1413,19 +1439,19 @@ so matisse's call is faster only under GPT-2 with a kept cache. tiktoken's faste
 enwik9's pages, every configuration of every competitor but the bpe crate's bitfield and table encoders at 24 threads,
 MiB/s of the median of three timed passes with the best in parentheses:
 
-| Encoder | gpt2 | cl100k |
-|---|---:|---:|
-| matisse `encode()` per document, a cache per thread | 795.3 (798.2) | 778.8 (790.3) |
-| bpe `Tokenizer::encode()` per document | 474.2 (478.9) | 477.3 (485.7) |
+| Encoder                                                      |          gpt2 |        cl100k |
+|--------------------------------------------------------------|--------------:|--------------:|
+| matisse `encode()` per document, a cache per thread          | 795.3 (798.2) | 778.8 (790.3) |
+| bpe `Tokenizer::encode()` per document                       | 474.2 (478.9) | 477.3 (485.7) |
 | bpe, its pieces by `encode_via_backtracking()`, per document | 509.1 (515.0) | 490.1 (494.3) |
-| tiktoken's core `encode_ordinary()` per document | 133.8 (133.9) | 118.9 (119.7) |
-| tiktoken-rs `encode_ordinary()` per document | 130.8 (132.1) | 120.0 (120.4) |
-| Hugging Face's crate `encode_fast()` per document | 32.1 (32.2) | 34.2 (34.2) |
-| Hugging Face's crate `encode_batch_fast()`, Rayon's pool | 24.5 (24.7) | 27.8 (28.3) |
-| tiktoken `encode_ordinary_batch()` | 47.9 (48.4) | 48.2 (48.5) |
-| tiktoken `encode_to_numpy()` mapped by a pool of 24 threads | 80.0 (80.1) | 79.5 (79.6) |
-| Hugging Face `encode_batch()` | 18.8 (18.8) | 19.3 (19.4) |
-| Hugging Face `encode_batch_fast()` | 30.9 (32.3) | 29.2 (29.3) |
+| tiktoken's core `encode_ordinary()` per document             | 133.8 (133.9) | 118.9 (119.7) |
+| tiktoken-rs `encode_ordinary()` per document                 | 130.8 (132.1) | 120.0 (120.4) |
+| Hugging Face's crate `encode_fast()` per document            |   32.1 (32.2) |   34.2 (34.2) |
+| Hugging Face's crate `encode_batch_fast()`, Rayon's pool     |   24.5 (24.7) |   27.8 (28.3) |
+| tiktoken `encode_ordinary_batch()`                           |   47.9 (48.4) |   48.2 (48.5) |
+| tiktoken `encode_to_numpy()` mapped by a pool of 24 threads  |   80.0 (80.1) |   79.5 (79.6) |
+| Hugging Face `encode_batch()`                                |   18.8 (18.8) |   19.3 (19.4) |
+| Hugging Face `encode_batch_fast()`                           |   30.9 (32.3) |   29.2 (29.3) |
 
 matisse's batch runs at 795.3 and 778.8 MiB/s, 1.56 and 1.59 times the bpe crate's fastest, 1.68 and 1.63 times its
 `Tokenizer::encode()`, 5.94 and 6.49 times tiktoken's fastest from Rust, its core under GPT-2 and tiktoken-rs under
@@ -1444,14 +1470,14 @@ anchors are, and no competitor gives such cuts. Beside matisse's `encode_paralle
 competitors' figures are therefore their one call on one thread from the single-core stage; Hugging Face was not run on
 enwik9, as above:
 
-| Encoder | gpt2 | cl100k |
-|---|---:|---:|
-| matisse `encode_parallel()`, 24 workers | 557.5 (573.5) | 626.1 (626.7) |
-| matisse `encode()`, one thread | 54.6 (55.7) | 57.1 (58.0) |
-| bpe, its pieces by `encode_via_backtracking()`, one thread | 50.9 (51.0) | 47.5 (48.9) |
-| tiktoken `encode_to_numpy()`, one thread | 22.0 (22.2) | 20.2 (20.3) |
-| tiktoken's core `encode_ordinary()`, one thread | 25.4 (25.4) | 21.7 (21.9) |
-| tiktoken-rs `encode_ordinary()`, one thread | 24.8 (25.0) | 21.8 (21.8) |
+| Encoder                                                    |          gpt2 |        cl100k |
+|------------------------------------------------------------|--------------:|--------------:|
+| matisse `encode_parallel()`, 24 workers                    | 557.5 (573.5) | 626.1 (626.7) |
+| matisse `encode()`, one thread                             |   54.6 (55.7) |   57.1 (58.0) |
+| bpe, its pieces by `encode_via_backtracking()`, one thread |   50.9 (51.0) |   47.5 (48.9) |
+| tiktoken `encode_to_numpy()`, one thread                   |   22.0 (22.2) |   20.2 (20.3) |
+| tiktoken's core `encode_ordinary()`, one thread            |   25.4 (25.4) |   21.7 (21.9) |
+| tiktoken-rs `encode_ordinary()`, one thread                |   24.8 (25.0) |   21.8 (21.8) |
 
 `encode_parallel()` encodes enwik9 at 557.5 and 626.1 MiB/s, 10.95 and 13.18 times the bpe crate's one call and 21.95
 and 28.85 times tiktoken's core's.
@@ -1511,26 +1537,26 @@ pieces that are no token, which the greedy longest token most often overshoots, 
 time of the backtracking over the scan's, summed over the merges of each class that the probe's runs make, one timed
 pass of `matisse_bench single` for each tokenizer and corpus:
 
-| Tokenizer | Corpus | Merges at least half outside ASCII | backtracking over scan | Other merges | backtracking over scan |
-|---|---|---:|---:|---:|---:|
-| cl100k | `gutenberg` | 12,184 | 0.89x | 431,220 | 1.24x |
-| cl100k | `munch-cpp@15b2863c` | 110 | 0.90x | 167,818 | 1.32x |
-| cl100k | `munch-python@15b2863c` | 0 |  | 21,809 | 1.28x |
-| cl100k | `twitter.json` | 10,316 | 0.28x | 8,336 | 1.50x |
-| cl100k | `wiki-ar` | 1,183,841 | 0.40x | 6,526 | 2.05x |
-| cl100k | `wiki-hi` | 1,059,196 | 0.49x | 10,361 | 1.62x |
-| cl100k | `wiki-ru` | 822,684 | 0.45x | 11,864 | 2.36x |
-| cl100k | `wiki-sv` | 8,182 | 0.77x | 959,922 | 1.16x |
-| cl100k | `wiki-zh` | 636,534 | 0.29x | 39,503 | 1.92x |
-| gpt2 | `gutenberg` | 110,346 | 0.84x | 2,962,595 | 0.60x |
-| gpt2 | `munch-cpp@15b2863c` | 217 | 0.63x | 1,716,997 | 0.62x |
-| gpt2 | `munch-python@15b2863c` | 0 |  | 185,760 | 0.60x |
-| gpt2 | `twitter.json` | 14,754 | 0.31x | 225,367 | 0.86x |
-| gpt2 | `wiki-ar` | 1,367,996 | 0.54x | 56,709 | 1.29x |
-| gpt2 | `wiki-hi` | 2,091,587 | 0.52x | 56,816 | 1.16x |
-| gpt2 | `wiki-ru` | 991,789 | 0.41x | 86,083 | 1.25x |
-| gpt2 | `wiki-sv` | 45,178 | 0.84x | 1,650,550 | 1.07x |
-| gpt2 | `wiki-zh` | 880,806 | 0.44x | 152,939 | 1.38x |
+| Tokenizer | Corpus                  | Merges at least half outside ASCII | backtracking over scan | Other merges | backtracking over scan |
+|-----------|-------------------------|-----------------------------------:|-----------------------:|-------------:|-----------------------:|
+| cl100k    | `gutenberg`             |                             12,184 |                  0.89x |      431,220 |                  1.24x |
+| cl100k    | `munch-cpp@15b2863c`    |                                110 |                  0.90x |      167,818 |                  1.32x |
+| cl100k    | `munch-python@15b2863c` |                                  0 |                        |       21,809 |                  1.28x |
+| cl100k    | `twitter.json`          |                             10,316 |                  0.28x |        8,336 |                  1.50x |
+| cl100k    | `wiki-ar`               |                          1,183,841 |                  0.40x |        6,526 |                  2.05x |
+| cl100k    | `wiki-hi`               |                          1,059,196 |                  0.49x |       10,361 |                  1.62x |
+| cl100k    | `wiki-ru`               |                            822,684 |                  0.45x |       11,864 |                  2.36x |
+| cl100k    | `wiki-sv`               |                              8,182 |                  0.77x |      959,922 |                  1.16x |
+| cl100k    | `wiki-zh`               |                            636,534 |                  0.29x |       39,503 |                  1.92x |
+| gpt2      | `gutenberg`             |                            110,346 |                  0.84x |    2,962,595 |                  0.60x |
+| gpt2      | `munch-cpp@15b2863c`    |                                217 |                  0.63x |    1,716,997 |                  0.62x |
+| gpt2      | `munch-python@15b2863c` |                                  0 |                        |      185,760 |                  0.60x |
+| gpt2      | `twitter.json`          |                             14,754 |                  0.31x |      225,367 |                  0.86x |
+| gpt2      | `wiki-ar`               |                          1,367,996 |                  0.54x |       56,709 |                  1.29x |
+| gpt2      | `wiki-hi`               |                          2,091,587 |                  0.52x |       56,816 |                  1.16x |
+| gpt2      | `wiki-ru`               |                            991,789 |                  0.41x |       86,083 |                  1.25x |
+| gpt2      | `wiki-sv`               |                             45,178 |                  0.84x |    1,650,550 |                  1.07x |
+| gpt2      | `wiki-zh`               |                            880,806 |                  0.44x |      152,939 |                  1.38x |
 
 Under GPT-2, which looks no piece up whole, the merge takes every piece, the tokens among them, which the backtracking
 lays in one walk of the trie, so it is faster on the mostly ASCII pieces of English prose and code as well, at 0.60 to
@@ -1548,35 +1574,35 @@ enwik8 hold, 520 merges timed under both tokenizers, the backtracking takes 0.10
 
 `encode()`:
 
-| Corpus | gpt2 before | gpt2 after | gain | cl100k before | cl100k after | gain |
-|---|---:|---:|---:|---:|---:|---:|
-| `twitter.json` | 101.7 | 116.4 | 1.14x | 111.5 | 134.4 | 1.21x |
-| `munch-python@15b2863c` | 88.6 | 88.9 | 1.00x | 101.0 | 100.0 | 0.99x |
-| `munch-cpp@15b2863c` | 90.0 | 90.7 | 1.01x | 97.8 | 97.0 | 0.99x |
-| `gutenberg` | 71.1 | 70.8 | 1.00x | 76.5 | 76.2 | 1.00x |
-| `wiki-zh` | 47.9 | 79.0 | 1.65x | 24.7 | 65.7 | 2.66x |
-| `wiki-ar` | 66.4 | 84.3 | 1.27x | 48.5 | 72.6 | 1.50x |
-| `wiki-ru` | 60.8 | 90.2 | 1.48x | 37.3 | 62.9 | 1.69x |
-| `wiki-hi` | 101.3 | 99.1 | 0.98x | 95.1 | 97.5 | 1.03x |
-| `wiki-sv` | 53.4 | 52.7 | 0.99x | 44.7 | 43.8 | 0.98x |
-| `enwik8` | 53.5 | 53.7 | 1.00x | 59.3 | 59.6 | 1.01x |
-| `enwik9` | 55.7 | 54.6 | 0.98x | 60.9 | 60.8 | 1.00x |
+| Corpus                  | gpt2 before | gpt2 after |  gain | cl100k before | cl100k after |  gain |
+|-------------------------|------------:|-----------:|------:|--------------:|-------------:|------:|
+| `twitter.json`          |       101.7 |      116.4 | 1.14x |         111.5 |        134.4 | 1.21x |
+| `munch-python@15b2863c` |        88.6 |       88.9 | 1.00x |         101.0 |        100.0 | 0.99x |
+| `munch-cpp@15b2863c`    |        90.0 |       90.7 | 1.01x |          97.8 |         97.0 | 0.99x |
+| `gutenberg`             |        71.1 |       70.8 | 1.00x |          76.5 |         76.2 | 1.00x |
+| `wiki-zh`               |        47.9 |       79.0 | 1.65x |          24.7 |         65.7 | 2.66x |
+| `wiki-ar`               |        66.4 |       84.3 | 1.27x |          48.5 |         72.6 | 1.50x |
+| `wiki-ru`               |        60.8 |       90.2 | 1.48x |          37.3 |         62.9 | 1.69x |
+| `wiki-hi`               |       101.3 |       99.1 | 0.98x |          95.1 |         97.5 | 1.03x |
+| `wiki-sv`               |        53.4 |       52.7 | 0.99x |          44.7 |         43.8 | 0.98x |
+| `enwik8`                |        53.5 |       53.7 | 1.00x |          59.3 |         59.6 | 1.01x |
+| `enwik9`                |        55.7 |       54.6 | 0.98x |          60.9 |         60.8 | 1.00x |
 
 The encoding with no cache:
 
-| Corpus | gpt2 before | gpt2 after | gain | cl100k before | cl100k after | gain |
-|---|---:|---:|---:|---:|---:|---:|
-| `twitter.json` | 53.6 | 62.3 | 1.16x | 81.1 | 124.9 | 1.54x |
-| `munch-python@15b2863c` | 47.3 | 49.2 | 1.04x | 88.1 | 85.5 | 0.97x |
-| `munch-cpp@15b2863c` | 47.9 | 47.3 | 0.99x | 87.5 | 88.5 | 1.01x |
-| `gutenberg` | 40.5 | 41.0 | 1.01x | 69.5 | 69.3 | 1.00x |
-| `wiki-zh` | 48.4 | 82.7 | 1.71x | 25.1 | 70.6 | 2.81x |
-| `wiki-ar` | 48.9 | 71.0 | 1.45x | 33.8 | 64.9 | 1.92x |
-| `wiki-ru` | 45.0 | 75.8 | 1.68x | 26.0 | 52.8 | 2.03x |
-| `wiki-hi` | 54.5 | 71.3 | 1.31x | 54.4 | 75.8 | 1.39x |
-| `wiki-sv` | 36.3 | 36.0 | 0.99x | 32.4 | 32.2 | 0.99x |
-| `enwik8` | 37.3 | 35.7 | 0.96x | 58.1 | 57.6 | 0.99x |
-| `enwik9` | 38.3 | 37.6 | 0.98x | 59.4 | 60.1 | 1.01x |
+| Corpus                  | gpt2 before | gpt2 after |  gain | cl100k before | cl100k after |  gain |
+|-------------------------|------------:|-----------:|------:|--------------:|-------------:|------:|
+| `twitter.json`          |        53.6 |       62.3 | 1.16x |          81.1 |        124.9 | 1.54x |
+| `munch-python@15b2863c` |        47.3 |       49.2 | 1.04x |          88.1 |         85.5 | 0.97x |
+| `munch-cpp@15b2863c`    |        47.9 |       47.3 | 0.99x |          87.5 |         88.5 | 1.01x |
+| `gutenberg`             |        40.5 |       41.0 | 1.01x |          69.5 |         69.3 | 1.00x |
+| `wiki-zh`               |        48.4 |       82.7 | 1.71x |          25.1 |         70.6 | 2.81x |
+| `wiki-ar`               |        48.9 |       71.0 | 1.45x |          33.8 |         64.9 | 1.92x |
+| `wiki-ru`               |        45.0 |       75.8 | 1.68x |          26.0 |         52.8 | 2.03x |
+| `wiki-hi`               |        54.5 |       71.3 | 1.31x |          54.4 |         75.8 | 1.39x |
+| `wiki-sv`               |        36.3 |       36.0 | 0.99x |          32.4 |         32.2 | 0.99x |
+| `enwik8`                |        37.3 |       35.7 | 0.96x |          58.1 |         57.6 | 0.99x |
+| `enwik9`                |        38.3 |       37.6 | 0.98x |          59.4 |         60.1 | 1.01x |
 
 On Chinese, Arabic and Russian `encode()` runs 1.65, 1.27 and 1.48 times as fast under GPT-2 and 2.66, 1.50 and 1.69
 times under cl100k, and with no cache 1.71, 1.45 and 1.68 and 2.81, 1.92 and 2.03 times; Hindi gains 1.31 and 1.39 with
@@ -1588,36 +1614,36 @@ move by 0.96 to 1.04, as the segmentation, which the change does not reach, move
 
 `prompts`, latencies in microseconds:
 
-| Encoder | Tokenizer | MiB/s | M tokens/s | mean | p50 | p90 | p99 |
-|---|---|---:|---:|---:|---:|---:|---:|
-| matisse `encode()`, before | gpt2 | 34.4 | 18.63 | 29.06 | 27.83 | 49.93 | 64.67 |
-| matisse `encode()`, before | cl100k | 27.1 | 9.76 | 36.90 | 32.83 | 68.40 | 90.01 |
-| matisse `encode()`, after | gpt2 | 40.8 | 22.09 | 24.52 | 22.37 | 46.85 | 65.11 |
-| matisse `encode()`, after | cl100k | 40.4 | 14.54 | 24.77 | 22.99 | 43.90 | 69.83 |
-| matisse `encode()`, kept cache, before | gpt2 | 47.3 | 25.62 | 21.14 | 19.56 | 37.94 | 49.18 |
-| matisse `encode()`, kept cache, before | cl100k | 33.4 | 12.03 | 29.95 | 25.25 | 58.34 | 84.26 |
-| matisse `encode()`, kept cache, after | gpt2 | 60.8 | 32.94 | 16.44 | 15.16 | 29.91 | 45.41 |
-| matisse `encode()`, kept cache, after | cl100k | 48.7 | 17.54 | 20.53 | 18.90 | 36.80 | 57.68 |
-| bpe `Tokenizer::encode()` | gpt2 | 37.3 | 20.22 | 26.79 | 25.69 | 46.16 | 67.36 |
-| bpe `Tokenizer::encode()` | cl100k | 36.6 | 13.17 | 27.34 | 25.77 | 46.31 | 72.73 |
-| bpe, its pieces by `encode_via_backtracking()` | gpt2 | 40.1 | 21.73 | 24.93 | 23.88 | 42.82 | 64.27 |
-| bpe, its pieces by `encode_via_backtracking()` | cl100k | 38.7 | 13.94 | 25.83 | 24.29 | 43.98 | 69.91 |
+| Encoder                                        | Tokenizer | MiB/s | M tokens/s |  mean |   p50 |   p90 |   p99 |
+|------------------------------------------------|-----------|------:|-----------:|------:|------:|------:|------:|
+| matisse `encode()`, before                     | gpt2      |  34.4 |      18.63 | 29.06 | 27.83 | 49.93 | 64.67 |
+| matisse `encode()`, before                     | cl100k    |  27.1 |       9.76 | 36.90 | 32.83 | 68.40 | 90.01 |
+| matisse `encode()`, after                      | gpt2      |  40.8 |      22.09 | 24.52 | 22.37 | 46.85 | 65.11 |
+| matisse `encode()`, after                      | cl100k    |  40.4 |      14.54 | 24.77 | 22.99 | 43.90 | 69.83 |
+| matisse `encode()`, kept cache, before         | gpt2      |  47.3 |      25.62 | 21.14 | 19.56 | 37.94 | 49.18 |
+| matisse `encode()`, kept cache, before         | cl100k    |  33.4 |      12.03 | 29.95 | 25.25 | 58.34 | 84.26 |
+| matisse `encode()`, kept cache, after          | gpt2      |  60.8 |      32.94 | 16.44 | 15.16 | 29.91 | 45.41 |
+| matisse `encode()`, kept cache, after          | cl100k    |  48.7 |      17.54 | 20.53 | 18.90 | 36.80 | 57.68 |
+| bpe `Tokenizer::encode()`                      | gpt2      |  37.3 |      20.22 | 26.79 | 25.69 | 46.16 | 67.36 |
+| bpe `Tokenizer::encode()`                      | cl100k    |  36.6 |      13.17 | 27.34 | 25.77 | 46.31 | 72.73 |
+| bpe, its pieces by `encode_via_backtracking()` | gpt2      |  40.1 |      21.73 | 24.93 | 23.88 | 42.82 | 64.27 |
+| bpe, its pieces by `encode_via_backtracking()` | cl100k    |  38.7 |      13.94 | 25.83 | 24.29 | 43.98 | 69.91 |
 
 The batch of enwik9's pages, MiB/s of the median of three timed passes with the best in parentheses:
 
-| Encoder | gpt2, 1 thread | gpt2, 24 threads | cl100k, 1 thread | cl100k, 24 threads |
-|---|---:|---:|---:|---:|
-| matisse `encode()` per document, a cache per thread, before | 60.3 (62.9) | 794.7 (811.8) | 68.7 (69.5) | 934.6 (942.6) |
-| matisse `encode()` per document, a cache per thread, after | 60.8 (60.9) | 780.5 (783.0) | 68.2 (69.0) | 841.8 (861.6) |
-| bpe `Tokenizer::encode()` per document | 49.2 (49.9) | 504.7 (514.3) | 49.5 (49.8) | 511.3 (514.7) |
-| bpe, its pieces by `encode_via_backtracking()`, per document | 49.0 (53.6) | 511.2 (519.1) | 49.8 (50.1) | 495.4 (501.8) |
+| Encoder                                                      | gpt2, 1 thread | gpt2, 24 threads | cl100k, 1 thread | cl100k, 24 threads |
+|--------------------------------------------------------------|---------------:|-----------------:|-----------------:|-------------------:|
+| matisse `encode()` per document, a cache per thread, before  |    60.3 (62.9) |    794.7 (811.8) |      68.7 (69.5) |      934.6 (942.6) |
+| matisse `encode()` per document, a cache per thread, after   |    60.8 (60.9) |    780.5 (783.0) |      68.2 (69.0) |      841.8 (861.6) |
+| bpe `Tokenizer::encode()` per document                       |    49.2 (49.9) |    504.7 (514.3) |      49.5 (49.8) |      511.3 (514.7) |
+| bpe, its pieces by `encode_via_backtracking()`, per document |    49.0 (53.6) |    511.2 (519.1) |      49.8 (50.1) |      495.4 (501.8) |
 
 `encode_parallel()` on enwik9:
 
-| Tokenizer | `encode()` before | `encode()` after | 24 workers before | 24 workers after | gain |
-|---|---:|---:|---:|---:|---:|
-| gpt2 | 54.6 | 55.8 | 532.3 | 532.3 | 1.00x |
-| cl100k | 60.9 | 61.0 | 622.5 | 612.8 | 0.98x |
+| Tokenizer | `encode()` before | `encode()` after | 24 workers before | 24 workers after |  gain |
+|-----------|------------------:|-----------------:|------------------:|-----------------:|------:|
+| gpt2      |              54.6 |             55.8 |             532.3 |            532.3 | 1.00x |
+| cl100k    |              60.9 |             61.0 |             622.5 |            612.8 | 0.98x |
 
 `encode_parallel()` at 24 workers measures 1.00 and 0.98 times the build before, its `encode()` rows of the same stage
 55.8 and 61.0 against the single-core stage's 54.6 and 60.8, so the parallel rows move within the noise of a single run.
@@ -1628,14 +1654,14 @@ from the Wikipedia samples as well as from gutenberg. The batch of enwik9's page
 keeps, measured 0.98 and 0.90 at 24 threads in the session, and three further alternations of the two builds put it at
 0.98 to 1.02:
 
-| Tokenizer | Run | Before | After | gain |
-|---|---|---:|---:|---:|
-| gpt2 | 1 | 796.1 | 801.7 | 1.01x |
-| gpt2 | 2 | 807.9 | 790.8 | 0.98x |
-| gpt2 | 3 | 802.7 | 795.3 | 0.99x |
-| cl100k | 1 | 931.5 | 928.4 | 1.00x |
-| cl100k | 2 | 922.4 | 938.6 | 1.02x |
-| cl100k | 3 | 935.2 | 922.6 | 0.99x |
+| Tokenizer | Run | Before | After |  gain |
+|-----------|-----|-------:|------:|------:|
+| gpt2      | 1   |  796.1 | 801.7 | 1.01x |
+| gpt2      | 2   |  807.9 | 790.8 | 0.98x |
+| gpt2      | 3   |  802.7 | 795.3 | 0.99x |
+| cl100k    | 1   |  931.5 | 928.4 | 1.00x |
+| cl100k    | 2   |  922.4 | 938.6 | 1.02x |
+| cl100k    | 3   |  935.2 | 922.6 | 0.99x |
 
 ### **The standing after the backtracking**
 
@@ -1645,35 +1671,35 @@ of the two, and the same for the build before the change:
 
 gpt2:
 
-| Corpus | matisse `encode()` | no cache | bpe `Tokenizer::encode()` | bpe, its pieces by `encode_via_backtracking()` | over the faster bpe | before, over the faster bpe |
-|---|---:|---:|---:|---:|---:|---:|
-| `twitter.json` | 116.4 (118.8) | 62.3 (64.5) | 50.0 (52.2) | 55.2 (56.8) | 2.11x | 1.84x |
-| `munch-python@15b2863c` | 88.9 (90.8) | 49.2 (50.0) | 57.4 (58.7) | 58.9 (60.5) | 1.51x | 1.50x |
-| `munch-cpp@15b2863c` | 90.7 (92.2) | 47.3 (48.3) | 56.2 (57.1) | 59.2 (60.4) | 1.53x | 1.52x |
-| `gutenberg` | 70.8 (71.6) | 41.0 (41.3) | 57.5 (58.8) | 59.1 (60.2) | 1.20x | 1.20x |
-| `wiki-zh` | 79.0 (80.4) | 82.7 (84.2) | 40.8 (41.6) | 44.1 (44.7) | 1.79x | 1.09x |
-| `wiki-ar` | 84.3 (85.9) | 71.0 (71.5) | 48.5 (49.1) | 51.5 (52.2) | 1.64x | 1.29x |
-| `wiki-ru` | 90.2 (91.2) | 75.8 (77.9) | 49.4 (50.5) | 51.6 (52.7) | 1.75x | 1.18x |
-| `wiki-hi` | 99.1 (101.6) | 71.3 (73.4) | 54.6 (55.8) | 57.7 (59.2) | 1.72x | 1.76x |
-| `wiki-sv` | 52.7 (54.1) | 36.0 (36.4) | 31.9 (32.3) | 32.8 (33.5) | 1.61x | 1.63x |
-| `enwik8` | 53.7 (53.8) | 35.7 (36.6) | 50.6 (52.5) | 51.6 (51.9) | 1.04x | 1.04x |
-| `enwik9` | 54.6 (54.9) | 37.6 (38.2) | 49.0 (49.2) | 51.0 (51.3) | 1.07x | 1.09x |
+| Corpus                  | matisse `encode()` |    no cache | bpe `Tokenizer::encode()` | bpe, its pieces by `encode_via_backtracking()` | over the faster bpe | before, over the faster bpe |
+|-------------------------|-------------------:|------------:|--------------------------:|-----------------------------------------------:|--------------------:|----------------------------:|
+| `twitter.json`          |      116.4 (118.8) | 62.3 (64.5) |               50.0 (52.2) |                                    55.2 (56.8) |               2.11x |                       1.84x |
+| `munch-python@15b2863c` |        88.9 (90.8) | 49.2 (50.0) |               57.4 (58.7) |                                    58.9 (60.5) |               1.51x |                       1.50x |
+| `munch-cpp@15b2863c`    |        90.7 (92.2) | 47.3 (48.3) |               56.2 (57.1) |                                    59.2 (60.4) |               1.53x |                       1.52x |
+| `gutenberg`             |        70.8 (71.6) | 41.0 (41.3) |               57.5 (58.8) |                                    59.1 (60.2) |               1.20x |                       1.20x |
+| `wiki-zh`               |        79.0 (80.4) | 82.7 (84.2) |               40.8 (41.6) |                                    44.1 (44.7) |               1.79x |                       1.09x |
+| `wiki-ar`               |        84.3 (85.9) | 71.0 (71.5) |               48.5 (49.1) |                                    51.5 (52.2) |               1.64x |                       1.29x |
+| `wiki-ru`               |        90.2 (91.2) | 75.8 (77.9) |               49.4 (50.5) |                                    51.6 (52.7) |               1.75x |                       1.18x |
+| `wiki-hi`               |       99.1 (101.6) | 71.3 (73.4) |               54.6 (55.8) |                                    57.7 (59.2) |               1.72x |                       1.76x |
+| `wiki-sv`               |        52.7 (54.1) | 36.0 (36.4) |               31.9 (32.3) |                                    32.8 (33.5) |               1.61x |                       1.63x |
+| `enwik8`                |        53.7 (53.8) | 35.7 (36.6) |               50.6 (52.5) |                                    51.6 (51.9) |               1.04x |                       1.04x |
+| `enwik9`                |        54.6 (54.9) | 37.6 (38.2) |               49.0 (49.2) |                                    51.0 (51.3) |               1.07x |                       1.09x |
 
 cl100k:
 
-| Corpus | matisse `encode()` | no cache | bpe `Tokenizer::encode()` | bpe, its pieces by `encode_via_backtracking()` | over the faster bpe | before, over the faster bpe |
-|---|---:|---:|---:|---:|---:|---:|
-| `twitter.json` | 134.4 (137.2) | 124.9 (127.0) | 70.0 (71.4) | 73.0 (74.6) | 1.84x | 1.53x |
-| `munch-python@15b2863c` | 100.0 (101.7) | 85.5 (88.5) | 60.8 (62.8) | 63.0 (64.8) | 1.59x | 1.60x |
-| `munch-cpp@15b2863c` | 97.0 (100.1) | 88.5 (90.7) | 63.5 (64.8) | 66.0 (67.0) | 1.47x | 1.48x |
-| `gutenberg` | 76.2 (76.9) | 69.3 (70.7) | 57.2 (58.0) | 58.7 (59.4) | 1.30x | 1.30x |
-| `wiki-zh` | 65.7 (67.1) | 70.6 (71.7) | 44.9 (45.7) | 47.0 (48.4) | 1.40x | 0.53x |
-| `wiki-ar` | 72.6 (74.1) | 64.9 (66.9) | 52.5 (54.0) | 55.6 (57.1) | 1.31x | 0.87x |
-| `wiki-ru` | 62.9 (63.7) | 52.8 (53.4) | 46.0 (46.5) | 46.6 (47.3) | 1.35x | 0.80x |
-| `wiki-hi` | 97.5 (99.4) | 75.8 (77.3) | 63.4 (64.8) | 67.4 (69.2) | 1.45x | 1.41x |
-| `wiki-sv` | 43.8 (44.9) | 32.2 (33.2) | 31.1 (31.8) | 32.2 (32.8) | 1.36x | 1.39x |
-| `enwik8` | 59.6 (62.3) | 57.6 (58.8) | 47.4 (48.4) | 50.9 (51.7) | 1.17x | 1.17x |
-| `enwik9` | 60.8 (61.0) | 60.1 (60.2) | 48.4 (48.5) | 50.2 (50.4) | 1.21x | 1.21x |
+| Corpus                  | matisse `encode()` |      no cache | bpe `Tokenizer::encode()` | bpe, its pieces by `encode_via_backtracking()` | over the faster bpe | before, over the faster bpe |
+|-------------------------|-------------------:|--------------:|--------------------------:|-----------------------------------------------:|--------------------:|----------------------------:|
+| `twitter.json`          |      134.4 (137.2) | 124.9 (127.0) |               70.0 (71.4) |                                    73.0 (74.6) |               1.84x |                       1.53x |
+| `munch-python@15b2863c` |      100.0 (101.7) |   85.5 (88.5) |               60.8 (62.8) |                                    63.0 (64.8) |               1.59x |                       1.60x |
+| `munch-cpp@15b2863c`    |       97.0 (100.1) |   88.5 (90.7) |               63.5 (64.8) |                                    66.0 (67.0) |               1.47x |                       1.48x |
+| `gutenberg`             |        76.2 (76.9) |   69.3 (70.7) |               57.2 (58.0) |                                    58.7 (59.4) |               1.30x |                       1.30x |
+| `wiki-zh`               |        65.7 (67.1) |   70.6 (71.7) |               44.9 (45.7) |                                    47.0 (48.4) |               1.40x |                       0.53x |
+| `wiki-ar`               |        72.6 (74.1) |   64.9 (66.9) |               52.5 (54.0) |                                    55.6 (57.1) |               1.31x |                       0.87x |
+| `wiki-ru`               |        62.9 (63.7) |   52.8 (53.4) |               46.0 (46.5) |                                    46.6 (47.3) |               1.35x |                       0.80x |
+| `wiki-hi`               |        97.5 (99.4) |   75.8 (77.3) |               63.4 (64.8) |                                    67.4 (69.2) |               1.45x |                       1.41x |
+| `wiki-sv`               |        43.8 (44.9) |   32.2 (33.2) |               31.1 (31.8) |                                    32.2 (32.8) |               1.36x |                       1.39x |
+| `enwik8`                |        59.6 (62.3) |   57.6 (58.8) |               47.4 (48.4) |                                    50.9 (51.7) |               1.17x |                       1.17x |
+| `enwik9`                |        60.8 (61.0) |   60.1 (60.2) |               48.4 (48.5) |                                    50.2 (50.4) |               1.21x |                       1.21x |
 
 matisse's `encode()` is faster than the bpe crate's faster configuration on every corpus under both tokenizers, 1.04 to
 2.11 times under GPT-2 and 1.17 to 1.84 times under cl100k, where it ran at 0.53, 0.87 and 0.80 times the crate's rate
@@ -1706,35 +1732,35 @@ matisse's `encode()` over the fastest of them:
 
 o200k:
 
-| Corpus | matisse `encode()` | bpe | tiktoken | tiktoken's core | tiktoken-rs | Hugging Face | Hugging Face's crate | over the fastest |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|
-| `twitter.json` | 114.6 (119.9) | 64.8 (66.9) | 27.3 (27.9) | 29.7 (30.6) | 28.9 (29.7) | 5.0 (5.2) | 5.2 (5.7) | 1.77x |
-| `munch-python@15b2863c` | 91.5 (94.4) | 57.8 (59.4) | 33.8 (34.2) | 36.4 (37.9) | 37.3 (37.8) | 4.8 (4.9) | 5.6 (5.7) | 1.58x |
-| `munch-cpp@15b2863c` | 87.4 (89.4) | 56.2 (58.5) | 33.0 (33.8) | 35.6 (36.5) | 35.6 (35.9) | 4.0 (4.4) | 4.3 (4.4) | 1.56x |
-| `gutenberg` | 68.1 (68.8) | 48.9 (50.4) | 36.9 (37.9) | 40.0 (41.2) | 39.6 (40.7) | 3.7 (3.8) | 3.8 (3.9) | 1.39x |
-| `wiki-zh` | 52.0 (53.5) | 43.0 (43.9) | 19.7 (20.0) | 20.4 (20.6) | 20.0 (20.5) | 4.8 (4.8) | 5.0 (5.1) | 1.21x |
-| `wiki-ar` | 47.2 (50.1) | 47.8 (48.8) | 27.8 (28.4) | 28.8 (29.5) | 28.7 (29.3) | 4.7 (4.9) | 4.6 (4.7) | 0.99x |
-| `wiki-ru` | 47.1 (48.4) | 44.3 (45.8) | 24.6 (25.3) | 25.6 (25.9) | 25.4 (25.9) | 5.1 (5.3) | 4.9 (4.9) | 1.06x |
-| `wiki-hi` | 90.7 (93.0) | 72.1 (73.9) | 36.9 (37.6) | 38.1 (38.7) | 38.8 (39.9) | 6.3 (6.6) | 6.4 (6.4) | 1.26x |
-| `wiki-sv` | 40.7 (41.8) | 29.9 (30.7) | 24.0 (24.4) | 25.0 (25.6) | 25.8 (26.3) | 3.7 (4.0) | 3.9 (4.0) | 1.36x |
-| `enwik8` | 49.1 (49.2) | 41.4 (41.6) | 30.1 (30.3) | 32.5 (33.1) | 32.8 (33.1) | 3.7 (3.7) | 4.0 (4.1) | 1.19x |
-| `enwik9` | 53.1 (53.4) | 43.4 (43.7) | 29.0 (29.0) | 31.9 (32.0) | 31.6 (31.7) |  |  | 1.22x |
+| Corpus                  | matisse `encode()` |         bpe |    tiktoken | tiktoken's core | tiktoken-rs | Hugging Face | Hugging Face's crate | over the fastest |
+|-------------------------|-------------------:|------------:|------------:|----------------:|------------:|-------------:|---------------------:|-----------------:|
+| `twitter.json`          |      114.6 (119.9) | 64.8 (66.9) | 27.3 (27.9) |     29.7 (30.6) | 28.9 (29.7) |    5.0 (5.2) |            5.2 (5.7) |            1.77x |
+| `munch-python@15b2863c` |        91.5 (94.4) | 57.8 (59.4) | 33.8 (34.2) |     36.4 (37.9) | 37.3 (37.8) |    4.8 (4.9) |            5.6 (5.7) |            1.58x |
+| `munch-cpp@15b2863c`    |        87.4 (89.4) | 56.2 (58.5) | 33.0 (33.8) |     35.6 (36.5) | 35.6 (35.9) |    4.0 (4.4) |            4.3 (4.4) |            1.56x |
+| `gutenberg`             |        68.1 (68.8) | 48.9 (50.4) | 36.9 (37.9) |     40.0 (41.2) | 39.6 (40.7) |    3.7 (3.8) |            3.8 (3.9) |            1.39x |
+| `wiki-zh`               |        52.0 (53.5) | 43.0 (43.9) | 19.7 (20.0) |     20.4 (20.6) | 20.0 (20.5) |    4.8 (4.8) |            5.0 (5.1) |            1.21x |
+| `wiki-ar`               |        47.2 (50.1) | 47.8 (48.8) | 27.8 (28.4) |     28.8 (29.5) | 28.7 (29.3) |    4.7 (4.9) |            4.6 (4.7) |            0.99x |
+| `wiki-ru`               |        47.1 (48.4) | 44.3 (45.8) | 24.6 (25.3) |     25.6 (25.9) | 25.4 (25.9) |    5.1 (5.3) |            4.9 (4.9) |            1.06x |
+| `wiki-hi`               |        90.7 (93.0) | 72.1 (73.9) | 36.9 (37.6) |     38.1 (38.7) | 38.8 (39.9) |    6.3 (6.6) |            6.4 (6.4) |            1.26x |
+| `wiki-sv`               |        40.7 (41.8) | 29.9 (30.7) | 24.0 (24.4) |     25.0 (25.6) | 25.8 (26.3) |    3.7 (4.0) |            3.9 (4.0) |            1.36x |
+| `enwik8`                |        49.1 (49.2) | 41.4 (41.6) | 30.1 (30.3) |     32.5 (33.1) | 32.8 (33.1) |    3.7 (3.7) |            4.0 (4.1) |            1.19x |
+| `enwik9`                |        53.1 (53.4) | 43.4 (43.7) | 29.0 (29.0) |     31.9 (32.0) | 31.6 (31.7) |              |                      |            1.22x |
 
 llama3:
 
-| Corpus | matisse `encode()` | tiktoken | tiktoken's core | Hugging Face | Hugging Face's crate | over the fastest |
-|---|---:|---:|---:|---:|---:|---:|
-| `twitter.json` | 99.7 (101.1) | 26.6 (27.1) | 29.0 (29.7) | 5.8 (6.0) | 5.5 (5.7) | 3.44x |
-| `munch-python@15b2863c` | 94.2 (96.4) | 31.9 (32.9) | 34.9 (36.0) | 5.6 (5.8) | 5.0 (5.3) | 2.70x |
-| `munch-cpp@15b2863c` | 85.6 (88.1) | 31.6 (32.0) | 34.4 (34.8) | 4.1 (4.4) | 4.3 (4.4) | 2.49x |
-| `gutenberg` | 71.5 (72.8) | 34.8 (35.6) | 37.9 (38.3) | 3.8 (3.9) | 4.1 (4.1) | 1.89x |
-| `wiki-zh` | 19.7 (20.1) | 21.9 (22.5) | 22.7 (23.1) | 5.7 (5.9) | 6.0 (6.1) | 0.87x |
-| `wiki-ar` | 41.2 (41.9) | 27.2 (27.7) | 29.1 (29.5) | 4.7 (4.9) | 4.9 (5.1) | 1.42x |
-| `wiki-ru` | 34.7 (35.3) | 24.5 (25.2) | 26.1 (26.4) | 5.1 (5.3) | 5.4 (5.5) | 1.33x |
-| `wiki-hi` | 106.6 (109.0) | 45.8 (46.4) | 50.0 (51.5) | 4.8 (4.9) | 4.6 (4.9) | 2.13x |
-| `wiki-sv` | 41.0 (42.4) | 23.2 (23.9) | 24.7 (25.6) | 4.1 (4.4) | 4.0 (4.3) | 1.66x |
-| `enwik8` | 52.9 (53.2) | 30.1 (30.2) | 31.6 (31.8) | 4.1 (4.2) | 4.6 (4.6) | 1.67x |
-| `enwik9` | 55.9 (56.0) | 27.5 (27.6) | 30.9 (30.9) |  |  | 1.81x |
+| Corpus                  | matisse `encode()` |    tiktoken | tiktoken's core | Hugging Face | Hugging Face's crate | over the fastest |
+|-------------------------|-------------------:|------------:|----------------:|-------------:|---------------------:|-----------------:|
+| `twitter.json`          |       99.7 (101.1) | 26.6 (27.1) |     29.0 (29.7) |    5.8 (6.0) |            5.5 (5.7) |            3.44x |
+| `munch-python@15b2863c` |        94.2 (96.4) | 31.9 (32.9) |     34.9 (36.0) |    5.6 (5.8) |            5.0 (5.3) |            2.70x |
+| `munch-cpp@15b2863c`    |        85.6 (88.1) | 31.6 (32.0) |     34.4 (34.8) |    4.1 (4.4) |            4.3 (4.4) |            2.49x |
+| `gutenberg`             |        71.5 (72.8) | 34.8 (35.6) |     37.9 (38.3) |    3.8 (3.9) |            4.1 (4.1) |            1.89x |
+| `wiki-zh`               |        19.7 (20.1) | 21.9 (22.5) |     22.7 (23.1) |    5.7 (5.9) |            6.0 (6.1) |            0.87x |
+| `wiki-ar`               |        41.2 (41.9) | 27.2 (27.7) |     29.1 (29.5) |    4.7 (4.9) |            4.9 (5.1) |            1.42x |
+| `wiki-ru`               |        34.7 (35.3) | 24.5 (25.2) |     26.1 (26.4) |    5.1 (5.3) |            5.4 (5.5) |            1.33x |
+| `wiki-hi`               |      106.6 (109.0) | 45.8 (46.4) |     50.0 (51.5) |    4.8 (4.9) |            4.6 (4.9) |            2.13x |
+| `wiki-sv`               |        41.0 (42.4) | 23.2 (23.9) |     24.7 (25.6) |    4.1 (4.4) |            4.0 (4.3) |            1.66x |
+| `enwik8`                |        52.9 (53.2) | 30.1 (30.2) |     31.6 (31.8) |    4.1 (4.2) |            4.6 (4.6) |            1.67x |
+| `enwik9`                |        55.9 (56.0) | 27.5 (27.6) |     30.9 (30.9) |              |                      |            1.81x |
 
 Under o200k the fastest competitor is the bpe crate on every corpus, and matisse's `encode()` runs at 1.06 to 1.77 times
 it but on Arabic, where it is level at 0.99 times; against the fastest of tiktoken's three it runs at 1.50 to 3.86
@@ -1748,25 +1774,25 @@ Llama 3.
 
 `prompts`, each call timed alone, five timed passes after the first; latencies in microseconds:
 
-| Encoder | Tokenizer | MiB/s | M tokens/s | mean | p50 | p90 | p99 |
-|---|---|---:|---:|---:|---:|---:|---:|
-| matisse `encode()` | o200k | 28.3 | 6.47 | 35.28 | 31.28 | 63.18 | 91.11 |
-| matisse `encode()` | llama3 | 23.8 | 6.13 | 41.96 | 33.37 | 82.65 | 120.28 |
-| matisse `encode()`, kept cache | o200k | 32.2 | 7.35 | 31.05 | 28.45 | 56.90 | 80.35 |
-| matisse `encode()`, kept cache | llama3 | 30.2 | 7.77 | 33.07 | 26.19 | 66.02 | 106.48 |
-| bpe `Tokenizer::encode()` | o200k | 31.4 | 7.16 | 31.87 | 29.35 | 54.42 | 83.42 |
-| bpe, its pieces by `encode_via_backtracking()` | o200k | 32.9 | 7.51 | 30.41 | 28.43 | 52.91 | 81.27 |
-| tiktoken `encode_to_numpy()` | o200k | 19.0 | 4.34 | 52.64 | 48.46 | 90.67 | 129.74 |
-| tiktoken `encode_to_numpy()` | llama3 | 22.3 | 5.74 | 44.79 | 41.41 | 79.28 | 109.58 |
-| tiktoken's core `encode_ordinary()` | o200k | 22.8 | 5.21 | 43.86 | 41.08 | 78.29 | 108.40 |
-| tiktoken's core `encode_ordinary()` | llama3 | 22.9 | 5.88 | 43.74 | 40.65 | 79.50 | 106.25 |
-| tiktoken-rs `encode_ordinary()` | o200k | 23.1 | 5.27 | 43.36 | 40.03 | 77.26 | 109.71 |
-| Hugging Face `encode()` | o200k | 3.2 | 0.74 | 310.39 | 299.49 | 538.99 | 726.14 |
-| Hugging Face `encode()` | llama3 | 3.2 | 0.81 | 317.26 | 313.54 | 545.46 | 728.99 |
-| Hugging Face `encode_batch_fast()` | o200k | 3.3 | 0.76 | 302.05 | 282.88 | 512.60 | 714.79 |
-| Hugging Face `encode_batch_fast()` | llama3 | 3.9 | 1.02 | 253.28 | 247.96 | 443.49 | 622.14 |
-| Hugging Face's crate `encode_fast()` | o200k | 4.4 | 1.02 | 224.80 | 215.64 | 390.70 | 519.51 |
-| Hugging Face's crate `encode_fast()` | llama3 | 5.2 | 1.35 | 190.82 | 184.36 | 326.12 | 442.68 |
+| Encoder                                        | Tokenizer | MiB/s | M tokens/s |   mean |    p50 |    p90 |    p99 |
+|------------------------------------------------|-----------|------:|-----------:|-------:|-------:|-------:|-------:|
+| matisse `encode()`                             | o200k     |  28.3 |       6.47 |  35.28 |  31.28 |  63.18 |  91.11 |
+| matisse `encode()`                             | llama3    |  23.8 |       6.13 |  41.96 |  33.37 |  82.65 | 120.28 |
+| matisse `encode()`, kept cache                 | o200k     |  32.2 |       7.35 |  31.05 |  28.45 |  56.90 |  80.35 |
+| matisse `encode()`, kept cache                 | llama3    |  30.2 |       7.77 |  33.07 |  26.19 |  66.02 | 106.48 |
+| bpe `Tokenizer::encode()`                      | o200k     |  31.4 |       7.16 |  31.87 |  29.35 |  54.42 |  83.42 |
+| bpe, its pieces by `encode_via_backtracking()` | o200k     |  32.9 |       7.51 |  30.41 |  28.43 |  52.91 |  81.27 |
+| tiktoken `encode_to_numpy()`                   | o200k     |  19.0 |       4.34 |  52.64 |  48.46 |  90.67 | 129.74 |
+| tiktoken `encode_to_numpy()`                   | llama3    |  22.3 |       5.74 |  44.79 |  41.41 |  79.28 | 109.58 |
+| tiktoken's core `encode_ordinary()`            | o200k     |  22.8 |       5.21 |  43.86 |  41.08 |  78.29 | 108.40 |
+| tiktoken's core `encode_ordinary()`            | llama3    |  22.9 |       5.88 |  43.74 |  40.65 |  79.50 | 106.25 |
+| tiktoken-rs `encode_ordinary()`                | o200k     |  23.1 |       5.27 |  43.36 |  40.03 |  77.26 | 109.71 |
+| Hugging Face `encode()`                        | o200k     |   3.2 |       0.74 | 310.39 | 299.49 | 538.99 | 726.14 |
+| Hugging Face `encode()`                        | llama3    |   3.2 |       0.81 | 317.26 | 313.54 | 545.46 | 728.99 |
+| Hugging Face `encode_batch_fast()`             | o200k     |   3.3 |       0.76 | 302.05 | 282.88 | 512.60 | 714.79 |
+| Hugging Face `encode_batch_fast()`             | llama3    |   3.9 |       1.02 | 253.28 | 247.96 | 443.49 | 622.14 |
+| Hugging Face's crate `encode_fast()`           | o200k     |   4.4 |       1.02 | 224.80 | 215.64 | 390.70 | 519.51 |
+| Hugging Face's crate `encode_fast()`           | llama3    |   5.2 |       1.35 | 190.82 | 184.36 | 326.12 | 442.68 |
 
 On a prompt under o200k the bpe crate's backtracking is the fastest call, a mean of 30.41 microseconds, against
 matisse's 35.28 with a cache of its own and 31.05 with a kept cache; under Llama 3 matisse's call is the fastest, 41.96
@@ -1774,17 +1800,17 @@ and 33.07 microseconds against tiktoken's core's 43.74.
 
 enwik9's pages at 24 threads, MiB/s of the median of three timed passes with the best in parentheses:
 
-| Encoder | o200k | llama3 |
-|---|---:|---:|
-| matisse `encode()` per document, a cache per thread | 794.0 (801.3) | 874.1 (876.0) |
-| bpe `Tokenizer::encode()` per document | 426.5 (456.1) |  |
-| bpe, its pieces by `encode_via_backtracking()`, per document | 463.7 (469.0) |  |
-| tiktoken's core `encode_ordinary()` per document | 153.8 (156.7) | 146.8 (147.6) |
-| tiktoken-rs `encode_ordinary()` per document | 153.1 (157.6) |  |
-| Hugging Face's crate `encode_fast()` per document | 31.2 (31.6) | 38.4 (38.5) |
-| Hugging Face's crate `encode_batch_fast()`, Rayon's pool | 28.8 (29.6) | 25.9 (26.6) |
-| tiktoken `encode_to_numpy()` mapped by a pool of 24 threads | 77.5 (79.9) | 82.0 (82.3) |
-| Hugging Face `encode_batch_fast()` | 35.3 (35.4) | 34.6 (34.7) |
+| Encoder                                                      |         o200k |        llama3 |
+|--------------------------------------------------------------|--------------:|--------------:|
+| matisse `encode()` per document, a cache per thread          | 794.0 (801.3) | 874.1 (876.0) |
+| bpe `Tokenizer::encode()` per document                       | 426.5 (456.1) |               |
+| bpe, its pieces by `encode_via_backtracking()`, per document | 463.7 (469.0) |               |
+| tiktoken's core `encode_ordinary()` per document             | 153.8 (156.7) | 146.8 (147.6) |
+| tiktoken-rs `encode_ordinary()` per document                 | 153.1 (157.6) |               |
+| Hugging Face's crate `encode_fast()` per document            |   31.2 (31.6) |   38.4 (38.5) |
+| Hugging Face's crate `encode_batch_fast()`, Rayon's pool     |   28.8 (29.6) |   25.9 (26.6) |
+| tiktoken `encode_to_numpy()` mapped by a pool of 24 threads  |   77.5 (79.9) |   82.0 (82.3) |
+| Hugging Face `encode_batch_fast()`                           |   35.3 (35.4) |   34.6 (34.7) |
 
 matisse's batch runs at 794.0 and 874.1 MiB/s under o200k and Llama 3, 1.71 times the bpe crate's faster configuration
 under o200k, 5.16 and 5.95 times tiktoken's fastest from Rust, its core, 10.25 and 10.66 times tiktoken's kept pool from
@@ -1794,14 +1820,14 @@ call per document under Llama 3.
 `encode_parallel()` at 24 workers on enwik9 beside the competitors' one call on one thread from the single-core stage,
 Hugging Face not being run on enwik9:
 
-| Encoder | o200k | llama3 |
-|---|---:|---:|
-| matisse `encode_parallel()`, 24 workers | 577.5 (581.9) | 579.5 (582.5) |
-| matisse `encode()`, one thread | 53.6 (53.7) | 55.0 (55.1) |
-| bpe, its pieces by `encode_via_backtracking()`, one thread | 43.4 (43.7) |  |
-| tiktoken `encode_to_numpy()`, one thread | 29.0 (29.0) | 27.5 (27.6) |
-| tiktoken's core `encode_ordinary()`, one thread | 31.9 (32.0) | 30.9 (30.9) |
-| tiktoken-rs `encode_ordinary()`, one thread | 31.6 (31.7) |  |
+| Encoder                                                    |         o200k |        llama3 |
+|------------------------------------------------------------|--------------:|--------------:|
+| matisse `encode_parallel()`, 24 workers                    | 577.5 (581.9) | 579.5 (582.5) |
+| matisse `encode()`, one thread                             |   53.6 (53.7) |   55.0 (55.1) |
+| bpe, its pieces by `encode_via_backtracking()`, one thread |   43.4 (43.7) |               |
+| tiktoken `encode_to_numpy()`, one thread                   |   29.0 (29.0) |   27.5 (27.6) |
+| tiktoken's core `encode_ordinary()`, one thread            |   31.9 (32.0) |   30.9 (30.9) |
+| tiktoken-rs `encode_ordinary()`, one thread                |   31.6 (31.7) |               |
 
 `encode_parallel()` encodes enwik9 at 577.5 and 579.5 MiB/s with 24 workers, 10.77 and 10.54 times its own `encode()` in
 the same run, 13.31 times the bpe crate's one call under o200k, and 18.10 and 18.75 times tiktoken's core's.
@@ -1830,63 +1856,63 @@ over `encode()`:
 
 gpt2:
 
-| Corpus | `encode()` | pushes of 64 bytes | pushes of 4 KiB | one push | one push over `encode()` |
-|---|---:|---:|---:|---:|---:|
-| `twitter.json` | 109.6 (113.4) | 6.1 (6.2) | 28.4 (29.3) | 30.8 (31.2) | 0.28x |
-| `munch-python@15b2863c` | 83.1 (86.6) | 5.0 (5.1) | 25.5 (26.1) | 27.6 (28.5) | 0.33x |
-| `munch-cpp@15b2863c` | 87.8 (89.4) | 6.8 (6.8) | 26.2 (26.8) | 28.0 (28.3) | 0.32x |
-| `gutenberg` | 68.2 (68.8) | 6.7 (6.7) | 24.9 (25.1) | 26.3 (26.7) | 0.39x |
-| `wiki-zh` | 77.3 (77.8) | 14.1 (14.2) | 42.3 (42.8) | 44.1 (45.1) | 0.57x |
-| `wiki-ar` | 83.2 (85.4) | 19.6 (19.9) | 35.3 (35.8) | 36.2 (36.6) | 0.44x |
-| `wiki-ru` | 86.6 (88.4) | 20.3 (20.7) | 40.0 (41.2) | 40.7 (41.6) | 0.47x |
-| `wiki-hi` | 99.2 (101.6) | 27.5 (28.1) | 50.4 (51.3) | 52.2 (53.1) | 0.53x |
-| `wiki-sv` | 51.4 (51.8) | 1.5 (1.5) | 18.7 (18.9) | 23.4 (23.6) | 0.46x |
-| `enwik8` | 51.6 (52.1) | 4.6 (4.7) | 22.4 (22.5) | 23.4 (23.8) | 0.45x |
+| Corpus                  |    `encode()` | pushes of 64 bytes | pushes of 4 KiB |    one push | one push over `encode()` |
+|-------------------------|--------------:|-------------------:|----------------:|------------:|-------------------------:|
+| `twitter.json`          | 109.6 (113.4) |          6.1 (6.2) |     28.4 (29.3) | 30.8 (31.2) |                    0.28x |
+| `munch-python@15b2863c` |   83.1 (86.6) |          5.0 (5.1) |     25.5 (26.1) | 27.6 (28.5) |                    0.33x |
+| `munch-cpp@15b2863c`    |   87.8 (89.4) |          6.8 (6.8) |     26.2 (26.8) | 28.0 (28.3) |                    0.32x |
+| `gutenberg`             |   68.2 (68.8) |          6.7 (6.7) |     24.9 (25.1) | 26.3 (26.7) |                    0.39x |
+| `wiki-zh`               |   77.3 (77.8) |        14.1 (14.2) |     42.3 (42.8) | 44.1 (45.1) |                    0.57x |
+| `wiki-ar`               |   83.2 (85.4) |        19.6 (19.9) |     35.3 (35.8) | 36.2 (36.6) |                    0.44x |
+| `wiki-ru`               |   86.6 (88.4) |        20.3 (20.7) |     40.0 (41.2) | 40.7 (41.6) |                    0.47x |
+| `wiki-hi`               |  99.2 (101.6) |        27.5 (28.1) |     50.4 (51.3) | 52.2 (53.1) |                    0.53x |
+| `wiki-sv`               |   51.4 (51.8) |          1.5 (1.5) |     18.7 (18.9) | 23.4 (23.6) |                    0.46x |
+| `enwik8`                |   51.6 (52.1) |          4.6 (4.7) |     22.4 (22.5) | 23.4 (23.8) |                    0.45x |
 
 cl100k:
 
-| Corpus | `encode()` | pushes of 64 bytes | pushes of 4 KiB | one push | one push over `encode()` |
-|---|---:|---:|---:|---:|---:|
-| `twitter.json` | 127.5 (133.2) | 6.8 (7.2) | 26.2 (27.3) | 30.4 (31.3) | 0.24x |
-| `munch-python@15b2863c` | 96.0 (99.4) | 0.8 (0.8) | 24.2 (25.5) | 27.5 (28.6) | 0.29x |
-| `munch-cpp@15b2863c` | 94.4 (96.1) | 5.1 (5.1) | 25.4 (25.7) | 27.4 (27.8) | 0.29x |
-| `gutenberg` | 74.2 (76.2) | 2.6 (2.7) | 21.7 (22.3) | 26.1 (26.4) | 0.35x |
-| `wiki-zh` | 63.2 (64.0) | 1.3 (1.4) | 35.8 (36.7) | 38.9 (39.4) | 0.62x |
-| `wiki-ar` | 70.3 (71.0) | 16.0 (16.4) | 34.3 (35.0) | 34.6 (35.3) | 0.49x |
-| `wiki-ru` | 61.1 (62.0) | 8.9 (9.0) | 30.2 (31.7) | 32.0 (32.4) | 0.52x |
-| `wiki-hi` | 94.6 (95.9) | 3.2 (3.2) | 47.1 (48.0) | 48.9 (49.6) | 0.52x |
-| `wiki-sv` | 42.8 (43.7) | 0.6 (0.6) | 12.1 (12.4) | 20.8 (21.3) | 0.49x |
-| `enwik8` | 57.1 (57.2) | 2.2 (2.2) | 19.9 (20.0) | 23.0 (23.1) | 0.40x |
+| Corpus                  |    `encode()` | pushes of 64 bytes | pushes of 4 KiB |    one push | one push over `encode()` |
+|-------------------------|--------------:|-------------------:|----------------:|------------:|-------------------------:|
+| `twitter.json`          | 127.5 (133.2) |          6.8 (7.2) |     26.2 (27.3) | 30.4 (31.3) |                    0.24x |
+| `munch-python@15b2863c` |   96.0 (99.4) |          0.8 (0.8) |     24.2 (25.5) | 27.5 (28.6) |                    0.29x |
+| `munch-cpp@15b2863c`    |   94.4 (96.1) |          5.1 (5.1) |     25.4 (25.7) | 27.4 (27.8) |                    0.29x |
+| `gutenberg`             |   74.2 (76.2) |          2.6 (2.7) |     21.7 (22.3) | 26.1 (26.4) |                    0.35x |
+| `wiki-zh`               |   63.2 (64.0) |          1.3 (1.4) |     35.8 (36.7) | 38.9 (39.4) |                    0.62x |
+| `wiki-ar`               |   70.3 (71.0) |        16.0 (16.4) |     34.3 (35.0) | 34.6 (35.3) |                    0.49x |
+| `wiki-ru`               |   61.1 (62.0) |          8.9 (9.0) |     30.2 (31.7) | 32.0 (32.4) |                    0.52x |
+| `wiki-hi`               |   94.6 (95.9) |          3.2 (3.2) |     47.1 (48.0) | 48.9 (49.6) |                    0.52x |
+| `wiki-sv`               |   42.8 (43.7) |          0.6 (0.6) |     12.1 (12.4) | 20.8 (21.3) |                    0.49x |
+| `enwik8`                |   57.1 (57.2) |          2.2 (2.2) |     19.9 (20.0) | 23.0 (23.1) |                    0.40x |
 
 o200k:
 
-| Corpus | `encode()` | pushes of 64 bytes | pushes of 4 KiB | one push | one push over `encode()` |
-|---|---:|---:|---:|---:|---:|
-| `twitter.json` | 125.1 (128.7) | 4.9 (5.2) | 24.3 (25.0) | 29.4 (30.0) | 0.24x |
-| `munch-python@15b2863c` | 93.5 (95.4) | 0.3 (0.3) | 23.7 (24.6) | 27.0 (28.1) | 0.29x |
-| `munch-cpp@15b2863c` | 91.4 (92.8) | 3.4 (3.5) | 23.4 (23.6) | 27.0 (27.5) | 0.30x |
-| `gutenberg` | 70.1 (71.5) | 1.5 (1.6) | 18.7 (18.9) | 25.6 (26.0) | 0.37x |
-| `wiki-zh` | 53.2 (54.3) | 0.6 (0.6) | 32.1 (32.5) | 34.2 (34.9) | 0.64x |
-| `wiki-ar` | 49.8 (51.4) | 6.0 (6.1) | 27.3 (28.1) | 29.6 (30.5) | 0.59x |
-| `wiki-ru` | 48.9 (50.0) | 2.6 (2.6) | 24.0 (24.6) | 29.0 (29.3) | 0.59x |
-| `wiki-hi` | 93.7 (96.4) | 1.3 (1.3) | 43.8 (45.6) | 48.8 (49.7) | 0.52x |
-| `wiki-sv` | 40.7 (41.6) | 0.4 (0.4) | 8.9 (8.9) | 20.3 (20.7) | 0.50x |
-| `enwik8` | 51.5 (51.8) | 1.4 (1.4) | 17.8 (17.9) | 21.9 (21.9) | 0.43x |
+| Corpus                  |    `encode()` | pushes of 64 bytes | pushes of 4 KiB |    one push | one push over `encode()` |
+|-------------------------|--------------:|-------------------:|----------------:|------------:|-------------------------:|
+| `twitter.json`          | 125.1 (128.7) |          4.9 (5.2) |     24.3 (25.0) | 29.4 (30.0) |                    0.24x |
+| `munch-python@15b2863c` |   93.5 (95.4) |          0.3 (0.3) |     23.7 (24.6) | 27.0 (28.1) |                    0.29x |
+| `munch-cpp@15b2863c`    |   91.4 (92.8) |          3.4 (3.5) |     23.4 (23.6) | 27.0 (27.5) |                    0.30x |
+| `gutenberg`             |   70.1 (71.5) |          1.5 (1.6) |     18.7 (18.9) | 25.6 (26.0) |                    0.37x |
+| `wiki-zh`               |   53.2 (54.3) |          0.6 (0.6) |     32.1 (32.5) | 34.2 (34.9) |                    0.64x |
+| `wiki-ar`               |   49.8 (51.4) |          6.0 (6.1) |     27.3 (28.1) | 29.6 (30.5) |                    0.59x |
+| `wiki-ru`               |   48.9 (50.0) |          2.6 (2.6) |     24.0 (24.6) | 29.0 (29.3) |                    0.59x |
+| `wiki-hi`               |   93.7 (96.4) |          1.3 (1.3) |     43.8 (45.6) | 48.8 (49.7) |                    0.52x |
+| `wiki-sv`               |   40.7 (41.6) |          0.4 (0.4) |       8.9 (8.9) | 20.3 (20.7) |                    0.50x |
+| `enwik8`                |   51.5 (51.8) |          1.4 (1.4) |     17.8 (17.9) | 21.9 (21.9) |                    0.43x |
 
 llama3:
 
-| Corpus | `encode()` | pushes of 64 bytes | pushes of 4 KiB | one push | one push over `encode()` |
-|---|---:|---:|---:|---:|---:|
-| `twitter.json` | 104.6 (108.7) | 5.9 (6.2) | 25.1 (26.1) | 28.0 (28.9) | 0.27x |
-| `munch-python@15b2863c` | 97.0 (101.2) | 0.7 (0.7) | 24.6 (25.4) | 27.9 (28.8) | 0.29x |
-| `munch-cpp@15b2863c` | 93.6 (96.2) | 4.8 (4.9) | 24.8 (25.1) | 27.3 (27.7) | 0.29x |
-| `gutenberg` | 74.7 (75.4) | 2.3 (2.3) | 21.2 (21.4) | 25.9 (26.3) | 0.35x |
-| `wiki-zh` | 20.4 (20.7) | 1.0 (1.0) | 15.5 (16.3) | 17.3 (17.4) | 0.85x |
-| `wiki-ar` | 42.8 (43.7) | 5.9 (6.0) | 25.1 (25.6) | 27.1 (27.9) | 0.63x |
-| `wiki-ru` | 36.0 (36.6) | 2.5 (2.6) | 20.7 (21.1) | 23.8 (24.4) | 0.66x |
-| `wiki-hi` | 105.2 (107.3) | 2.6 (2.6) | 49.3 (50.3) | 50.5 (52.0) | 0.48x |
-| `wiki-sv` | 42.0 (43.0) | 0.5 (0.5) | 11.3 (11.6) | 20.5 (21.0) | 0.49x |
-| `enwik8` | 56.8 (56.9) | 2.1 (2.1) | 20.0 (20.2) | 23.2 (23.5) | 0.41x |
+| Corpus                  |    `encode()` | pushes of 64 bytes | pushes of 4 KiB |    one push | one push over `encode()` |
+|-------------------------|--------------:|-------------------:|----------------:|------------:|-------------------------:|
+| `twitter.json`          | 104.6 (108.7) |          5.9 (6.2) |     25.1 (26.1) | 28.0 (28.9) |                    0.27x |
+| `munch-python@15b2863c` |  97.0 (101.2) |          0.7 (0.7) |     24.6 (25.4) | 27.9 (28.8) |                    0.29x |
+| `munch-cpp@15b2863c`    |   93.6 (96.2) |          4.8 (4.9) |     24.8 (25.1) | 27.3 (27.7) |                    0.29x |
+| `gutenberg`             |   74.7 (75.4) |          2.3 (2.3) |     21.2 (21.4) | 25.9 (26.3) |                    0.35x |
+| `wiki-zh`               |   20.4 (20.7) |          1.0 (1.0) |     15.5 (16.3) | 17.3 (17.4) |                    0.85x |
+| `wiki-ar`               |   42.8 (43.7) |          5.9 (6.0) |     25.1 (25.6) | 27.1 (27.9) |                    0.63x |
+| `wiki-ru`               |   36.0 (36.6) |          2.5 (2.6) |     20.7 (21.1) | 23.8 (24.4) |                    0.66x |
+| `wiki-hi`               | 105.2 (107.3) |          2.6 (2.6) |     49.3 (50.3) | 50.5 (52.0) |                    0.48x |
+| `wiki-sv`               |   42.0 (43.0) |          0.5 (0.5) |     11.3 (11.6) | 20.5 (21.0) |                    0.49x |
+| `enwik8`                |   56.8 (56.9) |          2.1 (2.1) |     20.0 (20.2) | 23.2 (23.5) |                    0.41x |
 
 In pushes of 4 KiB the stream runs at 18.7 to 50.4 MiB/s under GPT-2, 12.1 to 47.1 under cl100k, 8.9 to 43.8 under o200k
 and 11.3 to 49.3 under Llama 3, 0.19 to 0.60 times `encode()`'s rate and under Llama 3 on Chinese 0.76 of it. In pushes
@@ -1914,33 +1940,33 @@ a layer for every tab while the ids lag 16 bytes behind.
 
 Pushes of 64 bytes, the bytes not yet spelled after a push, at the most and on average:
 
-| Corpus | pushes | gpt2 | cl100k | o200k | llama3 |
-|---|---:|---:|---:|---:|---:|
-| `twitter.json` | 9,868 | 11, 2.15 | 25, 3.44 | 25, 3.68 | 25, 3.75 |
-| `munch-python@15b2863c` | 7,453 | 64, 2.82 | 89, 3.98 | 89, 3.99 | 89, 3.98 |
-| `munch-cpp@15b2863c` | 66,887 | 15, 2.76 | 65, 3.45 | 65, 3.45 | 65, 3.45 |
-| `gutenberg` | 113,625 | 16, 3.20 | 61, 3.37 | 61, 3.39 | 61, 3.37 |
-| `wiki-zh` | 65,728 | 16, 1.61 | 30, 2.62 | 30, 4.02 | 30, 3.96 |
-| `wiki-ar` | 66,218 | 12, 1.61 | 12, 1.95 | 22, 4.84 | 19, 4.35 |
-| `wiki-ru` | 66,236 | 14, 1.01 | 24, 3.54 | 33, 6.08 | 31, 5.48 |
-| `wiki-hi` | 66,142 | 16, 1.36 | 39, 2.45 | 45, 6.71 | 39, 4.52 |
-| `wiki-sv` | 65,552 | 17, 2.75 | 27, 3.12 | 24, 3.43 | 27, 3.14 |
-| `enwik8` | 1,562,500 | 62, 3.29 | 132, 3.42 | 132, 3.45 | 132, 3.43 |
+| Corpus                  |    pushes |     gpt2 |    cl100k |     o200k |    llama3 |
+|-------------------------|----------:|---------:|----------:|----------:|----------:|
+| `twitter.json`          |     9,868 | 11, 2.15 |  25, 3.44 |  25, 3.68 |  25, 3.75 |
+| `munch-python@15b2863c` |     7,453 | 64, 2.82 |  89, 3.98 |  89, 3.99 |  89, 3.98 |
+| `munch-cpp@15b2863c`    |    66,887 | 15, 2.76 |  65, 3.45 |  65, 3.45 |  65, 3.45 |
+| `gutenberg`             |   113,625 | 16, 3.20 |  61, 3.37 |  61, 3.39 |  61, 3.37 |
+| `wiki-zh`               |    65,728 | 16, 1.61 |  30, 2.62 |  30, 4.02 |  30, 3.96 |
+| `wiki-ar`               |    66,218 | 12, 1.61 |  12, 1.95 |  22, 4.84 |  19, 4.35 |
+| `wiki-ru`               |    66,236 | 14, 1.01 |  24, 3.54 |  33, 6.08 |  31, 5.48 |
+| `wiki-hi`               |    66,142 | 16, 1.36 |  39, 2.45 |  45, 6.71 |  39, 4.52 |
+| `wiki-sv`               |    65,552 | 17, 2.75 |  27, 3.12 |  24, 3.43 |  27, 3.14 |
+| `enwik8`                | 1,562,500 | 62, 3.29 | 132, 3.42 | 132, 3.45 | 132, 3.43 |
 
 Pushes of 4 KiB, the bytes not yet spelled after a push, at the most and on average:
 
-| Corpus | pushes | gpt2 | cl100k | o200k | llama3 |
-|---|---:|---:|---:|---:|---:|
-| `twitter.json` | 155 | 10, 2.32 | 13, 3.48 | 13, 3.73 | 13, 3.83 |
-| `munch-python@15b2863c` | 117 | 8, 2.55 | 19, 3.36 | 19, 3.40 | 19, 3.36 |
-| `munch-cpp@15b2863c` | 1,046 | 13, 2.84 | 20, 3.55 | 20, 3.54 | 20, 3.55 |
-| `gutenberg` | 1,776 | 13, 3.22 | 13, 3.37 | 13, 3.40 | 13, 3.37 |
-| `wiki-zh` | 1,027 | 8, 1.60 | 13, 2.59 | 13, 3.99 | 18, 3.90 |
-| `wiki-ar` | 1,035 | 7, 1.66 | 7, 2.02 | 17, 5.00 | 18, 4.46 |
-| `wiki-ru` | 1,035 | 8, 1.01 | 16, 3.65 | 27, 6.15 | 27, 5.53 |
-| `wiki-hi` | 1,034 | 5, 1.34 | 14, 2.42 | 33, 6.64 | 14, 4.53 |
-| `wiki-sv` | 1,025 | 13, 2.78 | 14, 3.17 | 14, 3.45 | 14, 3.20 |
-| `enwik8` | 24,415 | 54, 3.24 | 54, 3.38 | 54, 3.41 | 54, 3.38 |
+| Corpus                  | pushes |     gpt2 |   cl100k |    o200k |   llama3 |
+|-------------------------|-------:|---------:|---------:|---------:|---------:|
+| `twitter.json`          |    155 | 10, 2.32 | 13, 3.48 | 13, 3.73 | 13, 3.83 |
+| `munch-python@15b2863c` |    117 |  8, 2.55 | 19, 3.36 | 19, 3.40 | 19, 3.36 |
+| `munch-cpp@15b2863c`    |  1,046 | 13, 2.84 | 20, 3.55 | 20, 3.54 | 20, 3.55 |
+| `gutenberg`             |  1,776 | 13, 3.22 | 13, 3.37 | 13, 3.40 | 13, 3.37 |
+| `wiki-zh`               |  1,027 |  8, 1.60 | 13, 2.59 | 13, 3.99 | 18, 3.90 |
+| `wiki-ar`               |  1,035 |  7, 1.66 |  7, 2.02 | 17, 5.00 | 18, 4.46 |
+| `wiki-ru`               |  1,035 |  8, 1.01 | 16, 3.65 | 27, 6.15 | 27, 5.53 |
+| `wiki-hi`               |  1,034 |  5, 1.34 | 14, 2.42 | 33, 6.64 | 14, 4.53 |
+| `wiki-sv`               |  1,025 | 13, 2.78 | 14, 3.17 | 14, 3.45 | 14, 3.20 |
+| `enwik8`                | 24,415 | 54, 3.24 | 54, 3.38 | 54, 3.41 | 54, 3.38 |
 
 On every corpus and tokenizer a stream's ids lag 1.01 to 6.71 bytes on average after a push, in pushes of either size.
 The most after a push is 5 to 54 bytes in pushes of 4 KiB and 11 to 132 in pushes of 64 bytes.
@@ -2022,7 +2048,6 @@ mutants' script and results are archived with the session; one corpus is
 ```
 $ taskset -c 2 ./build/tools/probes/matisse_bench stream VOCAB cl100k 15 CORPORA/twitter.json 64 4096
 ```
-
 
 The profile is
 
