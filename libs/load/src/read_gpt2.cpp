@@ -44,11 +44,15 @@ using Byte_map_t = std::array<std::optional<unsigned char>, map_end>;
 constexpr std::string_view json_space{" \t\n\r"};
 
 /**
- * @brief The white space read between a merge line's two parts, the ASCII white space of C's isspace(); Python's
- *        str.split() splits at more, U+001C to U+001F among them, none of which the byte map carries, so a part
- *        holding one is refused.
+ * @brief The white space read between a merge line's two parts, the 29 characters Python's str.split() splits at:
+ *        those for which CPython 3.12's _PyUnicode_IsWhitespace() in Objects/unicodetype_db.h, generated from Unicode
+ *        15.0.0, returns 1, the characters of general category Zs or bidirectional class WS, B or S, which is the
+ *        Unicode White_Space property with U+001C to U+001F added. The byte map carries none of them.
  */
-constexpr std::string_view separators{" \t\n\v\f\r"};
+constexpr std::array<char32_t, 29> separators{0x0009, 0x000A, 0x000B, 0x000C, 0x000D, 0x001C, 0x001D, 0x001E,
+                                              0x001F, 0x0020, 0x0085, 0x00A0, 0x1680, 0x2000, 0x2001, 0x2002,
+                                              0x2003, 0x2004, 0x2005, 0x2006, 0x2007, 0x2008, 0x2009, 0x200A,
+                                              0x2028, 0x2029, 0x202F, 0x205F, 0x3000};
 
 /**
  * @brief The line of vocab.bpe that holds the merge of rank zero, after the version line.
@@ -339,9 +343,12 @@ private:
     [[nodiscard]] char32_t hex_escape();
 
     /**
-     * @brief Reads a decimal id after white space, as JSON spells a number, with no leading zero.
+     * @brief Reads a decimal id after white space, as Python's json reads a JSON number as a non-negative integer:
+     *        `-?(0|[1-9][0-9]*)` with no fraction and no exponent, its value at most the 32 bits of an id and zero
+     *        when the minus sign stands, so that `-0` is zero; a fraction, an exponent or a digit after a leading
+     *        zero is left unread and refused by the syntax after it.
      * @return The id.
-     * @throws std::invalid_argument If no decimal number stands there or it is beyond the 32 bits of an id.
+     * @throws std::invalid_argument If no such number stands there.
      */
     [[nodiscard]] Token_id_t id();
 
@@ -550,16 +557,21 @@ Token_id_t Encoder_reader::id()
 {
     skip_space();
 
-    // A zero is the whole number.
-    const auto zero{at_ < text_.size() && text_[at_] == '0'};
+    // Python's json reads -0 as the integer zero, so a minus sign is read and then allowed before zero alone.
+    const auto negative{at_ < text_.size() && text_[at_] == '-'};
 
-    const auto last{zero ? at_ + 1 : text_.size()};
+    const auto digits{at_ + (negative ? 1 : 0)};
+
+    // A zero is the whole number.
+    const auto zero{digits < text_.size() && text_[digits] == '0'};
+
+    const auto last{zero ? digits + 1 : text_.size()};
 
     std::uint64_t value{};
 
-    const auto [end, error]{std::from_chars(text_.data() + at_, text_.data() + last, value)};
+    const auto [end, error]{std::from_chars(text_.data() + digits, text_.data() + last, value)};
 
-    if (error != std::errc{} || value > std::numeric_limits<Token_id_t>::max())
+    if (error != std::errc{} || value > std::numeric_limits<Token_id_t>::max() || (negative && value != 0))
     {
         fail("id");
     }
@@ -655,7 +667,66 @@ void require_distinct_spellings(const std::span<const std::string> spellings, co
 }
 
 /**
- * @brief Returns the merge a line of vocab.bpe spells, its two parts separated by white space.
+ * @brief Returns the length of the separator at an index of a merge line, zero when none stands there.
+ * @param line The line.
+ * @param at The index, within the line.
+ * @return The number of bytes the separator takes, or zero.
+ */
+[[nodiscard]] std::size_t separator_length(const std::string_view line, const std::size_t at) noexcept
+{
+    const auto decoded{character_at(line, at)};
+
+    if (!decoded || !std::ranges::contains(separators, decoded->first))
+    {
+        return 0;
+    }
+
+    return decoded->second;
+}
+
+/**
+ * @brief Returns the index of the first character at or after an index of a merge line that is not a separator.
+ * @param line The line.
+ * @param at The index, at most the line's size.
+ * @return The index, the line's size when only separators follow.
+ */
+[[nodiscard]] std::size_t past_separators(const std::string_view line, std::size_t at) noexcept
+{
+    while (at < line.size())
+    {
+        const auto length{separator_length(line, at)};
+
+        if (length == 0)
+        {
+            break;
+        }
+
+        at += length;
+    }
+
+    return at;
+}
+
+/**
+ * @brief Returns the index of the first separator at or after an index of a merge line, bytes that are not UTF-8
+ *        passed one at a time and left to the refusal of the part that holds them.
+ * @param line The line.
+ * @param at The index, at most the line's size.
+ * @return The index, the line's size when no separator follows.
+ */
+[[nodiscard]] std::size_t next_separator(const std::string_view line, std::size_t at) noexcept
+{
+    while (at < line.size() && separator_length(line, at) == 0)
+    {
+        at += std::max(well_formed_length(line, at), 1UZ);
+    }
+
+    return at;
+}
+
+/**
+ * @brief Returns the merge a line of vocab.bpe spells, its two parts separated by white space, as str.split() splits
+ *        it: at every run of separators, none read before the first part or after the last, so that no part is empty.
  * @param line The line, without its line feed.
  * @param where The line and the file, for the refusals.
  * @return The merge, each part's byte map undone.
@@ -666,15 +737,15 @@ void require_distinct_spellings(const std::span<const std::string> spellings, co
 {
     std::vector<std::string> parts{};
 
-    for (std::size_t at{line.find_first_not_of(separators)}; at != std::string_view::npos;)
+    for (std::size_t at{past_separators(line, 0)}; at < line.size();)
     {
-        const auto stop{std::min(line.find_first_of(separators, at), line.size())};
+        const auto stop{next_separator(line, at)};
 
         const auto part{line.substr(at, stop - at)};
 
         parts.push_back(part_bytes(part, where));
 
-        at = line.find_first_not_of(separators, stop);
+        at = past_separators(line, stop);
     }
 
     if (parts.size() != 2)
