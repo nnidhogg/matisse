@@ -265,9 +265,12 @@ jobs:
           cmake --build .
 
       - name: Run tests with CTest
+        # The tokenizers' tests read the vocabulary files fetched above, and under the instrumented build each
+        # tokenizer's suite runs for many minutes, so the suites run four at a time, one per processor of the runner,
+        # each given an hour.
         run: |
           cd build
-          ctest --output-on-failure
+          ctest --output-on-failure -j 4 --timeout 3600
 
       - name: Generate code coverage report
         run: |

@@ -67,8 +67,22 @@ target_link_libraries(matisse_bench
         matisse_validate
 )
 
-# The bench's test is one pass of the single mode's rows on the validator's sample, for its references and its exit.
+# Both probes read all four tokenizers, so their tests need every pinned file in the directory; Llama 3's is gated by
+# its vendor, and a directory without it registers neither test.
+set(MATISSE_VOCAB_COMPLETE FALSE)
+
 if (MATISSE_VOCAB_DIR)
+    set(MATISSE_VOCAB_COMPLETE TRUE)
+
+    foreach (file gpt2-vocab.json gpt2-merges.txt cl100k_base.tiktoken o200k_base.tiktoken llama3.tiktoken)
+        if (NOT EXISTS "${MATISSE_VOCAB_DIR}/${file}")
+            set(MATISSE_VOCAB_COMPLETE FALSE)
+        endif ()
+    endforeach ()
+endif ()
+
+# The bench's test is one pass of the single mode's rows on the validator's sample, for its references and its exit.
+if (MATISSE_VOCAB_COMPLETE)
     add_test(NAME matisse_corpus COMMAND matisse_corpus ${MATISSE_VOCAB_DIR})
 
     add_test(NAME matisse_bench
@@ -76,7 +90,7 @@ if (MATISSE_VOCAB_DIR)
                     ${MATISSE_SOURCE_DIR}/tools/validate/tests/data/sample.txt)
 endif ()
 
-if (MATISSE_VOCAB_DIR AND MATISSE_CORPUS_DIR)
+if (MATISSE_VOCAB_COMPLETE AND MATISSE_CORPUS_DIR)
     add_test(NAME matisse_corpus_fixtures
             COMMAND matisse_corpus ${MATISSE_VOCAB_DIR}
                     ${MATISSE_CORPUS_DIR}/twitter.json

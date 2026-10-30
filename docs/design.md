@@ -109,10 +109,11 @@ with Clang 19, an ARM64 job where plain char is unsigned, the address and undefi
 encoder spawns threads, munch's thread-sanitizer job and its `-fprofile-update=atomic` coverage flag, the fuzz job once
 the harnesses exist, the installed-consumer job, and CodeQL. The coverage job fetches the four public vocabulary files
 the tests pin, held to their digests, so the real-vocabulary tests of the loaders, the encoders and the CLI run in the
-measured build; Llama 3's file is gated by its vendor and its tests skip there. The README has hopper's sections
-(Status, Features, a first example, Getting Started, Documentation, Testing, Versioning and Stability, License, Author),
-docs/ has three pages, design.md, limits.md and benchmarks.md, and CITATION.cff names the munch release with its version
-DOI under `references`, as hopper's does. Tests run with `ctest --test-dir build --timeout 300`, as munch's do.
+measured build; Llama 3's file is gated by its vendor, so its tests skip there and the two probes' tests, which read all
+four tokenizers, are not registered. The README has hopper's sections (Status, Features, a first example, Getting
+Started, Documentation, Testing, Versioning and Stability, License, Author), docs/ has three pages, design.md, limits.md
+and benchmarks.md, and CITATION.cff names the munch release with its version DOI under `references`, as hopper's does.
+Tests run with `ctest --test-dir build --timeout 300`, as munch's do.
 
 ## **The API**
 
