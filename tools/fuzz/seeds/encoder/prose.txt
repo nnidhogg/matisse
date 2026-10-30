@@ -1,0 +1,5 @@
+0~Hello world, tiktoken is great! It's 2026; we've 12345 ideas.
+
+  ab ba aab	b
+hello world café été 日本語 😀!!
+<|endoftext|>a

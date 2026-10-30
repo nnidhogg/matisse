@@ -6,3 +6,8 @@ add_subdirectory(validate)
 if (MATISSE_BUILD_TESTS)
     add_subdirectory(probes)
 endif ()
+
+# The fuzz harnesses need Clang's libFuzzer and an instrumented tree, so they build only in a tree configured for it.
+if (MATISSE_BUILD_FUZZER)
+    add_subdirectory(fuzz)
+endif ()

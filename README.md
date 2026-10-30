@@ -192,6 +192,14 @@ adds the probe on the three corpora of the test strategy, and each tokenizer's t
 the directory holds to the vendors', whose digests libs/load/tests/data/vendors_reference.txt records, skipping by name
 the corpora the directory lacks.
 
+Three libFuzzer harnesses under `tools/fuzz/` feed arbitrary bytes to the tiktoken reader and to the GPT-2 reader, a
+`std::invalid_argument` being a loader's answer to a file it cannot take exactly, and arbitrary well-formed UTF-8 to the
+encoder, holding `encode_parallel()` to `encode()` at a chunk count drawn from the input; a crash, a sanitizer report, a
+violated property or a hang is a finding. They read no vocabulary file, the encoder's definition being built in its
+harness, and build in a dedicated tree configured with Clang and `-DMATISSE_BUILD_FUZZER=ON`, which instruments the
+whole tree, the munch submodule included, and CI runs each for a bounded minute on every push to master and every pull
+request against it.
+
 ## **Versioning and Stability**
 
 matisse follows semantic versioning from 1.0.0 on, munch's rule: a minor release adds and never removes or renames on
@@ -251,10 +259,10 @@ is repaired or guessed, as [docs/limits.md](docs/limits.md) describes.
 
 **Platforms.** The promise is munch's: 64-bit Linux with GCC 13 or later and Clang 19 or later, source compatibility
 within a major version and no ABI promise. CI builds and tests on x86-64 and ARM64 and runs the address,
-undefined-behavior and thread sanitizers on x86-64. The munch submodule is pinned to a release, 3.0.0 at this version,
-and a matisse release names the munch release it was built and tested against; the `Segmenter` runs a
-`munch::dfa::Simulator`, from the layer munch keeps outside its stable surface, so matisse's promise holds with the
-munch release it names.
+undefined-behavior and thread sanitizers and the fuzz harnesses on x86-64. The munch submodule is pinned to a release,
+3.0.0 at this version, and a matisse release names the munch release it was built and tested against; the `Segmenter`
+runs a `munch::dfa::Simulator`, from the layer munch keeps outside its stable surface, so matisse's promise holds with
+the munch release it names.
 
 ## **License**
 

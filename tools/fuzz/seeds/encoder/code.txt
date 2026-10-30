@@ -1,0 +1,7 @@
+5 int main() {
+    for (int i = 0; i < 10; ++i) { s += "ab"; }
+	return 0;   
+}
+<|fim_prefix|>ab<|fim_suffix|>é<|fim_middle|>
+
+

@@ -298,6 +298,61 @@ jobs:
           fail_ci_if_error: true
           token: ${{ secrets.CODECOV_TOKEN }}
 
+  fuzz:
+    runs-on: ubuntu-24.04
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code with submodules
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-19 ninja-build
+
+      - name: Configure build with CMake
+        env:
+          CC: clang-19
+          CXX: clang++-19
+        run: |
+          mkdir build
+          cd build
+          cmake -G Ninja .. -DCMAKE_BUILD_TYPE=Release -DMATISSE_BUILD_FUZZER=ON -DMATISSE_BUILD_TESTS=OFF
+
+      - name: Build the fuzz harnesses
+        run: cmake --build build --target matisse_tiktoken_fuzzer matisse_gpt2_fuzzer matisse_encoder_fuzzer
+
+      # A bounded run on every push: a minute per harness, each seeded from its directory under tools/fuzz/seeds. No
+      # harness reads a vocabulary file, so none is fetched: the readers are fed the fuzz input itself, and the
+      # encoder's definition is built in the harness. A std::invalid_argument is a reader's answer to a file it cannot
+      # take exactly; a crash, a sanitizer report, a violated property or a hang is a finding. print_new_funcs=0:
+      # symbolizing each newly covered function costs a symbolizer spawn per function and adds nothing here; crash
+      # reports are still symbolized.
+      - name: Fuzz the tiktoken reader
+        run: |
+          mkdir tiktoken-corpus
+          ./build/tools/fuzz/matisse_tiktoken_fuzzer tiktoken-corpus tools/fuzz/seeds/tiktoken -max_total_time=60 \
+                -timeout=10 -rss_limit_mb=4096 -print_new_funcs=0
+
+      - name: Fuzz the GPT-2 reader
+        run: |
+          mkdir gpt2-corpus
+          ./build/tools/fuzz/matisse_gpt2_fuzzer gpt2-corpus tools/fuzz/seeds/gpt2 -max_total_time=60 -timeout=10 \
+                -rss_limit_mb=4096 -print_new_funcs=0
+
+      # The encoder harness decides its four reports before its first input, some seconds of its minute, and holds
+      # encode_parallel() to encode() at a chunk count each input draws.
+      - name: Fuzz the parallel encoder against the serial one
+        run: |
+          mkdir encoder-corpus
+          ./build/tools/fuzz/matisse_encoder_fuzzer encoder-corpus tools/fuzz/seeds/encoder -max_total_time=60 \
+                -timeout=10 -rss_limit_mb=4096 -print_new_funcs=0
+
   install-consumer:
     runs-on: ubuntu-24.04
 

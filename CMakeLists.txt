@@ -42,6 +42,15 @@ if (MATISSE_BUILD_TESTS)
     enable_testing()
 endif ()
 
+# Requires Clang, which carries libFuzzer. The whole tree is instrumented, the munch submodule included, not just the
+# harness: the fuzzer's coverage feedback and the sanitizers must see library code, so a fuzzer build is its own
+# dedicated build tree.
+option(MATISSE_BUILD_FUZZER "Build the libFuzzer harnesses for matisse (requires Clang)" OFF)
+if (MATISSE_BUILD_FUZZER)
+    add_compile_options(-fsanitize=address,undefined,fuzzer-no-link -fno-sanitize-recover=all)
+    add_link_options(-fsanitize=address,undefined)
+endif ()
+
 # The pinned vocabulary files, GPT-2's, cl100k_base's, o200k_base's and Llama 3's, are not in the tree; the loaders'
 # tests read them from this directory, each held to its digest, and skip when it is not given.
 set(MATISSE_VOCAB_DIR "" CACHE PATH "A directory holding the pinned vocabulary files the tests read")

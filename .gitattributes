@@ -3,3 +3,6 @@
 
 # Binary files are left untouched.
 *.png binary
+
+# The fuzz seeds are inputs byte for byte, carriage returns and NUL bytes among them.
+tools/fuzz/seeds/** binary

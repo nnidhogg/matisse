@@ -69,10 +69,11 @@ matisse/
     CMakeLists.txt
     validate/   src/  tests/  tests/data/              (the matisse-validate command line)
     probes/     src/                                    (the corpus probe and the bench)
+    fuzz/       include/  src/  seeds/                  (the libFuzzer harnesses)
     unicode/    generate_classes.py
 ```
 
-The fuzz harnesses, step 17 of the order of work, are to live in tools/fuzz beside them.
+The fuzz harnesses of step 17 of the order of work live in tools/fuzz beside them.
 
 The libraries are of two kinds, as hopper's generic parse library sits beside its json and clike grammars. The four
 stage libraries are the four subjects of the first version, and none of them holds a tokenizer's pattern or special
@@ -91,29 +92,28 @@ install rule and no place in the umbrella.
 
 The top-level CMakeLists.txt is hopper's with the prefix changed: `project(matisse VERSION 1.0.0 LANGUAGES CXX)`, C++23
 required, `MATISSE_IS_TOP_LEVEL`, Release by default at the top level only, `MATISSE_SOURCE_DIR` for test data paths,
-`-Wall -Wunused -Wextra` with `MATISSE_WERROR` on at the top level, `MATISSE_BUILD_TESTS`, `USE_SYSTEM_GTEST`, and, once
-the harnesses exist, `MATISSE_BUILD_FUZZER` instrumenting the whole tree with the submodule included. munch is consumed
-exactly as hopper consumes it, as the submodule by default, added by external/CMakeLists.txt, or with
-`MATISSE_SYSTEM_MUNCH` an installed munch found by `find_package(munch REQUIRED)` at the top level so that every library
-sees its imported targets, the submodule's external/boost then added for the Boost module the encoder builds with;
-`MATISSE_INSTALL` requires the system munch, exports `matisse_targets` under `lib/cmake/matisse`, and
-cmake/matisse-config.cmake calls `find_dependency(munch)`. Every library whose headers name munch types links munch
-publicly, as hopper_json does: load (its definition holds `munch::verifier::Merge`), pretok (a pattern's sets are
-`munch::regex::utf8::Code_point_range` tables, its verifier a `munch::verifier::Verifier`) and validate
-(`munch::verifier::Verifier`); a tokenizer library reaches munch through pretok. The version starts at 0.1.0 with
-"pre-1.0" in the README, as hopper's did.
+`-Wall -Wunused -Wextra` with `MATISSE_WERROR` on at the top level, `MATISSE_BUILD_TESTS`, `USE_SYSTEM_GTEST`, and
+`MATISSE_BUILD_FUZZER` instrumenting the whole tree with the submodule included. munch is consumed exactly as hopper
+consumes it, as the submodule by default, added by external/CMakeLists.txt, or with `MATISSE_SYSTEM_MUNCH` an installed
+munch found by `find_package(munch REQUIRED)` at the top level so that every library sees its imported targets, the
+submodule's external/boost then added for the Boost module the encoder builds with; `MATISSE_INSTALL` requires the
+system munch, exports `matisse_targets` under `lib/cmake/matisse`, and cmake/matisse-config.cmake calls
+`find_dependency(munch)`. Every library whose headers name munch types links munch publicly, as hopper_json does: load
+(its definition holds `munch::verifier::Merge`), pretok (a pattern's sets are `munch::regex::utf8::Code_point_range`
+tables, its verifier a `munch::verifier::Verifier`) and validate (`munch::verifier::Verifier`); a tokenizer library
+reaches munch through pretok. The version starts at 0.1.0 with "pre-1.0" in the README, as hopper's did.
 
 CI copies hopper's workflow with munch's sanitizer matrix: format-check with clang-format-19, build and test with GCC
 13.3 (with coverage), with GCC in strict C++23, extensions off and warnings as errors, as munch's strict job builds, and
 with Clang 19, an ARM64 job where plain char is unsigned, the address and undefined-behavior sanitizers and, because the
-encoder spawns threads, munch's thread-sanitizer job and its `-fprofile-update=atomic` coverage flag, the fuzz job once
-the harnesses exist, the installed-consumer job, and CodeQL. The coverage job fetches the four public vocabulary files
-the tests pin, held to their digests, so the real-vocabulary tests of the loaders, the encoders and the CLI run in the
-measured build; Llama 3's file is gated by its vendor, so its tests skip there and the two probes' tests, which read all
-four tokenizers, are not registered. The README has hopper's sections (Status, Features, a first example, Getting
-Started, Documentation, Testing, Versioning and Stability, License, Author), docs/ has three pages, design.md, limits.md
-and benchmarks.md, and CITATION.cff names the munch release with its version DOI under `references`, as hopper's does.
-Tests run with `ctest --test-dir build --timeout 300`, as munch's do.
+encoder spawns threads, munch's thread-sanitizer job and its `-fprofile-update=atomic` coverage flag, the fuzz job, the
+installed-consumer job, and CodeQL. The coverage job fetches the four public vocabulary files the tests pin, held to
+their digests, so the real-vocabulary tests of the loaders, the encoders and the CLI run in the measured build; Llama
+3's file is gated by its vendor, so its tests skip there and the two probes' tests, which read all four tokenizers, are
+not registered. The README has hopper's sections (Status, Features, a first example, Getting Started, Documentation,
+Testing, Versioning and Stability, License, Author), docs/ has three pages, design.md, limits.md and benchmarks.md, and
+CITATION.cff names the munch release with its version DOI under `references`, as hopper's does. Tests run with
+`ctest --test-dir build --timeout 300`, as munch's do.
 
 ## **The API**
 
@@ -1230,11 +1230,21 @@ the whole corpus first, and hold the corpus to its digest and the ids to the ven
 skipped by name, and every one is skipped when no directory is named. A difference would be the Unicode version or a
 vendor's engine; on every corpus each vendor ran on there is none.
 
-The fuzz harnesses, step 17 of the order of work and not written yet, are to live in tools/fuzz and follow hopper's
-contract (a refusal is the answer to bad input, a crash, a sanitizer report or a hang is a finding): one is to feed
-arbitrary bytes to the tiktoken reader, and to the tokenizer.json reader once it is written, and one arbitrary
-well-formed UTF-8 to the encoder, asserting that `encode_parallel()` equals `encode()` at a chunk count drawn from the
-input, which turns the encoder's one claim into a fuzz property.
+The fuzz harnesses, step 17 of the order of work, live in tools/fuzz and follow hopper's contract (a refusal is the
+answer to bad input, a crash, a sanitizer report or a hang is a finding), each its own target with its own seeds under
+tools/fuzz/seeds, so that each corpus holds inputs of one format. `matisse_tiktoken_fuzzer` writes arbitrary bytes to
+the rank file `read_tiktoken()` reads, and `matisse_gpt2_fuzzer` to the encoder.json and the vocab.bpe `read_gpt2()`
+reads, the input cut at its first NUL byte, which no encoder.json holds; a `std::invalid_argument` is the answer, and a
+definition read is held to what its reader promises, the merge rule and the lookup, tokens none empty and none spelled
+twice, and under GPT-2 no pair listed twice. The tokenizer.json reader gets its harness when it is written.
+`matisse_encoder_fuzzer` feeds arbitrary well-formed UTF-8 to the encoder, each maximal ill-formed subpart of the input
+replaced by U+FFFD, and asserts that `encode_parallel()` equals `encode()` at a chunk count drawn from the input, from
+zero to 255, and that `decode()` spells the text back, which turns the encoder's one claim into a fuzz property. Its
+sixteen encoders are GPT-2's, cl100k's, o200k's and Llama 3's patterns, each report decided to width three before the
+first input, under both inventories and a synthetic definition of each merge rule built in the harness: the 256 bytes,
+every string of two and three bytes over a, b, the space, the line feed and the two bytes of é in a seeded order of
+rank, three tokens that only the whole-piece lookup gives, and the vendor's special tokens, all of them allowed. No
+harness reads a vocabulary file, so the fuzz job runs without one.
 
 ## **What matisse needs from munch 3.0.0**
 
@@ -1389,4 +1399,7 @@ Each step lands green on its own, its tests first where a fixture exists.
     under cl100k, 243 under o200k and 254 under Llama 3, each test within 2.2 GB resident. The pin stays at Unicode
     15.0.0.
 16. The README's Versioning and Stability section naming the stable surface; then the first release.
-17. The fuzz harnesses and their CI job, in tools/fuzz, after the first release.
+17. The fuzz harnesses and their CI job, in tools/fuzz, after the first release. Built: `matisse_tiktoken_fuzzer`,
+    `matisse_gpt2_fuzzer` and `matisse_encoder_fuzzer` in tools/fuzz, under `MATISSE_BUILD_FUZZER` with the address and
+    undefined-behavior sanitizers, and the fuzz job, which runs each for a minute on every push; five minutes of each
+    found nothing.
