@@ -68,8 +68,8 @@ constexpr std::size_t byte_count{256};
 /**
  * @brief The longest piece merged by a scan of its parts, a longer piece by the heap.
  *
- * Measured with no cache and the scan and the heap alone, Russian gains 12 and 20 per cent under GPT-2 and cl100k from
- * a threshold of 16 bytes to 32, Chinese 6 to 9 per cent from 64 to 128, and neither gains beyond, 256, 512 and 1,024
+ * Measured with no cache and the scan and the heap alone, Russian gains 12 and 20 percent under GPT-2 and cl100k from a
+ * threshold of 16 bytes to 32, Chinese 6 to 9 percent from 64 to 128, and neither gains beyond, 256, 512 and 1,024
  * measuring level with 128; the other corpora measure level from 16 bytes on.
  */
 constexpr std::size_t longest_scanned_piece{128};
@@ -141,7 +141,7 @@ struct Scanned_part
 /**
  * @brief Returns the ids of a piece merged by a scan of its parts: each part holding the join it makes with the part
  *        after it, the least rank found by a scan from the left, that join made, and the joins of the joined part with
- *        its neighbours looked up again.
+ *        its neighbors looked up again.
  *
  * The scan makes the join the heap makes: the heap's entries that stand are one for every adjacent pair with a join,
  * and it joins the least of them by rank and then by start, which is the least rank the scan finds, the leftmost on a

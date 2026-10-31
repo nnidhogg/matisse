@@ -588,7 +588,7 @@ and because GPT-2's policy anchors are complete at width five, every cut a wider
 the report on pre-tokenizer certification proves. o200k's 30 classes make each further symbol thirty times the windows:
 `validate()` takes o200k to width three in 1.5 s, to four in 16 s and to five in 245 s and 2.9 GB, and width four adds
 to three's factorization anchors 23 on munch's C++ sources and none on twitter.json or wiki-zh, the policy inventory
-gaining 20,484 there, from 97.18 to 99.28 per cent of the boundaries, so o200k's tests, the corpus probe and the bench,
+gaining 20,484 there, from 97.18 to 99.28 percent of the boundaries, so o200k's tests, the corpus probe and the bench,
 which time the factorization inventory, decide its report to width three, the width of its windows fixture. Each table
 carries the right context its inventory needs, decided on the split verifier (section "What matisse needs from munch
 3.0.0"), with the shortest truncation at every context that fails, asked of the windows that hold no shorter certified
@@ -621,23 +621,23 @@ figure, class strings holding each byte as the code point of its value. `supply_
 the supply of both inventories on one input as munch-audit's renderings of its supply do, in supply.hpp beside the
 report, as munch-audit keeps its supply in a unit of its own.
 
-`matisse-validate` in tools/validate is the command line, modelled on munch-audit's (a `matisse_validate_cli` target
-with that output name): `matisse-validate FILE [--tiktoken PATTERN] [--windows N] [--input FILE] [--json]`, with
-`--tiktoken` naming the pattern of a rank file since the file names none, a tokenizer.json read under the first
-tokenizer of the lookup whose published spelling it holds, the report always, the supply section only with `--input`, so
-that runs without it are unchanged by it, as munch-audit's `--input` is. The pattern names are the lookup's, and the
-command line finds the pattern and the vendor's special tokens through `lookup::tokenizer()`. Until
-`read_tokenizer_json()` is written a FILE without `--tiktoken` is a command-line error, and GPT-2 reaches the command
-line only as a rank file under `--tiktoken gpt2`, since FILE is one file and encoder.json and vocab.bpe are two.
-`--windows` takes 2 to 5. The text heads the report with the file and the tokenizer it was read as, with its token
-counts, and `--json` writes one document holding the path, the tokenizer, the refusal or null, the token counts, the
-report and the supply. The exit status is munch-audit's: 0 when the definition was read and reported, 1 when the loader
-refused it, the refusal written in place of the report, and 2 on a command-line error, with the usage, or on a file or
-an input the command cannot read, an input that is not UTF-8 among them. Its tests run it on a rank file of the 256
-single bytes, which every pattern takes, and a short sample beside them, and hold its text at the default width and its
-JSON at width two to fixtures it wrote, each headed by the line that says how, as munch-audit's tests hold its own; the
-anchors and the share of the supply on the sample agree with the Python reference's measurement of the same text, and
-the gap figures and the density are munch-audit's, as `supply()` defines them.
+`matisse-validate` in tools/validate is the command line, modeled on munch-audit's (a `matisse_validate_cli` target with
+that output name): `matisse-validate FILE [--tiktoken PATTERN] [--windows N] [--input FILE] [--json]`, with `--tiktoken`
+naming the pattern of a rank file since the file names none, a tokenizer.json read under the first tokenizer of the
+lookup whose published spelling it holds, the report always, the supply section only with `--input`, so that runs
+without it are unchanged by it, as munch-audit's `--input` is. The pattern names are the lookup's, and the command line
+finds the pattern and the vendor's special tokens through `lookup::tokenizer()`. Until `read_tokenizer_json()` is
+written a FILE without `--tiktoken` is a command-line error, and GPT-2 reaches the command line only as a rank file
+under `--tiktoken gpt2`, since FILE is one file and encoder.json and vocab.bpe are two. `--windows` takes 2 to 5. The
+text heads the report with the file and the tokenizer it was read as, with its token counts, and `--json` writes one
+document holding the path, the tokenizer, the refusal or null, the token counts, the report and the supply. The exit
+status is munch-audit's: 0 when the definition was read and reported, 1 when the loader refused it, the refusal written
+in place of the report, and 2 on a command-line error, with the usage, or on a file or an input the command cannot read,
+an input that is not UTF-8 among them. Its tests run it on a rank file of the 256 single bytes, which every pattern
+takes, and a short sample beside them, and hold its text at the default width and its JSON at width two to fixtures it
+wrote, each headed by the line that says how, as munch-audit's tests hold its own; the anchors and the share of the
+supply on the sample agree with the Python reference's measurement of the same text, and the gap figures and the density
+are munch-audit's, as `supply()` defines them.
 
 ### **The encoder, matisse::encode**
 
@@ -872,7 +872,7 @@ rule it is Hugging Face's `merge_all`. A piece of n bytes takes at most n - 1 jo
 entry's and each node's offsets held in 32 bits, so the heap merges a piece shorter than 2^32 bytes and
 `Merger::merged()` refuses a longer one. A piece of at most 128 bytes is merged instead by a scan of its parts, held in
 an array on the stack, each part with the join it makes with the next: the scan finds the least rank from the left, so
-the leftmost on a tie, makes that join and looks up the joined part's pairs with its two neighbours, which is the join
+the leftmost on a tie, makes that join and looks up the joined part's pairs with its two neighbors, which is the join
 the heap makes and the two pairs it pushes, so both make the same joins in the same order. With the scan and the heap
 alone, the encoding of Chinese with no cache gains as the threshold rises to 128 and no further. The heap and the scan
 read the first pairs, every part a byte to begin with, from a table of the joins of all 65,536 pairs of bytes, filled
@@ -1113,7 +1113,7 @@ munch's verifier, and streams on four threads over one encoder to `encode()`; th
 The Python reference implementation holds everything the port needs: the class alphabets, the per-alternative languages
 and the one-step relation Q, the verifier M with its functionality and totality decisions, the one-codepoint gate, the
 certificates, the right-context decisions and the references and end-to-end run, over a small DFA kit. Each moves as one
-C++ unit of pretok or validate, written in munch's style and modelled on its nearest munch neighbour: the verifier
+C++ unit of pretok or validate, written in munch's style and modeled on its nearest munch neighbor: the verifier
 construction on `merge_tower()` and `trie_chain()`, the window tables on munch-audit's report, the supply on
 munch-audit's supply. The DFA kit the construction of M needs (product, complement, concatenation, minimization over a
 small alphabet) moves as one file of pretok; where it lives is open choice 7.
@@ -1334,9 +1334,9 @@ matisse's by the division.
    appears. So automata.hpp is not part of the stable surface. Its file comment says so, and the README's Versioning and
    Stability section names it outside the surface.
 8. **Vocabulary files in the tree.** CTest without network needs the pinned files on disk: about 1.5 MB for GPT-2's pair
-   and 1.7 MB for cl100k, plus the two tokenizer.json files. hopper vendors the JSONTestSuite cases with their licence
+   and 1.7 MB for cl100k, plus the two tokenizer.json files. hopper vendors the JSONTestSuite cases with their license
    and provenance. The vocabulary files' own terms need checking first. As far as is known, GPT-2's are published with
-   the model under MIT on its Hugging Face card, and cl100k_base.tiktoken is served by OpenAI without a licence file of
+   the model under MIT on its Hugging Face card, and cl100k_base.tiktoken is served by OpenAI without a license file of
    its own. Settled: the files are not in the tree, and the `MATISSE_VOCAB_DIR` option names a directory holding them,
    each held to its digest, with nothing fetched at test time. Every test program of the libraries and the validator
    registers with CTest whether or not a directory is named, the tests in it that read the files skipping when none is,
@@ -1345,7 +1345,7 @@ matisse's by the division.
 9. **The encoder's default inventory.** The factorization inventory needs one codepoint of right context and rests on
    less, its cut holding for every complete factorization into the gate-erased languages whatever the engine does inside
    its matches; the policy inventory needs two and rests on Q, validated and not machine-checked, but lands on more
-   boundaries (93.91 to 100.00 per cent against 57.30 to 92.88 at width four, and 96.09 to 100.00 against 57.30 to 92.88
+   boundaries (93.91 to 100.00 percent against 57.30 to 92.88 at width four, and 96.09 to 100.00 against 57.30 to 92.88
    at the default width of five, as [benchmarks.md](benchmarks.md) quotes the probe). Both reach a longest uncut stretch
    within 24 bytes of the longest piece on all six runs, at width four. Recommendation: the factorization inventory by
    default, the policy inventory by choice.
@@ -1379,7 +1379,7 @@ Each step lands green on its own, its tests first where a fixture exists.
     tiktoken, Hugging Face tokenizers and the bpe crate. Built: `matisse_corpus` and `matisse_bench` in tools/probes,
     the figures in [benchmarks.md](benchmarks.md). On fourteen corpora, from twitter.json to a mixed file of 1.98 GB,
     matisse's ids under GPT-2 and cl100k equal tiktoken's, Hugging Face's and the bpe crate's by digest wherever each
-    ran. At the default width of five the supply on the three corpora reaches 57.30 to 92.88 per cent of the pre-token
+    ran. At the default width of five the supply on the three corpora reaches 57.30 to 92.88 percent of the pre-token
     boundaries under the factorization inventory and 96.09 to 100.00 under the policy inventory, the longest gap between
     anchors within 24 bytes of the longest piece. The timings are the first implementation's, at 97aa503, before the
     performance iterations whose figures [benchmarks.md](benchmarks.md) gives after them: on one core `encode()` runs at
@@ -1387,7 +1387,7 @@ Each step lands green on its own, its tests first where a fixture exists.
     A call on a prompt of about a kilobyte costs matisse a mean of 94 microseconds under GPT-2 and 116 under cl100k,
     against tiktoken's 58 and 63 and the bpe crate's 26 and 25. `encode_parallel()` encodes enwik9 at 162.7 and 177.9
     MiB/s with 24 workers, 11.2 times `encode()`. The profile puts the class of a code point first on prose and code, 35
-    to 58 per cent of the time, and the merge first on Chinese under cl100k, 76 per cent.
+    to 58 percent of the time, and the merge first on Chinese under cl100k, 76 percent.
 14. validate: `validate_merges()`, the lazy route for byte-level tables without a pre-tokenizer, held to the lazy
     fixture.
 15. The vendor cross-check (tiktoken, Hugging Face tokenizers), its digests into the fixture, the Unicode version

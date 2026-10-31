@@ -127,9 +127,9 @@ matches; it needs one code point of right context on all four patterns in scope.
 the pattern's own segmentation, decided on its verifier, which rests on the one-step relation the verifier is built
 from, validated against the reference and not machine-checked; it needs two code points and lands on more boundaries. At
 the default width of five, on the three corpora of the test strategy under GPT-2 and cl100k, the factorization
-inventory's anchors reach 57.30 to 92.88 per cent of the pre-token boundaries and the policy inventory's 96.09 to
-100.00. The factorization inventory, which rests on less, is the one [design.md](design.md) recommends by default and
-the one [benchmarks.md](benchmarks.md) times.
+inventory's anchors reach 57.30 to 92.88 percent of the pre-token boundaries and the policy inventory's 96.09 to 100.00.
+The factorization inventory, which rests on less, is the one [design.md](design.md) recommends by default and the one
+[benchmarks.md](benchmarks.md) times.
 
 The width is five by default, `validate::default_width`, for two reasons. The walk over the windows decides width five
 in 1.1 seconds for GPT-2 and 2.4 for cl100k, and at width five GPT-2's policy anchors are complete, every cut a wider
@@ -138,7 +138,7 @@ every string of that length over the class symbols, 14 for GPT-2, 16 for cl100k 
 further symbol multiplies them; `matisse-validate` takes widths two to five. The walk decides o200k to width three in
 1.5 seconds, to four in 16 and to five in 245, holding 2.9 GB, and width four adds almost no factorization anchor to
 three's, 23 on munch's C++ sources and none on twitter.json or wiki-zh, where the policy inventory gains 20,484 on
-munch's C++ sources, from 97.18 to 99.28 per cent of the boundaries, so o200k's tests, the corpus probe and the bench,
+munch's C++ sources, from 97.18 to 99.28 percent of the boundaries, so o200k's tests, the corpus probe and the bench,
 which time the factorization inventory, decide its report to width three.
 
 Each chunk is a thread. `encode_parallel()` starts one `std::jthread` per chunk beyond the last, which runs on the

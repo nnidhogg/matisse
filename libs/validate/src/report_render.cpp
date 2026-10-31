@@ -174,7 +174,7 @@ template <typename Items, typename One>
 
 /**
  * @brief Returns the windows' rows of one table: the count, by width ascending, and the first few as examples,
- *        printable windows first, since a reader recognises those.
+ *        printable windows first, since a reader recognizes those.
  * @param table The window table.
  * @return The rows.
  */
