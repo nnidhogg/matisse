@@ -245,7 +245,9 @@ std::string_view table_named(const std::string_view name)
         return {};
     }
 
-    return found->second;
+    const auto& [found_name, table]{*found};
+
+    return table;
 }
 
 /**

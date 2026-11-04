@@ -116,7 +116,9 @@ std::string text_of(const std::string_view symbols)
             continue;
         }
 
-        text += found->second;
+        const auto& [found_symbol, spelling]{*found};
+
+        text += spelling;
     }
 
     return text;
@@ -138,7 +140,9 @@ std::vector<std::size_t> points_of(const std::string_view text, const std::vecto
     {
         const auto prefix{text.substr(0, end)};
 
-        points.push_back(static_cast<std::size_t>(std::ranges::count_if(prefix, begins_one)));
+        const auto prefix_points{std::ranges::count_if(prefix, begins_one)};
+
+        points.push_back(static_cast<std::size_t>(prefix_points));
     }
 
     return points;

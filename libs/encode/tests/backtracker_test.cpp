@@ -76,6 +76,58 @@ struct Tables
 };
 
 /**
+ * @brief The run of the plain loop on a piece: the ids it ends with and the rank of every join it makes, in order.
+ */
+struct Plain_run
+{
+    /**
+     * @brief The ids of the parts the run ends with.
+     */
+    std::vector<Token_id_t> ids{};
+
+    /**
+     * @brief The rank of every join, in the order the run makes them.
+     */
+    std::vector<std::uint32_t> ranks{};
+};
+
+/**
+ * @brief What holding a vocabulary's backtracking merge to the plain loop found.
+ */
+struct Vocabulary_check
+{
+    /**
+     * @brief The multi-byte tokens merged.
+     */
+    std::size_t tokens{0};
+
+    /**
+     * @brief The multi-byte tokens the merge does not form from their own bytes.
+     */
+    std::size_t not_their_own_merge{0};
+
+    /**
+     * @brief The tokens that encode to themselves by a merge that does not join in order of rank.
+     */
+    std::size_t out_of_order{0};
+
+    /**
+     * @brief The multi-byte tokens on which the backtracking gives way.
+     */
+    std::size_t tokens_given_way{0};
+
+    /**
+     * @brief The random pieces merged.
+     */
+    std::size_t pieces{0};
+
+    /**
+     * @brief The random pieces on which the backtracking gives way.
+     */
+    std::size_t pieces_given_way{0};
+};
+
+/**
  * @brief Returns the tables of a definition's merge as the Merger builds them: under the rank rule every split of a
  *        spelling into two spellings, joining at the spelling's id, the first id of a pair met kept; under the pair
  *        rule every merge, a pair listed twice at its last rank.
@@ -99,27 +151,29 @@ Tables tables_of(const Definition& definition)
 
     Join_table::Joins_t joins{};
 
+    const auto join_splits{[&joins, &ids](const std::string_view whole, const Token_id_t product) {
+        for (std::size_t split{1}; split < whole.size(); ++split)
+        {
+            const auto left{ids.find(whole.substr(0, split))};
+
+            const auto right{ids.find(whole.substr(split))};
+
+            if (!left || !right)
+            {
+                continue;
+            }
+
+            joins.emplace(Join_table::key_of(*left, *right), Join_table::Join{.rank = product, .product = product});
+        }
+    }};
+
     if (merge_rule == Merge_rule::ranks)
     {
         for (std::size_t id{0}; id < spellings.size(); ++id)
         {
-            const std::string_view whole{spellings[id]};
-
             const auto product{static_cast<Token_id_t>(id)};
 
-            for (std::size_t split{1}; split < whole.size(); ++split)
-            {
-                const auto left{ids.find(whole.substr(0, split))};
-
-                const auto right{ids.find(whole.substr(split))};
-
-                if (!left || !right)
-                {
-                    continue;
-                }
-
-                joins.emplace(Join_table::key_of(*left, *right), Join_table::Join{.rank = product, .product = product});
-            }
+            join_splits(spellings[id], product);
         }
     }
 
@@ -149,22 +203,6 @@ Backtracker backtracker_of(const Definition& definition, const Tables& tables)
 }
 
 /**
- * @brief The run of the plain loop on a piece: the ids it ends with and the rank of every join it makes, in order.
- */
-struct Plain_run
-{
-    /**
-     * @brief The ids of the parts the run ends with.
-     */
-    std::vector<Token_id_t> ids{};
-
-    /**
-     * @brief The rank of every join, in the order the run makes them.
-     */
-    std::vector<std::uint32_t> ranks{};
-};
-
-/**
  * @brief Returns the run of the plain loop over a merge's joins on a piece: join the adjacent pair of least rank, the
  *        leftmost on a tie, until no pair has a join.
  * @param piece The piece, at least one byte.
@@ -184,7 +222,9 @@ Plain_run plain_run(const std::string_view piece, const Tables& tables)
 
     while (true)
     {
-        std::pair best{no_rank, std::size_t{0}};
+        auto best_rank{no_rank};
+
+        std::size_t best_at{0};
 
         Token_id_t product{};
 
@@ -192,26 +232,26 @@ Plain_run plain_run(const std::string_view piece, const Tables& tables)
         {
             const auto join{tables.joins.find(parts[at], parts[at + 1])};
 
-            if (join && join->rank < best.first)
+            if (join && join->rank < best_rank)
             {
-                best = {join->rank, at};
+                best_rank = join->rank;
+
+                best_at = at;
 
                 product = join->product;
             }
         }
 
-        const auto [rank, at]{best};
-
-        if (rank == no_rank)
+        if (best_rank == no_rank)
         {
             return {.ids = parts, .ranks = ranks};
         }
 
-        ranks.push_back(rank);
+        ranks.push_back(best_rank);
 
-        parts[at] = product;
+        parts[best_at] = product;
 
-        parts.erase(parts.begin() + static_cast<std::ptrdiff_t>(at) + 1);
+        parts.erase(parts.begin() + static_cast<std::ptrdiff_t>(best_at) + 1);
     }
 }
 
@@ -301,7 +341,9 @@ Definition pairs_definition(const std::vector<munch::verifier::Merge>& merges)
     {
         for (const auto& spelling : {left, right, left + right})
         {
-            if (known.insert(spelling).second)
+            const auto [where, inserted]{known.insert(spelling)};
+
+            if (inserted)
             {
                 spellings.push_back(spelling);
             }
@@ -413,7 +455,9 @@ std::vector<std::string> random_pieces(const std::vector<std::string>& spellings
 
             const auto cut{long_length(random)};
 
-            piece.resize(std::min(piece.size(), cut));
+            const auto kept{std::min(piece.size(), cut)};
+
+            piece.resize(kept);
         }
 
         pieces.push_back(std::move(piece));
@@ -490,42 +534,6 @@ std::optional<Definition> pinned_tiktoken(const std::string_view name, const std
 
     return matisse::load::read_tiktoken(*path, {});
 }
-
-/**
- * @brief What holding a vocabulary's backtracking merge to the plain loop found.
- */
-struct Vocabulary_check
-{
-    /**
-     * @brief The multi-byte tokens merged.
-     */
-    std::size_t tokens{0};
-
-    /**
-     * @brief The multi-byte tokens the merge does not form from their own bytes.
-     */
-    std::size_t not_their_own_merge{0};
-
-    /**
-     * @brief The tokens that encode to themselves by a merge that does not join in order of rank.
-     */
-    std::size_t out_of_order{0};
-
-    /**
-     * @brief The multi-byte tokens on which the backtracking gives way.
-     */
-    std::size_t tokens_given_way{0};
-
-    /**
-     * @brief The random pieces merged.
-     */
-    std::size_t pieces{0};
-
-    /**
-     * @brief The random pieces on which the backtracking gives way.
-     */
-    std::size_t pieces_given_way{0};
-};
 
 /**
  * @brief Holds the backtracking merge of a definition to the plain loop over its joins on every multi-byte token and on
@@ -675,6 +683,40 @@ TEST(Backtracker_test, On_random_tables_over_three_symbols_backtracking_is_the_p
 
     std::size_t given_way{0};
 
+    const auto check_table{[&](const Definition& definition, const std::size_t table) {
+        const auto tables{tables_of(definition)};
+
+        const auto backtracker{backtracker_of(definition, tables)};
+
+        const auto all_in_order{out_of_order_tokens(definition, tables) == 0};
+
+        in_order += all_in_order ? 1UZ : 0UZ;
+
+        out_of_order += all_in_order ? 0UZ : 1UZ;
+
+        for (std::size_t count{0}; count <= pieces_per_table; ++count)
+        {
+            const auto long_piece{count == pieces_per_table};
+
+            const auto shortest{long_piece ? 100UZ : 1UZ};
+
+            const auto longest{long_piece ? 160UZ : 12UZ};
+
+            const auto piece{random_string(random, alphabet, shortest, longest)};
+
+            const auto merged{backtracker.merged(piece)};
+
+            EXPECT_TRUE(merged || !all_in_order) << "table " << table << " " << piece;
+
+            if (merged)
+            {
+                EXPECT_EQ(*merged, plain_merge(piece, tables)) << "table " << table << " " << piece;
+            }
+
+            given_way += merged ? 0UZ : 1UZ;
+        }
+    }};
+
     for (std::size_t table{0}; table < tables_drawn; ++table)
     {
         std::set<std::pair<std::string, std::string>> drawn_pairs{};
@@ -710,37 +752,7 @@ TEST(Backtracker_test, On_random_tables_over_three_symbols_backtracking_is_the_p
 
         for (const auto& definition : {pairs_definition(merges), ranks_definition(tokens)})
         {
-            const auto tables{tables_of(definition)};
-
-            const auto backtracker{backtracker_of(definition, tables)};
-
-            const auto all_in_order{out_of_order_tokens(definition, tables) == 0};
-
-            in_order += all_in_order ? 1UZ : 0UZ;
-
-            out_of_order += all_in_order ? 0UZ : 1UZ;
-
-            for (std::size_t count{0}; count <= pieces_per_table; ++count)
-            {
-                const auto long_piece{count == pieces_per_table};
-
-                const auto shortest{long_piece ? 100UZ : 1UZ};
-
-                const auto longest{long_piece ? 160UZ : 12UZ};
-
-                const auto piece{random_string(random, alphabet, shortest, longest)};
-
-                const auto merged{backtracker.merged(piece)};
-
-                EXPECT_TRUE(merged || !all_in_order) << "table " << table << " " << piece;
-
-                if (merged)
-                {
-                    EXPECT_EQ(*merged, plain_merge(piece, tables)) << "table " << table << " " << piece;
-                }
-
-                given_way += merged ? 0UZ : 1UZ;
-            }
+            check_table(definition, table);
         }
     }
 

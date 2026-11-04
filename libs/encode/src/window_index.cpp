@@ -122,7 +122,9 @@ std::optional<std::size_t> Window_index::first_anchor(
     // An occurrence up to the width less one code points before the byte can place its origin at or after it.
     auto begin{byte_before(stretch, from, width_ - 1)};
 
-    auto end{point_start(stretch, begin + std::min(stretch.size() - begin, block_bytes))};
+    const auto first_length{std::min(stretch.size() - begin, block_bytes)};
+
+    auto end{point_start(stretch, begin + first_length)};
 
     while (true)
     {
@@ -140,7 +142,9 @@ std::optional<std::size_t> Window_index::first_anchor(
         // window across the edge is read whole and the walk moves on however wide the windows are.
         begin = byte_before(stretch, end, width_ - 1);
 
-        end = point_start(stretch, end + std::min(stretch.size() - end, block_bytes));
+        const auto next_length{std::min(stretch.size() - end, block_bytes)};
+
+        end = point_start(stretch, end + next_length);
     }
 }
 

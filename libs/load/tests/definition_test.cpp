@@ -311,7 +311,9 @@ TEST(Definition_test, Read_gpt2_reads_a_character_python_s_str_split_does_not_sp
 
     for (const auto point : kept)
     {
-        const auto refusal{gpt2_refusal(R"({"a": 0, "b": 1})", std::format("#version: 0.2\na{}b\n", utf8_of(point)))};
+        const auto vocab{std::format("#version: 0.2\na{}b\n", utf8_of(point))};
+
+        const auto refusal{gpt2_refusal(R"({"a": 0, "b": 1})", vocab)};
 
         const auto expected{std::format(
                 "line 2 of {} holds U+{:04X}, which GPT-2's byte map does not carry",
@@ -492,7 +494,9 @@ TEST(Definition_test, Read_tiktoken_splits_lines_at_cr_and_crlf_as_python_s_byte
 
     for (const std::string_view line_end : {"\r", "\r\n"})
     {
-        const auto read{read_tiktoken(written("ranks.tiktoken", with_line_ends(ranks, line_end)), {})};
+        const auto ended{with_line_ends(ranks, line_end)};
+
+        const auto read{read_tiktoken(written("ranks.tiktoken", ended), {})};
 
         EXPECT_EQ(read.spellings, lf.spellings) << line_end.size();
 

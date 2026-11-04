@@ -119,6 +119,39 @@ const std::vector<Alternative> single_alternatives{
 const Pattern single{.alphabet = one_symbol, .alternatives = single_alternatives};
 
 /**
+ * @brief A span of a text's bytes, an occurrence of a special token or a stretch between them: where it begins and the
+ *        byte after it.
+ */
+struct Span
+{
+    /**
+     * @brief The byte at which the span begins.
+     */
+    std::size_t begin{};
+
+    /**
+     * @brief The byte after the span.
+     */
+    std::size_t end{};
+};
+
+/**
+ * @brief An anchor of a text, as brute force finds it: where it stands and where its stretch begins.
+ */
+struct Anchor
+{
+    /**
+     * @brief The anchor's byte.
+     */
+    std::size_t at{};
+
+    /**
+     * @brief The first byte of the stretch between special tokens that holds it.
+     */
+    std::size_t stretch{};
+};
+
+/**
  * @brief Returns a definition under the rank rule: the single bytes, then every string of two and three letters over a,
  *        b and c and every space followed by one of them, ranked in a seeded random order, then the given tokens, with
  *        three special tokens after them, the last a single byte.
@@ -276,39 +309,6 @@ std::string random_text(std::mt19937& random, const std::size_t fragments)
 }
 
 /**
- * @brief A span of a text's bytes, an occurrence of a special token or a stretch between them: where it begins and the
- *        byte after it.
- */
-struct Span
-{
-    /**
-     * @brief The byte at which the span begins.
-     */
-    std::size_t begin{};
-
-    /**
-     * @brief The byte after the span.
-     */
-    std::size_t end{};
-};
-
-/**
- * @brief An anchor of a text, as brute force finds it: where it stands and where its stretch begins.
- */
-struct Anchor
-{
-    /**
-     * @brief The anchor's byte.
-     */
-    std::size_t at{};
-
-    /**
-     * @brief The first byte of the stretch between special tokens that holds it.
-     */
-    std::size_t stretch{};
-};
-
-/**
  * @brief Returns whether a byte continues a UTF-8 sequence rather than beginning one.
  * @param byte The byte.
  * @return True for a continuation byte.
@@ -381,8 +381,56 @@ std::vector<Span> stretches_of(const std::string_view text, const std::vector<Sp
 }
 
 /**
- * @brief Returns every anchor of a text by brute force: in every stretch between special tokens, the byte of t + o for
- *        every occurrence at t of every window of a table certified at o, the stretch's start left out.
+ * @brief Returns the anchors of one stretch of a text by brute force: the byte of t + o for every occurrence at t of
+ *        every window of a table certified at o, the stretch's start left out.
+ * @param table The window table.
+ * @param text The text, well-formed UTF-8.
+ * @param begin The byte at which the stretch starts.
+ * @param end The byte after the stretch.
+ * @return The anchors, ascending.
+ */
+std::set<std::size_t> stretch_anchors(
+        const Window_table& table, const std::string_view text, const std::size_t begin, const std::size_t end)
+{
+    const auto stretch{text.substr(begin, end - begin)};
+
+    std::string symbols{};
+
+    for (const auto symbol : matisse::pretok::classes_of(alphabet, stretch))
+    {
+        symbols += alphabet.symbols[symbol];
+    }
+
+    std::vector<std::size_t> offsets{};
+
+    for (const auto [at, byte] : std::views::enumerate(stretch))
+    {
+        if (!is_continuation(byte))
+        {
+            offsets.push_back(begin + static_cast<std::size_t>(at));
+        }
+    }
+
+    offsets.push_back(end);
+
+    std::set<std::size_t> found{};
+
+    for (const auto& [window, origin] : table.windows)
+    {
+        for (auto at{symbols.find(window)}; at != std::string::npos; at = symbols.find(window, at + 1))
+        {
+            if (at + origin > 0)
+            {
+                found.insert(offsets[at + origin]);
+            }
+        }
+    }
+
+    return found;
+}
+
+/**
+ * @brief Returns every anchor of a text by brute force: the anchors of every stretch between special tokens.
  * @param table The window table.
  * @param text The text, well-formed UTF-8.
  * @param spans The occurrences of the allowed special tokens.
@@ -394,39 +442,7 @@ std::vector<Anchor> anchors_of(const Window_table& table, const std::string_view
 
     for (const auto [begin, end] : stretches_of(text, spans))
     {
-        const auto stretch{text.substr(begin, end - begin)};
-
-        std::string symbols{};
-
-        for (const auto symbol : matisse::pretok::classes_of(alphabet, stretch))
-        {
-            symbols += alphabet.symbols[symbol];
-        }
-
-        std::vector<std::size_t> offsets{};
-
-        for (const auto [at, byte] : std::views::enumerate(stretch))
-        {
-            if (!is_continuation(byte))
-            {
-                offsets.push_back(begin + static_cast<std::size_t>(at));
-            }
-        }
-
-        offsets.push_back(end);
-
-        std::set<std::size_t> found{};
-
-        for (const auto& [window, origin] : table.windows)
-        {
-            for (auto at{symbols.find(window)}; at != std::string::npos; at = symbols.find(window, at + 1))
-            {
-                if (at + origin > 0)
-                {
-                    found.insert(offsets[at + origin]);
-                }
-            }
-        }
+        const auto found{stretch_anchors(table, text, begin, end)};
 
         for (const auto at : found)
         {
@@ -444,7 +460,11 @@ std::vector<Anchor> anchors_of(const Window_table& table, const std::string_view
  */
 std::size_t code_points(const std::string_view text)
 {
-    return static_cast<std::size_t>(std::ranges::count_if(text, std::not_fn(is_continuation)));
+    const auto starts_point{std::not_fn(is_continuation)};
+
+    const auto points{std::ranges::count_if(text, starts_point)};
+
+    return static_cast<std::size_t>(points);
 }
 
 /**
@@ -1012,36 +1032,35 @@ TEST(Encoder_test, Chunk_boundaries_cuts_as_brute_force_over_every_certified_cut
 
     const auto report{matisse::validate::validate(pattern)};
 
+    constexpr std::array inventories{Inventory::factorization, Inventory::policy};
+
     // The one-byte special token can stand at the text's end and next to another, so a cut can meet both.
     const std::vector<std::vector<std::string>> allowed_lists{{}, {"<|end|>", "<|end|><|end|>"}, {"<|end|>", "!"}};
 
-    for (const auto inventory : {Inventory::factorization, Inventory::policy})
+    for (const auto [inventory, allowed] : std::views::cartesian_product(inventories, allowed_lists))
     {
         const auto& table{inventory == Inventory::factorization ? report.factorization : report.policy};
 
-        for (const auto& allowed : allowed_lists)
+        const Encoder encoder{definition, report, inventory, allowed};
+
+        std::mt19937 random{17};
+
+        for (std::size_t count{0}; count < 200; ++count)
         {
-            const Encoder encoder{definition, report, inventory, allowed};
+            const auto text{random_text(random, 20)};
 
-            std::mt19937 random{17};
+            const auto spans{special_spans(text, allowed)};
 
-            for (std::size_t count{0}; count < 200; ++count)
+            const auto anchors{anchors_of(table, text, spans)};
+
+            for (const auto chunks : chunk_counts(text))
             {
-                const auto text{random_text(random, 20)};
+                const auto boundaries{encoder.chunk_boundaries(text, chunks)};
 
-                const auto spans{special_spans(text, allowed)};
+                EXPECT_EQ(boundaries, promised_boundaries(text, spans, anchors, table.width, chunks))
+                        << text << " in " << chunks;
 
-                const auto anchors{anchors_of(table, text, spans)};
-
-                for (const auto chunks : chunk_counts(text))
-                {
-                    const auto boundaries{encoder.chunk_boundaries(text, chunks)};
-
-                    EXPECT_EQ(boundaries, promised_boundaries(text, spans, anchors, table.width, chunks))
-                            << text << " in " << chunks;
-
-                    expect_certified(text, spans, anchors, boundaries);
-                }
+                expect_certified(text, spans, anchors, boundaries);
             }
         }
     }
@@ -1053,26 +1072,25 @@ TEST(Encoder_test, Encode_parallel_gives_the_ids_of_encode_at_every_chunk_count_
 
     const auto report{matisse::validate::validate(pattern)};
 
+    constexpr std::array inventories{Inventory::factorization, Inventory::policy};
+
     const std::vector<std::vector<std::string>> allowed_lists{{}, {"<|end|>", "<|end|><|end|>"}, {"<|end|>", "!"}};
 
-    for (const auto inventory : {Inventory::factorization, Inventory::policy})
+    for (const auto [inventory, allowed] : std::views::cartesian_product(inventories, allowed_lists))
     {
-        for (const auto& allowed : allowed_lists)
+        const Encoder encoder{definition, report, inventory, allowed};
+
+        std::mt19937 random{19};
+
+        for (std::size_t count{0}; count < 100; ++count)
         {
-            const Encoder encoder{definition, report, inventory, allowed};
+            const auto text{random_text(random, 40)};
 
-            std::mt19937 random{19};
+            const auto ids{encoder.encode(text)};
 
-            for (std::size_t count{0}; count < 100; ++count)
+            for (const auto chunks : chunk_counts(text))
             {
-                const auto text{random_text(random, 40)};
-
-                const auto ids{encoder.encode(text)};
-
-                for (const auto chunks : chunk_counts(text))
-                {
-                    EXPECT_EQ(encoder.encode_parallel(text, chunks), ids) << text << " in " << chunks;
-                }
+                EXPECT_EQ(encoder.encode_parallel(text, chunks), ids) << text << " in " << chunks;
             }
         }
     }

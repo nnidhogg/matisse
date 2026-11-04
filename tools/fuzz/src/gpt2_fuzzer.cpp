@@ -53,7 +53,9 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* const data, const std:
 
         for (const auto& [left, right] : definition.merges)
         {
-            require(pairs.emplace(left, right).second);
+            const auto [position, inserted]{pairs.emplace(left, right)};
+
+            require(inserted);
         }
     }
     catch (const std::invalid_argument&)

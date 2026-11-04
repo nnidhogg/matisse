@@ -27,7 +27,9 @@ std::optional<Join_table::Join> held(const Join_table::Joins_t& joins, const Tok
         return std::nullopt;
     }
 
-    return found->second;
+    const auto& [key, join]{*found};
+
+    return join;
 }
 
 } // namespace

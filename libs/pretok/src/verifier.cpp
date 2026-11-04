@@ -29,95 +29,6 @@ using automata::State_t;
 using automata::Symbol_t;
 
 /**
- * @brief Returns the DFA of one state, over an alphabet, that accepts every string or none.
- * @param symbol_count How many symbols the alphabet holds.
- * @param accepts Whether the state accepts.
- * @return The DFA.
- */
-[[nodiscard]] Dfa one_state(const std::size_t symbol_count, const bool accepts)
-{
-    return {.symbol_count = symbol_count,
-            .transitions = {std::vector<State_t>(symbol_count, 0)},
-            .accepting = {accepts}};
-}
-
-/**
- * @brief Returns the DFA of one alternative's language, compiled by munch as a single token.
- * @param language The language, over the class symbols.
- * @return The DFA.
- */
-[[nodiscard]] munch::dfa::Simulator simulator_of(const munch::regex::Regex& language)
-{
-    munch::core::Builder builder{};
-
-    builder.add_token(language, std::size_t{0}, 0);
-
-    const auto lexer{builder.build()};
-
-    return lexer.simulator();
-}
-
-/**
- * @brief Returns the escape a byte of a class string is written as inside the quotes a refusal shows it in, when it has
- *        one: a common control, the backslash, and the quote.
- * @param byte The byte.
- * @return The escape, or std::nullopt for a byte written as itself or in hex.
- */
-[[nodiscard]] std::optional<std::string_view> quoted_escape(const unsigned char byte)
-{
-    switch (byte)
-    {
-    case '\n':
-        return R"(\n)";
-    case '\t':
-        return R"(\t)";
-    case '\r':
-        return R"(\r)";
-    case '\\':
-        return R"(\\)";
-    case '"':
-        return R"(\")";
-    default:
-        break;
-    }
-
-    return std::nullopt;
-}
-
-/**
- * @brief Returns a class string as a refusal shows it, as the report prints one: each byte the character when it is
- *        printable, an escape when it is a common control, and the escape `\xHH` otherwise.
- * @param bytes The class string.
- * @return The rendering, quoted.
- */
-[[nodiscard]] std::string shown(const std::string_view bytes)
-{
-    std::string out{'"'};
-
-    for (const auto byte : bytes)
-    {
-        const auto value{static_cast<unsigned char>(byte)};
-
-        const auto printable{value >= ' ' && value <= '~'};
-
-        if (const auto escape{quoted_escape(value)})
-        {
-            out += *escape;
-        }
-        else if (printable)
-        {
-            out += byte;
-        }
-        else
-        {
-            out += std::format(R"(\x{:02X})", value);
-        }
-    }
-
-    return out + '"';
-}
-
-/**
  * @brief The construction of a pattern's verifier over its class symbols, after the class theorem: each alternative's
  *        endpoints and longest accepts, the one-step relation Q, and the verifier M.
  *
@@ -276,6 +187,95 @@ private:
     std::string_view symbols_;
 };
 
+/**
+ * @brief Returns the DFA of one state, over an alphabet, that accepts every string or none.
+ * @param symbol_count How many symbols the alphabet holds.
+ * @param accepts Whether the state accepts.
+ * @return The DFA.
+ */
+[[nodiscard]] Dfa one_state(const std::size_t symbol_count, const bool accepts)
+{
+    return {.symbol_count = symbol_count,
+            .transitions = {std::vector<State_t>(symbol_count, 0)},
+            .accepting = {accepts}};
+}
+
+/**
+ * @brief Returns the DFA of one alternative's language, compiled by munch as a single token.
+ * @param language The language, over the class symbols.
+ * @return The DFA.
+ */
+[[nodiscard]] munch::dfa::Simulator simulator_of(const munch::regex::Regex& language)
+{
+    munch::core::Builder builder{};
+
+    builder.add_token(language, std::size_t{0}, 0);
+
+    const auto lexer{builder.build()};
+
+    return lexer.simulator();
+}
+
+/**
+ * @brief Returns the escape a byte of a class string is written as inside the quotes a refusal shows it in, when it has
+ *        one: a common control, the backslash, and the quote.
+ * @param byte The byte.
+ * @return The escape, or std::nullopt for a byte written as itself or in hex.
+ */
+[[nodiscard]] std::optional<std::string_view> quoted_escape(const unsigned char byte)
+{
+    switch (byte)
+    {
+    case '\n':
+        return R"(\n)";
+    case '\t':
+        return R"(\t)";
+    case '\r':
+        return R"(\r)";
+    case '\\':
+        return R"(\\)";
+    case '"':
+        return R"(\")";
+    default:
+        break;
+    }
+
+    return std::nullopt;
+}
+
+/**
+ * @brief Returns a class string as a refusal shows it, as the report prints one: each byte the character when it is
+ *        printable, an escape when it is a common control, and the escape `\xHH` otherwise.
+ * @param bytes The class string.
+ * @return The rendering, quoted.
+ */
+[[nodiscard]] std::string shown(const std::string_view bytes)
+{
+    std::string out{'"'};
+
+    for (const auto byte : bytes)
+    {
+        const auto value{static_cast<unsigned char>(byte)};
+
+        const auto printable{value >= ' ' && value <= '~'};
+
+        if (const auto escape{quoted_escape(value)})
+        {
+            out += *escape;
+        }
+        else if (printable)
+        {
+            out += byte;
+        }
+        else
+        {
+            out += std::format(R"(\x{:02X})", value);
+        }
+    }
+
+    return out + '"';
+}
+
 Construction::Construction(const std::string_view symbols) noexcept : symbols_{symbols}
 {}
 
@@ -383,7 +383,9 @@ Dfa Construction::language_of(const munch::regex::Regex& language) const
                 sources.push_back(next);
             }
 
-            row.push_back(entry->second);
+            const auto& [known_source, number]{*entry};
+
+            row.push_back(number);
         }
 
         const auto accepts{source && simulator.is_accepting(*source)};
@@ -413,9 +415,11 @@ Dfa Construction::marker_and_tail(const std::string_view gate) const
     // The states before the marker, just after it, in a tail that passed the gate, and dead.
     constexpr State_t dead{3};
 
+    const std::vector dead_row(marker() + 1, dead);
+
     Dfa tails{
             .symbol_count = marker() + 1,
-            .transitions = std::vector(4, std::vector<State_t>(marker() + 1, dead)),
+            .transitions = std::vector(4, dead_row),
             .accepting = {false, true, true, false}};
 
     constexpr State_t before_marker{0};

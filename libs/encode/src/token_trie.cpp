@@ -212,7 +212,9 @@ std::vector<Token_trie::Entry> Token_trie::entries_of(
     {
         const std::string_view spelling{spellings[id]};
 
-        const auto shorter_match{longest(spelling.substr(0, spelling.size() - 1))};
+        const auto without_last{spelling.substr(0, spelling.size() - 1)};
+
+        const auto shorter_match{longest(without_last)};
 
         const auto shorter{shorter_match.length == 0 ? no_token : shorter_match.id};
 

@@ -217,8 +217,6 @@ const matisse::validate::Report& decided_report()
  */
 Encoder cl100k_encoder(Definition definition, const std::vector<std::string>& allowed = {})
 {
-    const auto pattern{matisse::cl100k::pattern()};
-
     return {std::move(definition), decided_report(), matisse::validate::Inventory::factorization, allowed};
 }
 
@@ -703,8 +701,10 @@ void expect_streamed(const Encoder& encoder, const std::string_view text, const 
         start = cut;
 
         ASSERT_LE(returned.size(), expected.size()) << text << " after " << cut;
-        ASSERT_TRUE(std::ranges::equal(returned, std::span{expected}.first(returned.size())))
-                << text << " after " << cut;
+
+        const auto expected_prefix{std::span{expected}.first(returned.size())};
+
+        ASSERT_TRUE(std::ranges::equal(returned, expected_prefix)) << text << " after " << cut;
     }
 
     const auto rest{stream.finish()};
@@ -829,7 +829,9 @@ TEST(Encoder_test, Every_corpus_of_the_vendor_fixture_the_corpus_directory_holds
 
         ASSERT_NE(vendor, vendor_ids.end()) << name;
 
-        const auto& [vendor_count, vendor_digest]{vendor->second};
+        const auto& [vendor_name, vendor_entry]{*vendor};
+
+        const auto& [vendor_count, vendor_digest]{vendor_entry};
 
         EXPECT_EQ(parts, documents) << name;
         EXPECT_EQ(count, vendor_count) << name;
@@ -959,29 +961,30 @@ TEST(Encoder_test, Encode_parallel_gives_encode_s_ids_under_both_inventories_and
 
     const matisse::pretok::Class_table class_table{pattern.alphabet};
 
-    for (const auto inventory : {Inventory::factorization, Inventory::policy})
+    constexpr std::array inventories{Inventory::factorization, Inventory::policy};
+
+    const std::vector<std::vector<std::string>> allowed_lists{{}, special_spellings()};
+
+    for (const auto [inventory, allowed] : std::views::cartesian_product(inventories, allowed_lists))
     {
-        for (const auto& allowed : {std::vector<std::string>{}, special_spellings()})
+        const Encoder encoder{*definition, report, inventory, allowed};
+
+        const Window_index index{inventory == Inventory::factorization ? report.factorization : report.policy};
+
+        std::mt19937 random{23};
+
+        for (std::size_t count{0}; count < 60; ++count)
         {
-            const Encoder encoder{*definition, report, inventory, allowed};
+            const auto text{random_text(random, 60)};
 
-            const Window_index index{inventory == Inventory::factorization ? report.factorization : report.policy};
+            const auto ids{encoder.encode(text)};
 
-            std::mt19937 random{23};
-
-            for (std::size_t count{0}; count < 60; ++count)
+            for (const auto chunks : chunk_counts(text))
             {
-                const auto text{random_text(random, 60)};
-
-                const auto ids{encoder.encode(text)};
-
-                for (const auto chunks : chunk_counts(text))
-                {
-                    EXPECT_EQ(encoder.encode_parallel(text, chunks), ids) << text << " in " << chunks;
-                }
-
-                expect_anchors_are_boundaries(index, class_table, segmenter, text);
+                EXPECT_EQ(encoder.encode_parallel(text, chunks), ids) << text << " in " << chunks;
             }
+
+            expect_anchors_are_boundaries(index, class_table, segmenter, text);
         }
     }
 }
@@ -994,8 +997,6 @@ TEST(Encoder_test, A_cut_in_white_space_holds_with_the_right_context_each_invent
     {
         GTEST_SKIP() << "MATISSE_VOCAB_DIR names no directory holding cl100k_base.tiktoken";
     }
-
-    const auto pattern{matisse::cl100k::pattern()};
 
     const auto& report{decided_report()};
 
@@ -1040,7 +1041,9 @@ TEST(Encoder_test, A_stream_pushed_in_parts_of_every_size_returns_prefixes_of_en
 
         for (const auto& encoder : encoders)
         {
-            expect_streamed(encoder, text, random_cuts(random, text.size(), 24));
+            const auto cuts{random_cuts(random, text.size(), 24)};
+
+            expect_streamed(encoder, text, cuts);
             expect_streamed(encoder, text, one_byte_cuts);
             expect_streamed(encoder, text, std::array{text.size()});
         }

@@ -381,7 +381,9 @@ void print_provenance(const std::span<const std::string_view> arguments)
 
     for (const auto argument : arguments)
     {
-        const auto shown{std::filesystem::path{argument}.filename().string()};
+        const auto file_name{std::filesystem::path{argument}.filename()};
+
+        const auto shown{file_name.string()};
 
         invocation += std::format(" {}", shown);
     }
@@ -840,7 +842,9 @@ void print_prompt_rows(
 
     // The order statistic at floor(q (n - 1)) of the n latencies ascending, as the vendors' harnesses take it.
     const auto microseconds{[&](const double quantile) {
-        const auto index{static_cast<std::size_t>(quantile * static_cast<double>(latencies.size() - 1))};
+        const auto last{static_cast<double>(latencies.size() - 1)};
+
+        const auto index{static_cast<std::size_t>(quantile * last)};
 
         return latencies[index] * 1e6;
     }};
@@ -890,7 +894,9 @@ void run_prompts(
 
     const auto alone{time_prompts(prompts, passes, encode_alone)};
 
-    const auto all{concatenated(alone.first)};
+    const auto& [alone_ids, alone_seconds, alone_latencies]{alone};
+
+    const auto all{concatenated(alone_ids)};
 
     print_ids(tokenizer_name, name, all);
 
@@ -902,7 +908,9 @@ void run_prompts(
 
     const auto kept{time_prompts(prompts, passes, encode_kept)};
 
-    if (kept.first != alone.first)
+    const auto& [kept_ids, kept_seconds, kept_latencies]{kept};
+
+    if (kept_ids != alone_ids)
     {
         throw std::runtime_error{"the prompts' ids with a kept cache differ from encode()'s"};
     }

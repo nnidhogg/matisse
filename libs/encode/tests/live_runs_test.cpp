@@ -103,10 +103,91 @@ std::vector<std::size_t> ends_before(
 }
 
 /**
- * @brief Expects the live runs over seeded random texts of the three classes to be the segmentations of every
- *        continuation of up to five code points, restricted to the text, the pieces they close to be the ones all
- *        those segmentations share from the start, and each run's marking from a byte to be its whole marking from
- *        the last piece end at or before the byte.
+ * @brief Expects the live runs after a text to be the segmentations of every continuation of up to five code points,
+ *        restricted to the text, the pieces they close to be the ones all those segmentations share from the start, and
+ *        each run's marking from a byte to be its whole marking from the last piece end at or before the byte.
+ * @param runs The live runs, stepped over the text.
+ * @param segmenter The pattern's segmenter.
+ * @param continuations Every continuation of up to five code points.
+ * @param text The text.
+ * @param closed The piece ends the runs closed over the text.
+ */
+void expect_runs_after(
+        const Live_runs& runs, const matisse::pretok::Segmenter& segmenter,
+        const std::vector<std::string>& continuations, const std::string& text, const std::vector<std::size_t>& closed)
+{
+    std::set<std::vector<std::size_t>> futures{};
+
+    std::optional<std::vector<std::size_t>> shared{};
+
+    for (const auto& continuation : continuations)
+    {
+        const auto ends{ends_before(segmenter, text + continuation, text.size())};
+
+        futures.insert(ends);
+
+        if (!shared)
+        {
+            shared = ends;
+
+            continue;
+        }
+
+        const auto [shared_end, ends_end]{std::ranges::mismatch(*shared, ends)};
+
+        shared->erase(shared_end, shared->end());
+    }
+
+    std::set<std::vector<std::size_t>> marked{};
+
+    for (const auto& [ends, dead_end] : runs.markings(0))
+    {
+        std::vector<std::size_t> all{closed};
+
+        all.insert(all.end(), ends.begin(), ends.end());
+
+        std::erase_if(all, [&text](const std::size_t end) { return end >= text.size(); });
+
+        std::ranges::sort(all);
+
+        const auto [first_repeat, last]{std::ranges::unique(all)};
+
+        all.erase(first_repeat, last);
+
+        marked.insert(all);
+    }
+
+    auto closed_before{closed};
+
+    std::erase_if(closed_before, [&text](const std::size_t end) { return end >= text.size(); });
+
+    EXPECT_EQ(marked, futures) << text;
+    EXPECT_EQ(closed_before, *shared) << text;
+
+    const auto whole{runs.markings(0)};
+
+    for (std::size_t from{1}; from <= text.size(); ++from)
+    {
+        const auto read_back{runs.markings(from)};
+
+        ASSERT_EQ(read_back.size(), whole.size()) << text;
+
+        for (const auto& [all, part] : std::views::zip(whole, read_back))
+        {
+            const auto after{std::ranges::upper_bound(all.ends, from)};
+
+            const auto kept{after == all.ends.begin() ? after : std::prev(after)};
+
+            const std::vector<std::size_t> expected{kept, all.ends.end()};
+
+            EXPECT_EQ(part.ends, expected) << text << ' ' << from;
+            EXPECT_EQ(part.dead_end, all.dead_end) << text << ' ' << from;
+        }
+    }
+}
+
+/**
+ * @brief Expects expect_runs_after() of the live runs after every prefix of seeded random texts of the three classes.
  * @param pattern The pattern.
  * @param seed The seed of the texts.
  */
@@ -167,74 +248,7 @@ void expect_futures(const Pattern& pattern, const unsigned seed)
                 closed.push_back(*end);
             }
 
-            std::set<std::vector<std::size_t>> futures{};
-
-            std::optional<std::vector<std::size_t>> shared{};
-
-            for (const auto& continuation : continuations)
-            {
-                const auto ends{ends_before(segmenter, text + continuation, text.size())};
-
-                futures.insert(ends);
-
-                if (!shared)
-                {
-                    shared = ends;
-
-                    continue;
-                }
-
-                const auto [shared_end, ends_end]{std::ranges::mismatch(*shared, ends)};
-
-                shared->erase(shared_end, shared->end());
-            }
-
-            std::set<std::vector<std::size_t>> marked{};
-
-            for (const auto& [ends, dead_end] : runs.markings(0))
-            {
-                std::vector<std::size_t> all{closed};
-
-                all.insert(all.end(), ends.begin(), ends.end());
-
-                std::erase_if(all, [&text](const std::size_t end) { return end >= text.size(); });
-
-                std::ranges::sort(all);
-
-                const auto [first_repeat, last]{std::ranges::unique(all)};
-
-                all.erase(first_repeat, last);
-
-                marked.insert(all);
-            }
-
-            auto closed_before{closed};
-
-            std::erase_if(closed_before, [&text](const std::size_t end) { return end >= text.size(); });
-
-            EXPECT_EQ(marked, futures) << text;
-            EXPECT_EQ(closed_before, *shared) << text;
-
-            const auto whole{runs.markings(0)};
-
-            for (std::size_t from{1}; from <= text.size(); ++from)
-            {
-                const auto read_back{runs.markings(from)};
-
-                ASSERT_EQ(read_back.size(), whole.size()) << text;
-
-                for (const auto& [all, part] : std::views::zip(whole, read_back))
-                {
-                    const auto after{std::ranges::upper_bound(all.ends, from)};
-
-                    const auto kept{after == all.ends.begin() ? after : std::prev(after)};
-
-                    const std::vector<std::size_t> expected{kept, all.ends.end()};
-
-                    EXPECT_EQ(part.ends, expected) << text << ' ' << from;
-                    EXPECT_EQ(part.dead_end, all.dead_end) << text << ' ' << from;
-                }
-            }
+            ASSERT_NO_FATAL_FAILURE(expect_runs_after(runs, segmenter, continuations, text, closed));
         }
     }
 }

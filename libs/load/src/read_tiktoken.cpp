@@ -257,9 +257,11 @@ void require_distinct_spellings(const std::span<const std::string> spellings, co
 
         if (!inserted)
         {
+            const auto& [spelling, listed_rank]{*listed};
+
             throw std::invalid_argument{std::format(
                     "read_tiktoken: the token at rank {} of {} repeats the spelling of the token at rank {}", rank,
-                    name, listed->second)};
+                    name, listed_rank)};
         }
     }
 }

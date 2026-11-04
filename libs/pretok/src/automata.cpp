@@ -213,7 +213,9 @@ using Subset_t = std::vector<State_t>;
 
         const auto [entry, inserted]{numbered.try_emplace(std::move(signature), numbered.size())};
 
-        refined.push_back(entry->second);
+        const auto& [known_signature, block]{*entry};
+
+        refined.push_back(block);
     }
 
     return refined;
@@ -307,7 +309,9 @@ Dfa determinize(const Nfa& nfa)
                 subsets.push_back(std::move(next));
             }
 
-            row.push_back(entry->second);
+            const auto& [known_subset, number]{*entry};
+
+            row.push_back(number);
         }
 
         const auto accepts{
@@ -418,7 +422,9 @@ Dfa product(const Dfa& first, const Dfa& second, const Accepts accepts)
                 pairs.push_back(next);
             }
 
-            row.push_back(entry->second);
+            const auto& [known_pair, number]{*entry};
+
+            row.push_back(number);
         }
 
         const auto pair_accepts{combined(accepts, first.accepting[left], second.accepting[right])};

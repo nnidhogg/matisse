@@ -692,14 +692,22 @@ std::vector<load::Token_id_t> Stream_encoder::run_ids(const Live_runs::Marking& 
     // of the rest after the cursor.
     if (start < covered_)
     {
-        append(stable_ids(encoder_, stretch.substr(covered_ - erased_bytes_), false));
+        const auto rest{stretch.substr(covered_ - erased_bytes_)};
+
+        const auto rest_ids{stable_ids(encoder_, rest, false)};
+
+        append(rest_ids);
 
         return listed;
     }
 
     const auto whole_piece{encoder_.definition().whole_piece_lookup};
 
-    append(stable_ids(encoder_, stretch.substr(start - erased_bytes_), whole_piece));
+    const auto open_piece{stretch.substr(start - erased_bytes_)};
+
+    const auto open_ids{stable_ids(encoder_, open_piece, whole_piece)};
+
+    append(open_ids);
 
     return listed;
 }

@@ -92,7 +92,9 @@ std::filesystem::path written(const std::string_view name, const std::string_vie
 
     std::ofstream stream{path, std::ios::binary | std::ios::trunc};
 
-    stream.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+    const auto size{static_cast<std::streamsize>(bytes.size())};
+
+    stream.write(bytes.data(), size);
 
     stream.close();
 
@@ -110,7 +112,9 @@ void require_spelled_apart(const std::span<const std::string> spellings)
     {
         require(!spelling.empty());
 
-        require(seen.insert(spelling).second);
+        const auto [position, inserted]{seen.insert(spelling)};
+
+        require(inserted);
     }
 }
 

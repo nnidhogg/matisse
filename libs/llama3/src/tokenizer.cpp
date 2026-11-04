@@ -108,6 +108,36 @@ constexpr std::array<Code_point_range, 2> t_points{{{.first = U'T', .last = U'T'
 constexpr std::array<Code_point_range, 2> v_points{{{.first = U'V', .last = U'V'}, {.first = U'v', .last = U'v'}}};
 
 /**
+ * @brief The id of the first special token, the count of the rank file's ordinary tokens.
+ */
+constexpr load::Token_id_t first_special{128000};
+
+/**
+ * @brief The special tokens Meta's tokenizer.py names first, in id order from first_special.
+ */
+constexpr std::array<std::string_view, 10> named_specials{
+        "<|begin_of_text|>",
+        "<|end_of_text|>",
+        "<|reserved_special_token_0|>",
+        "<|reserved_special_token_1|>",
+        "<|reserved_special_token_2|>",
+        "<|reserved_special_token_3|>",
+        "<|start_header_id|>",
+        "<|end_header_id|>",
+        "<|reserved_special_token_4|>",
+        "<|eot_id|>"};
+
+/**
+ * @brief The first of the reserved special tokens Meta's tokenizer.py numbers after the named ones.
+ */
+constexpr std::size_t first_unnamed_reserved{5};
+
+/**
+ * @brief One past the last of them, the 256 special tokens less the five named reserved ones.
+ */
+constexpr std::size_t last_unnamed_reserved{251};
+
+/**
  * @brief Returns the sets the classes read, in the order a code point is classed by them: the literals, the white
  *        space, the letters and the numbers.
  * @return The sets.
@@ -146,36 +176,6 @@ constexpr std::array<Code_point_range, 2> v_points{{{.first = U'V', .last = U'V'
             .other = '!',
             .unicode_version = std::string{class_unicode_version}};
 }
-
-/**
- * @brief The id of the first special token, the count of the rank file's ordinary tokens.
- */
-constexpr load::Token_id_t first_special{128000};
-
-/**
- * @brief The special tokens Meta's tokenizer.py names first, in id order from first_special.
- */
-constexpr std::array<std::string_view, 10> named_specials{
-        "<|begin_of_text|>",
-        "<|end_of_text|>",
-        "<|reserved_special_token_0|>",
-        "<|reserved_special_token_1|>",
-        "<|reserved_special_token_2|>",
-        "<|reserved_special_token_3|>",
-        "<|start_header_id|>",
-        "<|end_header_id|>",
-        "<|reserved_special_token_4|>",
-        "<|eot_id|>"};
-
-/**
- * @brief The first of the reserved special tokens Meta's tokenizer.py numbers after the named ones.
- */
-constexpr std::size_t first_unnamed_reserved{5};
-
-/**
- * @brief One past the last of them, the 256 special tokens less the five named reserved ones.
- */
-constexpr std::size_t last_unnamed_reserved{251};
 
 /**
  * @brief Returns the contractions, `(?i:'s|'t|'re|'ve|'m|'ll|'d)`: the apostrophe and the contraction letters, each

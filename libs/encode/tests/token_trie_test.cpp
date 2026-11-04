@@ -59,7 +59,9 @@ std::optional<Token_trie::Match> brute_longest(
 
         if (found != held.end())
         {
-            return Token_trie::Match{.id = found->second, .length = static_cast<std::uint32_t>(length)};
+            const auto& [spelling, id]{*found};
+
+            return Token_trie::Match{.id = id, .length = static_cast<std::uint32_t>(length)};
         }
     }
 
@@ -92,7 +94,7 @@ TEST(Token_trie_test, A_trie_gives_the_longest_token_it_holds_that_begins_a_text
 
         const auto id{static_cast<Token_id_t>(spellings.size())};
 
-        const auto first{seen.insert(spelling).second};
+        const auto [where, first]{seen.insert(spelling)};
 
         if (first && drawn(random))
         {
@@ -171,7 +173,9 @@ TEST(Token_trie_test, A_trie_of_every_byte_gives_each_byte_and_nothing_longer)
 
     for (unsigned value{0}; value < 256; ++value)
     {
-        ids.push_back(static_cast<Token_id_t>(spellings.size()));
+        const auto id{static_cast<Token_id_t>(spellings.size())};
+
+        ids.push_back(id);
 
         spellings.emplace_back(1, static_cast<char>(value));
     }

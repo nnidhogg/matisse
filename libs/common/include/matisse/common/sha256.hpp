@@ -22,6 +22,48 @@
 namespace matisse::common
 {
 /**
+ * @brief SHA-256 over a message given in parts: each whole 64-byte block is compressed as it arrives and only the bytes
+ *        past the last one are held, so that a message too long to copy, such as a corpus's ids written as words, is
+ *        hashed as it is produced.
+ */
+class Sha256
+{
+public:
+    /**
+     * @brief Starts the digest of an empty message.
+     */
+    Sha256();
+
+    /**
+     * @brief Hashes the next part of the message.
+     * @param part The part's bytes.
+     */
+    void add(std::string_view part);
+
+    /**
+     * @brief Returns the SHA-256 of the parts added, as hexadecimal.
+     * @return The 64 hexadecimal digits.
+     */
+    [[nodiscard]] std::string digest() const;
+
+private:
+    /**
+     * @brief The hash state after the whole blocks added.
+     */
+    std::array<std::uint32_t, 8> state_;
+
+    /**
+     * @brief The bytes added past the last whole block, fewer than 64.
+     */
+    std::string held_;
+
+    /**
+     * @brief The bytes added.
+     */
+    std::uint64_t length_;
+};
+
+/**
  * @brief Returns the end of a message padded as SHA-256 pads it: the bytes past its last whole block, a one bit, zeros
  *        to 56 mod 64, and the message's bit length big-endian.
  * @param tail The bytes past the message's last whole block, fewer than 64.
@@ -43,7 +85,9 @@ inline std::string padded_tail(const std::string_view tail, const std::uint64_t 
 
     for (int shift{56}; shift >= 0; shift -= 8)
     {
-        padded.push_back(static_cast<char>((bit_length >> static_cast<unsigned>(shift)) & 0xFF));
+        const auto byte{(bit_length >> static_cast<unsigned>(shift)) & 0xFF};
+
+        padded.push_back(static_cast<char>(byte));
     }
 
     return padded;
@@ -137,48 +181,6 @@ inline std::array<std::uint32_t, 8> compressed(
 
     return state;
 }
-
-/**
- * @brief SHA-256 over a message given in parts: each whole 64-byte block is compressed as it arrives and only the bytes
- *        past the last one are held, so that a message too long to copy, such as a corpus's ids written as words, is
- *        hashed as it is produced.
- */
-class Sha256
-{
-public:
-    /**
-     * @brief Starts the digest of an empty message.
-     */
-    Sha256();
-
-    /**
-     * @brief Hashes the next part of the message.
-     * @param part The part's bytes.
-     */
-    void add(std::string_view part);
-
-    /**
-     * @brief Returns the SHA-256 of the parts added, as hexadecimal.
-     * @return The 64 hexadecimal digits.
-     */
-    [[nodiscard]] std::string digest() const;
-
-private:
-    /**
-     * @brief The hash state after the whole blocks added.
-     */
-    std::array<std::uint32_t, 8> state_;
-
-    /**
-     * @brief The bytes added past the last whole block, fewer than 64.
-     */
-    std::string held_;
-
-    /**
-     * @brief The bytes added.
-     */
-    std::uint64_t length_;
-};
 
 inline Sha256::Sha256()
     : state_{0x6A09E667, 0xBB67AE85, 0x3C6EF372, 0xA54FF53A, 0x510E527F, 0x9B05688C, 0x1F83D9AB, 0x5BE0CD19}

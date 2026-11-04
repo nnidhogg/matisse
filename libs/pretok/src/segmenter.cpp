@@ -29,6 +29,12 @@ namespace
 constexpr char sentinel{'\xFF'};
 
 /**
+ * @brief The state of an alternative that has stopped in a walk of the product: its automaton has no move on the symbol
+ *        read, no accept is reachable from where it stands, or an alternative before it has accepted.
+ */
+constexpr std::size_t stopped{std::numeric_limits<std::size_t>::max()};
+
+/**
  * @brief Returns the lookahead of a gate, one of its symbols or the sentinel.
  * @param gate The class symbols that may follow an accept.
  * @return The lookahead.
@@ -57,12 +63,6 @@ constexpr char sentinel{'\xFF'};
 
     return lexer.simulator();
 }
-
-/**
- * @brief The state of an alternative that has stopped in a walk of the product: its automaton has no move on the symbol
- *        read, no accept is reachable from where it stands, or an alternative before it has accepted.
- */
-constexpr std::size_t stopped{std::numeric_limits<std::size_t>::max()};
 
 /**
  * @brief Returns the state a state of the product of the alternatives' automata moves to on a symbol, std::nullopt
@@ -248,7 +248,9 @@ munch::dfa::Simulator Segmenter::automaton_of(const Pattern& pattern)
                 sources.push_back(*moved);
             }
 
-            builder.add_transition(from, munch::dfa::Label{symbol}, entry->second);
+            const auto& [known_source, target]{*entry};
+
+            builder.add_transition(from, munch::dfa::Label{symbol}, target);
         }
     }
 

@@ -70,7 +70,16 @@ TEST(Spelling_table_test, A_table_finds_the_first_id_of_every_spelling_it_holds_
 
         const auto found{first_ids.find(text)};
 
-        const auto expected{found == first_ids.end() ? std::nullopt : std::optional{found->second}};
+        const auto expected{[&]() -> std::optional<Token_id_t> {
+            if (found == first_ids.end())
+            {
+                return std::nullopt;
+            }
+
+            const auto& [spelling, id]{*found};
+
+            return id;
+        }()};
 
         EXPECT_EQ(table.find(text), expected) << text;
     }

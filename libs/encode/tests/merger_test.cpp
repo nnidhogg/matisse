@@ -74,6 +74,43 @@ constexpr std::string_view o200k_digest{"446a9538cb6c348e3516120d7c08b09f57c3649
 constexpr std::string_view llama3_digest{"82e9d31979e92ab929cd544440f129d9ecd797b69e327f80f17e1c50d5551b55"};
 
 /**
+ * @brief What holding a vocabulary's merge to the plain references found.
+ */
+struct Vocabulary_check
+{
+    /**
+     * @brief The multi-byte tokens merged.
+     */
+    std::size_t tokens{0};
+
+    /**
+     * @brief The multi-byte tokens the merge does not form from their own bytes.
+     */
+    std::size_t not_their_own_merge{0};
+
+    /**
+     * @brief The random pieces merged.
+     */
+    std::size_t pieces{0};
+};
+
+/**
+ * @brief One part of a piece under tiktoken's _byte_pair_merge: where it starts and the rank of the pair it begins.
+ */
+struct Scan_part
+{
+    /**
+     * @brief The byte at which the part starts.
+     */
+    std::size_t start{};
+
+    /**
+     * @brief The rank of the pair the part begins, absent when the pair is no token.
+     */
+    std::size_t rank{};
+};
+
+/**
  * @brief Returns the parts of a piece under tiktoken's _byte_pair_merge, transcribed: each part carries the rank of the
  *        pair it begins, the least rank is joined, the first on a tie, and the two ranks beside the join are read
  *        again.
@@ -86,20 +123,29 @@ Parts_t tiktoken_scan(const std::string_view piece, const Ranks_t& ranks)
     const auto rank_of{[&ranks](const std::string_view bytes) {
         const auto found{ranks.find(std::string{bytes})};
 
-        return found == ranks.end() ? absent : found->second;
+        if (found == ranks.end())
+        {
+            return absent;
+        }
+
+        const auto& [spelling, rank]{*found};
+
+        return rank;
     }};
 
-    // Each part is where it starts and the rank of the pair it begins, the last two the ends.
-    std::vector<std::pair<std::size_t, std::size_t>> parts{};
+    // The last two parts are the ends.
+    std::vector<Scan_part> parts{};
 
     for (std::size_t at{0}; at + 1 < piece.size(); ++at)
     {
-        parts.emplace_back(at, rank_of(piece.substr(at, 2)));
+        const auto pair{piece.substr(at, 2)};
+
+        parts.push_back({.start = at, .rank = rank_of(pair)});
     }
 
-    parts.emplace_back(piece.size() - 1, absent);
+    parts.push_back({.start = piece.size() - 1, .rank = absent});
 
-    parts.emplace_back(piece.size(), absent);
+    parts.push_back({.start = piece.size(), .rank = absent});
 
     const auto rank_at{[&](const std::size_t index) {
         if (index + 3 >= parts.size())
@@ -107,33 +153,37 @@ Parts_t tiktoken_scan(const std::string_view piece, const Ranks_t& ranks)
             return absent;
         }
 
-        const auto start{parts[index].first};
+        const auto start{parts[index].start};
 
-        return rank_of(piece.substr(start, parts[index + 3].first - start));
+        return rank_of(piece.substr(start, parts[index + 3].start - start));
     }};
 
     const auto least{[&parts] {
-        std::pair minimum{absent, std::size_t{0}};
+        auto least_rank{absent};
+
+        std::size_t least_index{0};
 
         for (std::size_t index{0}; index + 1 < parts.size(); ++index)
         {
-            if (parts[index].second < minimum.first)
+            if (parts[index].rank < least_rank)
             {
-                minimum = {parts[index].second, index};
+                least_rank = parts[index].rank;
+
+                least_index = index;
             }
         }
 
-        return minimum;
+        return std::pair{least_rank, least_index};
     }};
 
     for (auto [rank, index]{least()}; rank != absent; std::tie(rank, index) = least())
     {
         if (index > 0)
         {
-            parts[index - 1].second = rank_at(index - 1);
+            parts[index - 1].rank = rank_at(index - 1);
         }
 
-        parts[index].second = rank_at(index);
+        parts[index].rank = rank_at(index);
 
         parts.erase(parts.begin() + static_cast<std::ptrdiff_t>(index) + 1);
     }
@@ -142,9 +192,9 @@ Parts_t tiktoken_scan(const std::string_view piece, const Ranks_t& ranks)
 
     for (std::size_t index{0}; index + 1 < parts.size(); ++index)
     {
-        const auto start{parts[index].first};
+        const auto start{parts[index].start};
 
-        out.emplace_back(piece.substr(start, parts[index + 1].first - start));
+        out.emplace_back(piece.substr(start, parts[index + 1].start - start));
     }
 
     return out;
@@ -180,28 +230,37 @@ Parts_t pair_loop(const std::string_view piece, const Pair_ranks_t& ranks)
 
     while (true)
     {
-        std::pair best{absent, std::size_t{0}};
+        auto best_rank{absent};
+
+        std::size_t best_at{0};
 
         for (std::size_t at{0}; at + 1 < parts.size(); ++at)
         {
             const auto found{ranks.find({parts[at], parts[at + 1]})};
 
-            if (found != ranks.end() && found->second < best.first)
+            if (found == ranks.end())
             {
-                best = {found->second, at};
+                continue;
+            }
+
+            const auto& [pair, rank]{*found};
+
+            if (rank < best_rank)
+            {
+                best_rank = rank;
+
+                best_at = at;
             }
         }
 
-        const auto [rank, at]{best};
-
-        if (rank == absent)
+        if (best_rank == absent)
         {
             return parts;
         }
 
-        parts[at] += parts[at + 1];
+        parts[best_at] += parts[best_at + 1];
 
-        parts.erase(parts.begin() + static_cast<std::ptrdiff_t>(at) + 1);
+        parts.erase(parts.begin() + static_cast<std::ptrdiff_t>(best_at) + 1);
     }
 }
 
@@ -218,24 +277,37 @@ Parts_t pass_loop(const std::string_view piece, const Pair_ranks_t& ranks)
 
     while (word.size() > 1)
     {
-        auto best{ranks.end()};
+        auto best_rank{absent};
+
+        std::size_t best_at{0};
 
         for (std::size_t at{0}; at + 1 < word.size(); ++at)
         {
             const auto found{ranks.find({word[at], word[at + 1]})};
 
-            if (found != ranks.end() && (best == ranks.end() || found->second < best->second))
+            if (found == ranks.end())
             {
-                best = found;
+                continue;
+            }
+
+            const auto& [pair, rank]{*found};
+
+            if (rank < best_rank)
+            {
+                best_rank = rank;
+
+                best_at = at;
             }
         }
 
-        if (best == ranks.end())
+        if (best_rank == absent)
         {
             break;
         }
 
-        const auto& [first, second]{best->first};
+        const auto first{word[best_at]};
+
+        const auto second{word[best_at + 1]};
 
         Parts_t joined{};
 
@@ -292,7 +364,16 @@ std::vector<Token_id_t> ids_of(const Parts_t& parts, const std::unordered_map<st
     {
         const auto found{ids.find(part)};
 
-        out.push_back(found == ids.end() ? std::numeric_limits<Token_id_t>::max() : found->second);
+        if (found == ids.end())
+        {
+            out.push_back(std::numeric_limits<Token_id_t>::max());
+
+            continue;
+        }
+
+        const auto& [spelling, id]{*found};
+
+        out.push_back(id);
     }
 
     return out;
@@ -385,7 +466,9 @@ Definition pairs_definition(const std::vector<munch::verifier::Merge>& merges)
     {
         for (const auto& spelling : {left, right, left + right})
         {
-            if (known.insert(spelling).second)
+            const auto [where, inserted]{known.insert(spelling)};
+
+            if (inserted)
             {
                 spellings.push_back(spelling);
             }
@@ -496,7 +579,9 @@ std::vector<std::string> random_pieces(const std::vector<std::string>& spellings
 
             const auto cut{long_length(random)};
 
-            piece.resize(std::min(piece.size(), cut));
+            const auto kept{std::min(piece.size(), cut)};
+
+            piece.resize(kept);
         }
 
         pieces.push_back(std::move(piece));
@@ -573,27 +658,6 @@ std::optional<Definition> pinned_tiktoken(const std::string_view name, const std
 
     return matisse::load::read_tiktoken(*path, {});
 }
-
-/**
- * @brief What holding a vocabulary's merge to the plain references found.
- */
-struct Vocabulary_check
-{
-    /**
-     * @brief The multi-byte tokens merged.
-     */
-    std::size_t tokens{0};
-
-    /**
-     * @brief The multi-byte tokens the merge does not form from their own bytes.
-     */
-    std::size_t not_their_own_merge{0};
-
-    /**
-     * @brief The random pieces merged.
-     */
-    std::size_t pieces{0};
-};
 
 /**
  * @brief Holds the merge of a definition to its plain reference on every multi-byte token and on seeded random pieces,

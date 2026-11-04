@@ -1,46 +1,75 @@
 # **Design**
 
-The decisions behind matisse, in the order a reader meets them: what the library is and is not, the repository and its
-build, the libraries' interfaces, how the vendor verifiers move from their Python reference into C++, how the result is
-tested against the real tokenizers, what matisse needs from munch, the choices still open, and the order of work. Steps
-1 to 13 and 15 of the order of work are built, `read_tokenizer_json()` waiting on open choice 5: load reads GPT-2's
-files and tiktoken rank files, pretok classes and segments a text and builds a pattern's split verifier and
-factorization lexer, validate decides a pattern's window tables under both certificates with their right contexts,
-measures their anchor supply on an input and renders the report as text and as JSON, the gpt2, cl100k, o200k and llama3
-libraries describe their patterns, lookup finds them, `matisse-validate` reports a rank file read under a pattern, and
-encode encodes a text and decodes its ids under both merge rules, with the whole-piece lookup, the special-token cuts,
-the fast merge, its backtracking and the piece cache, encodes it in parallel, cut only at the certified cuts of either
-inventory, and streams it, every id returned as soon as no continuation of the text can change it, while
-`validate_merges()` is still to be written; on the fourteen corpora of [benchmarks.md](benchmarks.md) matisse's ids
-equal tiktoken's, Hugging Face tokenizers' and the bpe crate's by digest wherever each of them ran, the vendor fixture
-records their digests and each tokenizer's tests hold matisse's ids to them, and the page holds what the corpus probe,
-the bench and the other encoders' harnesses measured. The sketches below give names and types, and they change as the
-code is written.
+The decisions behind matisse as it ships, each with its reason: what the library is and is not, how its libraries fit
+together, how a tokenizer is described, validated and encoded, how exactness is guaranteed and tested against the real
+tokenizers, what matisse needs from munch, and the questions that are still open. [usage.md](usage.md) shows how each
+library is called, [limits.md](limits.md) states what every call guarantees, and [benchmarks.md](benchmarks.md) gives
+the measured numbers.
 
 ## **What matisse is and is not**
 
 matisse reads the definition of a real tokenizer, decides where its output can be cut with certainty, and encodes text
-in parallel by cutting only there, with token ids byte-identical to the sequential encoding. The first version does this
-for GPT-2, cl100k_base, o200k_base and Llama 3, whose deployed pre-tokenizer patterns have exact verifiers; for a
-byte-level tokenizer without a pre-tokenizer, reporting the certified windows of the merge table through the lazy
-certification is step 14 of the order of work and not written yet. It is not a general tokenizer library. It trains
-nothing, applies no normalizer but the identity, and does not try to match Hugging Face's feature surface; its product
-is exactness against the reference tokenizer, shown on pinned vocabularies and corpora.
+in parallel by cutting only there, with token ids byte-identical to the sequential encoding. It does this for GPT-2,
+cl100k_base, o200k_base and Llama 3, whose deployed pre-tokenizer patterns have exact verifiers. It is not a general
+tokenizer library. It trains nothing, applies no normalizer but the identity, and does not try to match Hugging Face's
+feature surface. Its product is exactness against the reference tokenizer, shown on pinned vocabularies and corpora.
 
 munch stays the decision library, with the verifier framework and the general constructions on abstract inputs, merge
 tables and vocabularies among them. matisse takes everything about specific real tokenizers, which is reading their
 files and special tokens, the vendor pre-tokenizer verifiers tied to a regex and to an engine's Unicode tables, and the
 runtime with its token ids, normalizers and special-token cuts. The test for where a piece goes is whether it would make
-sense if no LLM existed; if it would, it belongs in munch. matisse is also the intended home of the tokenizer pieces of
-an execution-contract compiler (the full-dictionary verifier, the two-mode WordPiece construction, a labeler carrying
-token ids, certified-prefix streaming). Certified-prefix streaming is built, as the `Stream_encoder` of libs/encode,
-with one claim: every id it returns is a prefix of `encode()` of the whole text, and what it returns is the longest such
-prefix but for the three exceptions the encoder's section names; the others are not in the first version.
+sense if no LLM existed, and if it would, it belongs in munch.
+
+matisse is also where the tokenizer pieces of an execution-contract compiler would live: the full-dictionary verifier,
+the two-mode WordPiece construction, a labeler carrying token ids, and certified-prefix streaming. Only the streaming is
+built, as the `Stream_encoder` described below, and it claims that every id it returns is a prefix of `encode()` of the
+whole text and that what it returns is the longest such prefix but for three exceptions.
 
 The name is after Matisse's paper cut-outs, cutting with certainty, beside munch, the lexer library, and hopper, the
 parser toolkit.
 
-## **Repository and build**
+## **How the libraries fit together**
+
+A tokenizer reaches matisse as two things read apart. Its files are read by load into a `load::Definition`, which holds
+the merge rule, whether a piece is looked up whole, the bytes of every ordinary token, the merge table and the special
+tokens. Its pre-tokenizer is a `pretok::Pattern`, the published regex described as data, which the tokenizer's own
+library supplies with `pattern()`, beside `specials()`, the vendor's special tokens for a rank file that names none.
+validate decides a report of the pattern once: the windows of classes that certify a cut under each of two certificates,
+and the right context each certificate needs. encode builds an `Encoder` from the definition, the report, the inventory
+of certified windows chosen and the special tokens allowed, and the encoder encodes a text sequentially, in parallel at
+certified cuts, and as a stream through a `Stream_encoder` over it. For cl100k_base:
+
+```
+cl100k_base.tiktoken ──▶ load::read_tiktoken() ──▶ load::Definition ────┐
+                                                                        │
+cl100k::pattern() ──▶ validate::validate() ──▶ validate::Report ────────┤
+                                                                        ▼
+                                                                 encode::Encoder
+                                                                        │
+                                                                        ├──▶ encode(), encode_parallel(), decode()
+                                                                        └──▶ encode::Stream_encoder: push(), finish()
+```
+
+The libraries are of two kinds, as hopper's generic parse library sits beside its json and clike grammars. The four
+stage libraries hold nothing of a specific tokenizer and take its description as data. load reads tokenizer files into
+one definition type; its `read_gpt2()` reads the file format GPT-2 published, and `read_tiktoken()` the rank files
+tiktoken publishes. pretok holds the pre-tokenizer machinery over a pattern description: the classes of a text, the
+runtime segmenter, and the construction of a pattern's verifier. validate decides the certified windows and their right
+context and measures anchor supply. encode is the runtime. Beside them every tokenizer is a small library of its own,
+gpt2, cl100k, o200k and llama3, holding its pattern description, its generated class tables, the vendor's special tokens
+for a file that names none, and its tests, and lookup finds the tokenizer libraries by name, for `matisse-validate` and
+any caller choosing a tokenizer at run time.
+
+Each library is a target `matisse_<name>` with the alias `matisse::<name>`, in namespace `matisse::<name>`, and the
+umbrella `matisse::matisse` links all of them, as `hopper::hopper` links hopper's. A consumer that encodes under one
+tokenizer links its library, which brings load and pretok with it, beside encode, which brings validate, as
+`matisse::cl100k matisse::encode`. common holds the SHA-256 that the tests and the probes use, the tests holding the
+pinned files and the class tables to their digests and the probes the corpora and their ids; its target `matisse_common`
+lives in the build tree only, with no alias, no install rule and no place in the umbrella. Every library whose headers
+name munch types links munch publicly, as hopper_json does: load, whose definition holds `munch::verifier::Merge`,
+pretok, whose pattern's sets are `munch::regex::utf8::Code_point_range` tables and whose verifier is a
+`munch::verifier::Verifier`, and validate, which decides on that verifier. A tokenizer library reaches munch through
+pretok.
 
 The repository is laid out as hopper's is, one library per subject under libs/, each with include/, src/ and tests/, the
 tools beside them, munch as a git submodule and googletest beside it:
@@ -51,7 +80,7 @@ matisse/
   .clang-format  .gitattributes  .gitignore  .gitmodules
   .github/workflows/  ci.yml  codeql.yml
   cmake/matisse-config.cmake
-  docs/  design.md  limits.md  benchmarks.md
+  docs/  design.md  usage.md  limits.md  benchmarks.md
   external/  CMakeLists.txt  googletest/  munch/          (submodule, pinned to the munch release it builds against)
   libs/
     CMakeLists.txt
@@ -73,993 +102,565 @@ matisse/
     unicode/    generate_classes.py
 ```
 
-The fuzz harnesses of step 17 of the order of work live in tools/fuzz beside them.
-
-The libraries are of two kinds, as hopper's generic parse library sits beside its json and clike grammars. The four
-stage libraries are the four subjects of the first version, and none of them holds a tokenizer's pattern or special
-tokens; load's `read_gpt2()` reads the file format GPT-2 published. load reads tokenizer files into one definition type.
-pretok holds the pre-tokenizer machinery over a pattern description: the classes of a text, the runtime segmenter, and
-the construction of a pattern's verifier. validate decides the certified windows and their right context and measures
-anchor supply. encode is the runtime. Beside them every tokenizer is a small library of its own, gpt2, cl100k, o200k and
-llama3 in the first version, holding its pattern description, its generated class tables, the vendor's special tokens
-for a file that names none, and its tests, and lookup finds the tokenizer libraries by name. Each is a target
-`matisse_<name>` with the alias `matisse::<name>`, in namespace `matisse::<name>`, and the umbrella `matisse::matisse`
-links all of them, as `hopper::hopper` links hopper's; a consumer that encodes under one tokenizer links its library,
-which brings load and pretok with it, beside encode, which brings validate, as `matisse::cl100k matisse::encode`. common
-holds the tests' and the probes' SHA-256 alone, which the tokenizer tests hold the pinned files and the class tables to,
-and the probes the corpora and their ids; its target `matisse_common` lives in the build tree only, with no alias, no
-install rule and no place in the umbrella.
-
-The top-level CMakeLists.txt is hopper's with the prefix changed: `project(matisse VERSION 1.0.0 LANGUAGES CXX)`, C++23
-required, `MATISSE_IS_TOP_LEVEL`, Release by default at the top level only, `MATISSE_SOURCE_DIR` for test data paths,
-`-Wall -Wunused -Wextra` with `MATISSE_WERROR` on at the top level, `MATISSE_BUILD_TESTS`, `USE_SYSTEM_GTEST`, and
-`MATISSE_BUILD_FUZZER` instrumenting the whole tree with the submodule included. munch is consumed exactly as hopper
-consumes it, as the submodule by default, added by external/CMakeLists.txt, or with `MATISSE_SYSTEM_MUNCH` an installed
-munch found by `find_package(munch REQUIRED)` at the top level so that every library sees its imported targets, the
-submodule's external/boost then added for the Boost module the encoder builds with; `MATISSE_INSTALL` requires the
-system munch, exports `matisse_targets` under `lib/cmake/matisse`, and cmake/matisse-config.cmake calls
-`find_dependency(munch)`. Every library whose headers name munch types links munch publicly, as hopper_json does: load
-(its definition holds `munch::verifier::Merge`), pretok (a pattern's sets are `munch::regex::utf8::Code_point_range`
-tables, its verifier a `munch::verifier::Verifier`) and validate (`munch::verifier::Verifier`); a tokenizer library
-reaches munch through pretok. The version starts at 0.1.0 with "pre-1.0" in the README, as hopper's did.
-
-CI copies hopper's workflow with munch's sanitizer matrix: format-check with clang-format-19, build and test with GCC
-13.3 (with coverage), with GCC in strict C++23, extensions off and warnings as errors, as munch's strict job builds, and
-with Clang 19, an ARM64 job where plain char is unsigned, the address and undefined-behavior sanitizers and, because the
-encoder spawns threads, munch's thread-sanitizer job and its `-fprofile-update=atomic` coverage flag, the fuzz job, the
-installed-consumer job, and CodeQL. The coverage job fetches the four public vocabulary files the tests pin, held to
-their digests, so the real-vocabulary tests of the loaders, the encoders and the CLI run in the measured build; Llama
-3's file is gated by its vendor, so its tests skip there and the two probes' tests, which read all four tokenizers, are
-not registered. The README has hopper's sections (Status, Features, a first example, Getting Started, Documentation,
-Testing, Versioning and Stability, License, Author), docs/ has three pages, design.md, limits.md and benchmarks.md, and
-CITATION.cff names the munch release with its version DOI under `references`, as hopper's does. Tests run with
-`ctest --test-dir build --timeout 300`, as munch's do.
-
-## **The API**
-
-Every declaration gets munch's full doc block when written. Aggregates are built with designated initializers, results
-are returned rather than written through out-parameters, and there are no raw pointers. Refusals follow munch. Content a
-function cannot take throws `std::invalid_argument` with a message naming the item and where it is, as `merge_tower()`
-names a merge and its rank, an id that names no token throws `std::out_of_range`, as `Mode_lexer` refuses an index that
-names no mode, and a file that cannot be read throws `std::runtime_error{"cannot read <path>"}`, as munch-audit's main
-does.
-
-### **Loaders, matisse::load**
-
-```cpp
-namespace matisse::load
-{
-using Token_id_t = std::uint32_t;
-
-enum class Merge_rule : std::uint8_t
-{
-    pairs,
-    ranks
-};
-
-struct Special_token
-{
-    std::string spelling{};
-
-    Token_id_t id{};
-};
-
-struct Definition
-{
-    Merge_rule merge_rule{};
-
-    bool whole_piece_lookup{};
-
-    std::vector<std::string> spellings{};
-
-    std::vector<munch::verifier::Merge> merges{};
-
-    std::vector<Special_token> specials{};
-};
-
-[[nodiscard]] Definition read_tokenizer_json(const std::filesystem::path& path, std::string_view published);
-
-[[nodiscard]] Definition read_gpt2(const std::filesystem::path& encoder, const std::filesystem::path& vocab);
-
-[[nodiscard]] Definition read_tiktoken(const std::filesystem::path& path, std::span<const Special_token> specials);
-
-} // namespace matisse::load
-```
-
-A `Definition` is held in raw bytes throughout, and it names no pattern: the pattern is the tokenizer library's
-description, which the stages take beside the definition. `spellings` gives the bytes of every ordinary token by id,
-dense from zero; GPT-2's byte-to-character map is undone by the loader, so `"Ġthe"` is read as `" the"`. `merges` is the
-merge table in rank order under `Merge_rule::pairs` and empty under `Merge_rule::ranks` (tiktoken's rank merge, which
-joins the adjacent pair whose concatenation has the least rank, leftmost first, and needs only the ranks). Settled:
-`Merge_rule::pairs` is Hugging Face's rule, one join at a time, the adjacent pair of least rank at its leftmost
-occurrence, which is its BPE model's `merge_all`. encoder.py's loop joins every occurrence of the least pair in one pass
-instead, and the two give the same tokens on every piece of a table in which no part of a pair is formed by a pair of a
-later rank, condition C, each pass then being a run of single joins; without C they can differ, (ab, a) then (a, b)
-giving ab ab on abab under the pass and aba b one join at a time, and a tokenizers model with that list loads. The
-agreement under C is not a new result: it is Lemma 1 of Berglund and van der Merwe's Formalizing BPE Tokenization (NCMA
-2023), the equivalence of its Definition 3, one merge at a time at the leftmost occurrence, and its Definition 4, the
-pass, which holds under the ordering condition that clause (b) of their revised Definition 5 (2024) states, which is C.
-GPT-2's table satisfies C. `read_gpt2()` checks it once at load and refuses a table outside it, naming the merge, its
-rank and its line; it also refuses a pair listed twice, which both vendors would read at its last rank. So on every file
-`read_gpt2()` accepts, the pair rule is encoder.py's by that proof. On a tokenizer.json it is Hugging Face's rule
-itself, Llama 3's list included, which violates C in 149,956 places. `whole_piece_lookup` says whether a piece that is
-itself an ordinary token is that one token, looked up before any merge: tiktoken looks every piece up, so
-`read_tiktoken()` sets it; encoder.py never does, so `read_gpt2()` leaves it false; Hugging Face's BPE model does when
-its `ignore_merges` is true, so `read_tokenizer_json()` sets it to the file's value, true for Llama 3's and false for
-GPT-2's tokenizer.json, where it is absent. It changes nothing on cl100k, o200k or GPT-2, where every multi-byte token
-is formed by the merge rule from its own bytes, GPT-2's `<|endoftext|>` aside, which its pattern never leaves as one
-piece; it is load-bearing on Llama 3, where 588 of 127,744 multi-byte tokens are not formed from their own bytes.
-`Token_id_t` is 32 bits because ids are what a model reads, and every vocabulary in scope fits.
-
-`read_tokenizer_json()` takes a Hugging Face tokenizer.json with a BPE model and the published spelling of the pattern
-it is read under, which the tokenizer library's description carries once the reader is written. It recognizes a
-pre-tokenizer only by that exact spelling: a ByteLevel pre-tokenizer with `use_regex` true and `add_prefix_space` false
-is GPT-2's, and a Split on cl100k's published pattern, isolated and not inverted, followed by ByteLevel without its
-regex is cl100k's. An empty spelling reads a null pre-tokenizer, for the lazy route. The `added_tokens` marked special
-become `specials`. It refuses, naming the member: a model other than BPE, a normalizer other than null, any other
-pre-tokenizer or pattern (the cl100k pattern as tiktoken shipped it before its possessive rewrite is a different
-pattern, Llama 3's, which the llama3 library's verifier covers), `byte_fallback`, a post-processor that adds tokens,
-ordinary ids that are not dense from zero, and an empty token. `read_gpt2()` takes encoder.json and vocab.bpe as
-encoder.py reads them, with no special tokens, since encoder.py treats `<|endoftext|>` as text. `read_tiktoken()` takes
-a rank file, one base64 token and its rank per line; the file names neither its pattern nor its special tokens, so the
-caller gives the vendor's special tokens, which the tokenizer library supplies from its own table, quoted from
-tiktoken's openai_public.py (for cl100k_base `<|endoftext|>` 100257, `<|fim_prefix|>` 100258, `<|fim_middle|>` 100259,
-`<|fim_suffix|>` 100260 and `<|endofprompt|>` 100276, to be held to the pinned source).
-
-The JSON files need a JSON reader; which one is open choice 5.
-
-#### **The SentencePiece loader and its tie-breaking**
-
-The table a SentencePiece BPE model gives munch is the self-split table, not the Hugging Face converter's. For every
-piece P, the loader encodes P's own characters with SentencePiece's loop; when the result is P alone, the last pair
-merged is P's split, and that split is P's one merge. The merges are ranked by score, highest first, products of equal
-score shortest first. On Mistral 7B v0.1 and Yi 6B every product encodes to itself, no product is left out, every part
-precedes its product, and munch accepts the table. The converter's table, every split of every piece, is refused by
-munch's constructions and must be, since most of its products have several splits and some parts come after their
-products.
-
-Proved (the self-split proposition): in SentencePiece's loop on any input, whenever a pair (L, R) is merged into a piece
-P, the loop run on P's spelling alone ends with P as one token and merges (L, R) last. Tokens only grow, so the span of
-P's characters is a union of tokens throughout the run, and each merge inside it was the loop's choice at its time, the
-highest-scored pair and leftmost on a tie, hence also the highest and leftmost among the span's own pairs; by induction
-the loop on the span alone makes the same merges in the same order, ties included, since merges outside the span keep
-the relative order of the symbols inside it. So SentencePiece only ever forms a piece by its self split, and dropping
-every other split changes nothing in its run.
-
-Proved, no ties: when no two products share a score, SentencePiece's rule on the self-split pairs is munch's encoder on
-the self-split table, since the highest-scored pair present is the lowest-ranked merge present, and SentencePiece's
-leftmost tie between occurrences of one merge is munch's leftmost occurrence. Yi's scores are all distinct, and its
-table agrees with the library on 525,864 inputs with no difference.
-
-Mistral's one tie group, a separate compilation result. Mistral scores U+2581 and its runs of 2 to 14 and 16 all at
--1e9, below every other piece, and no other piece holds two U+2581 in a row, so these merges act last and only inside
-runs of U+2581, where SentencePiece's position tie grows the leftmost token one character at a time: its self splits are
-(k - 1, 1) for the runs of 2 to 14 and (14, 2) for 16. No rank order of those self splits reproduces it, since every
-admissible order applies (1, 1) at both occurrences of four spaces and gets stuck at 2 and 2. A search over the
-admissible tables of the group, splits and ranks both, found one in 50,017 nodes, the runs joined being 1+1, 2+2, 4+4,
-4+1, 4+2, 2+1, 8+8, 8+1, 8+2, 8+3, 8+4, 8+5, 8+6 and 6+1: a split-and-rank compilation, not the self-split table (four
-spaces form as 2+2, eight as 4+4, sixteen as 8+8). What is proved of it is output equivalence on every run, by this
-argument: after the first six rules a run of length 8q + r consists of q tokens of length 8 followed by a tail of r for
-r up to 6 and of 6 then 1 for r = 7; (8, 8) then joins pairs into blocks of 16 from the left, an unmatched 8 absorbs a
-tail of 1 to 6 by the (8, k) rules, giving (14, 1) on the tail (6, 1), and the last rule (6, 1) joins a tail of 7 with
-no unmatched 8 before it; so a run of 16q + r ends as q sixteens then nothing, [r] for r from 1 to 14, or [14, 1] for r
-= 15, which is SentencePiece's own output, since it grows the leftmost token to 14, merges the next two into 2 and then
-(14, 2) into 16, a 16 being a barrier to every further merge, and ends with (14, 1) when one character remains.
-Validated on every run of 1 to 4,000 as well. The group acts in isolation only because of the two model facts stated
-first, which the loader checks when it compiles a group. With that group compiled and placed at the end of the table,
-Mistral agrees with the library on 526,292 inputs with no difference, and certificates decided on the compiled table
-hold for SentencePiece's segmentations by the equivalence.
-
-The general tie, refuted. Two equal-scored pieces ab and ba over {a, b} need opposite rule orders: on aba
-SentencePiece's position tie gives ab then a, on bab it gives ba then b, and a rank order that puts ab first turns bab
-into b then ab, while one that puts ba first turns aba into a then ba. So no rank order reproduces a position tie in
-general, and alternative splits cannot help, since two-symbol products have none; three equal-scored products ab, bc and
-ca likewise force a cyclic priority on abc, bca and cab, so all six orders fail. What the loader does: it runs the
-search over the group's admissible tables, which may change splits, bounded by the group's runs, and refuses a model
-whose group admits no output-equivalent table, naming the group. Mistral's group is the proved positive case, ab and ba
-the proved negative one. The realizability of a candidate table is decidable exactly: canonical adjacency holds for
-every deterministic merge encoder by interval projection, so two encoders are equal exactly when their canonical token
-sets and adjacency relations agree, every disagreement having a witness of at most 2L - 1, attained; the loader's search
-over admissible tables therefore ends in a complete finite test, at most |V|^2 pairs, and runs to 31 suffice for the
-whitespace group because L = 16. What remains is the cost of synthesis, not decidability. And conversion is not a
-prerequisite for certification: munch's lazy certification needs only the canonical tokens and the adjacency relation,
-which SentencePiece's own encoder supplies as a pair oracle, so a model whose tie group admits no table can still be
-certified through that relation once munch takes it directly, a planned munch addition.
-
-The class the loader may claim, proved: canonical adjacency holds for every projective merge process, every key rule
-among them (least priority among mergeable pairs, priority any function of the pair, ties by position), SentencePiece's
-score-first leftmost loop with score ties included, and the source paper's pass order for every dictionary; it fails for
-the count rule and for a parity tie, so "deterministic and memoryless" is not the class. Two encoders of the class are
-equal exactly when their canonical tokens and pairs agree, with a shortest witness of at most 2L - 1, so the loader's
-acceptance test is the pair test over the straddling candidates (Mistral: 184,745,026 candidate pairs, 18 seconds on 20
-threads, 0 pairs in one encoder only; Yi: 495,683,098, 58 seconds, 0 differences on the core, 516 skipped for a
-user-defined symbol across the join), and the compiled tables equal SentencePiece's core on every string by that
-theorem, no longer by sampling. Certification needs no table at all: the chain search with a pair oracle (encode a
-token, encode a pair) decides window certificates for every projective encoder, 15,436 decisions against brute force
-with 0 disagreements.
-
-What the loader does beyond the table, each outside munch's construction by the division: the dummy prefix (input
-normalization), byte fallback (a wrapper, since munch's character alphabet refuses boundaries inside a character by
-design; it contradicted no certificate on Mistral), and user-defined symbols, a longest-match pre-tokenizer composed
-with the BPE certificate by the closure calculus (on Yi they override certificates on 1,028,924 corpus occurrences,
-every one under a user-defined token). The Python reference implementation of the self-split table, the tie-group
-compilation and its search is the loader's model. SentencePiece's source also holds an unused-piece resegmentation
-stage, so the loader states its treatment of `UNUSED` pieces before it claims to cover a model, and the result statement
-reads: SentencePiece's deterministic BPE core forms every piece by a unique self split; with distinct product scores the
-score-ranked self-split table reproduces the core encoder, which is Yi's case; Mistral's tied separator group instead
-admits a split-and-rank compilation, proved equivalent by its 16-block structure; not every equal-score group admits
-one, ab and ba being a two-product counterexample; representability is decidable by finite enumeration of candidates and
-canonical-piece and pair equivalence, and efficient synthesis remains open.
-
-### **Pre-tokenizers, matisse::pretok**
-
-```cpp
-namespace matisse::pretok
-{
-struct Code_point_set
-{
-    char symbol{};
-
-    std::vector<munch::regex::utf8::Code_point_range> ranges{};
-};
-
-struct Alphabet
-{
-    std::string symbols{};
-
-    std::vector<Code_point_set> sets{};
-
-    char other{};
-
-    std::string unicode_version{};
-};
-
-struct Alternative
-{
-    munch::regex::Regex language{};
-
-    std::string gate{};
-};
-
-struct Pattern
-{
-    Alphabet alphabet{};
-
-    std::vector<Alternative> alternatives{};
-};
-
-using Class_t = unsigned char;
-
-class Class_table
-{
-public:
-    explicit Class_table(const Alphabet& alphabet);
-
-    [[nodiscard]] std::string symbols(std::string_view text) const;
-
-    [[nodiscard]] std::vector<Class_t> classes(std::string_view text) const;
-};
-
-[[nodiscard]] std::vector<Class_t> classes_of(const Alphabet& alphabet, std::string_view text);
-
-class Segmenter
-{
-public:
-    explicit Segmenter(const Pattern& pattern);
-
-    [[nodiscard]] std::vector<std::size_t> boundaries(std::string_view text) const;
-};
-
-[[nodiscard]] munch::verifier::Verifier split_verifier(const Pattern& pattern);
-
-[[nodiscard]] munch::core::Lexer factorization_lexer(const Pattern& pattern);
-
-} // namespace matisse::pretok
-```
-
-A `Pattern` is the contract of the class theorem of the report on pre-tokenizer certification named below, as data: an
-ordered gated pattern over a class alphabet, a list of regular languages of nonempty class strings, each with its gate,
-the class symbols that may follow its accepts, the end of the input always passing. Its discipline commits the longest
-prefix in an alternative's language whose next symbol passes that alternative's gate, for the first alternative that has
-one. The theorem gives the route, the verifier M, both certificates and the splice, for every such pattern that is
-total, and carries them to an engine that realizes it: no alternative reads left of where its match begins, each
-alternative matches the longest gate-passing prefix of its language and fails only where there is none, and the engine
-reads code points only through the classes. Those conditions are facts about the published regex and its engine, which
-no description can check; the fixtures, written by the engine, hold each description to them. The alphabet is the class
-partition: the class symbols ascending, the code point sets in the order a code point is classed by them, each with its
-symbol and its ranges, and the symbol of everything else. A literal's class is a set listed before the Unicode sets,
-holding the code points the literal matches, so a case-sensitive letter holds itself, cl100k's caseless `s` holds `S`,
-`s` and U+017F, and o200k's classes, which read Lu and Ll apart and put the long s with the lower s alone, are stated
-the same way. Settled: each class symbol is one ASCII byte, so a class string is a text over bytes and munch's verifier
-alphabet holds it. A class with an ASCII member is written by one of its members, a literal's class by the literal, the
-class of everything else by `!` and any other by its least member, so that in GPT-2's, cl100k's and Llama 3's alphabets
-a class string is a text of the pattern again; a class with none is written by the next of `#`, `$`, `%` and `&`, bytes
-of the class of everything else, in the order of the classes' least code points, which makes o200k's other letters,
-title case letters, modifier letters and marks `#`, `$`, `%` and `&`. Such a symbol is no member of its class, so an
-o200k class string is no text of its pattern, and the fixtures and the tests read one with each of those symbols
-replaced by its class's least code point, U+00AA, U+01C5, U+02B0 and U+0300. An alternative is its language over the
-class symbols, a value of munch's regex nodes built with munch's combinators, and its gate as a string of class symbols:
-every symbol for an ungated alternative, the white space for `(?!\S)`, and none for an alternative anchored at the end
-of the input. A spelling of the language over the class symbols in munch's pattern syntax, as a vendor's published
-alternative reads over the classes, is read into the same nodes by `munch::pattern::parse()`. The pattern holds all of
-it by value, the alphabet with its sets and ranges, the languages and the gates, so a copy of it, such as the one a
-report keeps, stands apart from the strings and tables it was built from. Everything the verifier construction reads,
-the alphabet, the languages and the gates, is in the description, so split_verifier() and factorization_lexer() take the
-pattern and nothing else.
-
-`classes_of()` decodes UTF-8 and maps every codepoint to its class under an alphabet, numbered from zero, read from the
-Unicode tables the tokenizer library pins (open choice 6). Malformed UTF-8 is refused with its byte offset, since the
-model is defined on codepoints and invalid text is outside it. `Class_table` holds the class symbol of every codepoint
-under an alphabet, built once from its sets: a table of the ASCII bytes and a table of blocks of 256 codepoints, each
-distinct block kept once and every block's index among them, so that a codepoint's symbol is two loads and an ASCII
-byte's one; GPT-2's, cl100k's and Llama 3's alphabets have 127, 128 and 128 distinct blocks, 37 KB a table, and o200k's
-135, 39 KB. Its `symbols()` is a text's class string and its `classes()` the classes, and `classes_of()` is `classes()`
-on a table built for the one text; the `Segmenter`, the encoder and `supply()` each build a table of their own. The
-tokenizer libraries' tests hold the table to the first set holding every one of the 1,112,064 scalar values. `Segmenter`
-is the runtime pre-tokenizer, the gated commitment order of the gate-sufficiency proposition read over codepoints. At
-each boundary it commits the longest gate-passing accept of the first alternative that has one, an accept passing when
-the class symbol after it is in its gate or the input ends there. A gate reads one class symbol, so each alternative is
-compiled as the DFA of its language followed by one symbol of its gate or a sentinel byte, 0xFF, which no class symbol
-is and which `boundaries()` appends to the class string; munch's longest-match `run()` of that DFA at a boundary, less
-the one symbol, is the alternative's longest gate-passing accept, the end of the input passing through the sentinel. The
-alternatives' DFAs are walked at once as one automaton, their product, whose state is each alternative's state and the
-first alternative that has accepted so far, every later alternative stopped, and which accepts where that alternative
-accepts; the first that has accepted when the walk stops is the first alternative with an accept anywhere, and from that
-alternative's first accept on the product accepts exactly where it does, every accept before it being shorter, so the
-product's longest accept is that alternative's longest, and one `run()` at each boundary commits it. The product has 36
-states for GPT-2's twelve alternatives and 33 for cl100k's eight. `boundaries()` returns the piece ends as byte offsets.
-`split_verifier()` is the verifier M built from the one-step relation Q of each pattern, minimized, and handed to munch
-as a `Verifier` table over the class symbols; the table munch's constructor makes of M has 21 states for GPT-2, 32 for
-cl100k, 46 for o200k and 33 for Llama 3, 22, 33, 47 and 34 counting the dead state. As it builds Q it decides that the
-pattern is total, every nonempty residual matched by some alternative, which is the verifier fixture's `covered`
-decision, and refuses a pattern that is not, naming a shortest residual no alternative matches; the `Segmenter` takes a
-total pattern and does not check it, so the check runs once, where the validator builds the verifier, and never in the
-segmenter's loop. `factorization_lexer()` compiles the gate-erased union U of the alternatives over the class symbols as
-a munch token set, on which `is_split_window()` decides the factorization certificate.
-
-The construction behind these, the gate-sufficiency proposition, the transfer of a cut from class strings to text and
-the splice theorem the encoder rests on are the results of a report on pre-tokenizer certification that is not yet
-published.
-
-### **Tokenizers, matisse::gpt2, matisse::cl100k, matisse::o200k and matisse::llama3, and matisse::lookup**
-
-```cpp
-namespace matisse::cl100k
-{
-[[nodiscard]] pretok::Pattern pattern();
-
-[[nodiscard]] std::vector<load::Special_token> specials();
-
-} // namespace matisse::cl100k
-
-namespace matisse::lookup
-{
-struct Tokenizer
-{
-    std::string_view name{};
-
-    pretok::Pattern pattern{};
-
-    std::vector<load::Special_token> specials{};
-};
-
-[[nodiscard]] std::vector<Tokenizer> tokenizers();
-
-[[nodiscard]] std::optional<Tokenizer> tokenizer(std::string_view name);
-
-} // namespace matisse::lookup
-```
-
-Each tokenizer library declares the same two functions in `matisse/<name>/tokenizer.hpp`, matisse::gpt2 as
-matisse::cl100k does. `pattern()` is the description of the published pattern over its classes, 14 for GPT-2, 16 for
-cl100k and Llama 3 and 30 for o200k: each alternative is built with munch's combinators, below a comment quoting the
-vendor's alternative it describes, from small documented pieces of the library's source, each one symbol of a set or
-literal the pattern names, such as `letter()` for `\p{L}` and `white_space()` for `\s`, or the contractions, so that
-what the alternatives share is written once; its sets are copied from constants of the library's source, among them the
-Unicode tables generated into the library's src/class_ranges.inc. `specials()` is the vendor's special tokens of a rank
-file read under the pattern, which `read_tiktoken()` takes. A file format of its own would be a reader binding in the
-library beside them; GPT-2's encoder.json and vocab.bpe are read by `read_gpt2()`, which needs nothing from the
-description. The library's tests hold the description to the classes, segmentation and known-answer fixtures, each
-alternative's combinators to its spelling over the class symbols in munch's pattern syntax, both compiled to the same
-minimal DFA state for state, the pinned vocabulary to its digest, and the vendor's special tokens to their quoted
-values.
-
-`tokenizers()` lists every tokenizer library by name, gpt2, cl100k, o200k and llama3, and `tokenizer()` finds one by its
-name, for the command line and any caller choosing a tokenizer at run time. The list is one function naming the
-libraries explicitly, the simplest form that needs no registry: a library registering itself when it is loaded would
-rest on the order in which static objects are initialized and on the linker keeping an object nothing names, and munch's
-style has neither. The lookup links every tokenizer library, so a consumer of one tokenizer links that library alone and
-calls it directly.
-
-#### **Adding a tokenizer**
-
-A tokenizer is added as a new directory under libs/, as o200k and Llama 3 are, and the stage libraries do not change.
+The top-level CMakeLists.txt is hopper's with the prefix changed, and munch is consumed exactly as hopper consumes it:
+the submodule by default, or with `MATISSE_SYSTEM_MUNCH` an installed munch found by `find_package(munch REQUIRED)` at
+the top level, so that every library sees its imported targets. Installing requires the installed munch, because an
+exported target can refer to munch only as an installed package. [usage.md](usage.md) lists the options.
+
+## **A tokenizer is data**
+
+Nothing in the stage libraries names a tokenizer. A tokenizer's pre-tokenizer is a `pretok::Pattern`, the contract of
+the class theorem of the report on pre-tokenizer certification written as data, and its files are read by a reader that
+knows the format and nothing of the vendor. Every construction therefore lives in one place, and a new tokenizer brings
+a description and its tests while the stage libraries stay as they are.
+
+A pattern is an ordered gated pattern over a class alphabet: a list of regular languages of nonempty class strings, each
+with its gate, the class symbols that may follow its accepts, the end of the input always passing. Its discipline
+commits the longest prefix in an alternative's language whose next symbol passes that alternative's gate, for the first
+alternative that has one. For every such pattern that is total the theorem gives the route, the verifier M, both
+certificates and the splice, and it carries them to an engine that realizes the pattern. The engine realizes it when no
+alternative reads left of where its match begins, each alternative matches the longest gate-passing prefix of its
+language and fails only where there is none, and the engine reads code points only through the classes. Those conditions
+are facts about the published regex and its engine, which no description can check, so the fixtures, written by the
+engine, hold each description to them.
+
+The alphabet is the class partition: the class symbols ascending, the code point sets in the order a code point is
+classed by them, each with its symbol and its ranges, and the symbol of everything else. A literal's class is a set
+listed before the Unicode sets, holding the code points the literal matches, so a case-sensitive letter holds itself and
+cl100k's caseless `s` holds `S`, `s` and U+017F. o200k's classes read Lu and Ll apart and put the long s with the lower
+s alone, and they are stated the same way. Each class symbol is one ASCII byte, so a class string is a text over bytes
+and munch's verifier alphabet holds it. A class with an ASCII member is written by one of its members: a literal's class
+by the literal, the class of everything else by `!` and any other by its least member. In GPT-2's, cl100k's and Llama
+3's alphabets a class string is therefore a text of the pattern again. A class with no ASCII member is written by the
+next of `#`, `$`, `%` and `&`, bytes of the class of everything else, in the order of the classes' least code points,
+which makes o200k's other letters, title case letters, modifier letters and marks `#`, `$`, `%` and `&`. Such a symbol
+is no member of its class, so an o200k class string is no text of its pattern, and the fixtures and the tests read one
+with each of those symbols replaced by its class's least code point, U+00AA, U+01C5, U+02B0 and U+0300.
+
+An alternative is its language over the class symbols, a value of munch's regex nodes built with munch's combinators,
+and its gate as a string of class symbols: every symbol for an ungated alternative, the white space for `(?!\S)`, and
+none for an alternative anchored at the end of the input. A spelling of the language in munch's pattern syntax, written
+as a vendor's published alternative reads over the classes, is read into the same nodes by `munch::pattern::parse()`.
+The pattern holds all of it by value, the alphabet with its sets and ranges, the languages and the gates, so a copy of
+it, such as the one a report keeps, stands apart from the strings and tables it was built from. Everything the verifier
+construction reads is in the description, so `split_verifier()` and `factorization_lexer()` take the pattern and nothing
+else.
+
+Each tokenizer library declares the same two functions in `matisse/<name>/tokenizer.hpp`. `pattern()` is the description
+of the published pattern over its classes, 14 for GPT-2, 16 for cl100k and Llama 3 and 30 for o200k. Each alternative is
+built with munch's combinators, below a comment quoting the vendor's alternative it describes, from small documented
+pieces of the library's source, each one symbol of a set or literal the pattern names, such as `letter()` for `\p{L}`
+and `white_space()` for `\s`, or the contractions, so that what the alternatives share is written once. Its sets are
+copied from constants of the library's source, among them the Unicode tables generated into the library's
+src/class_ranges.inc. `specials()` is the vendor's special tokens of a rank file read under the pattern, which
+`read_tiktoken()` takes, quoted from tiktoken's openai_public.py for the OpenAI encodings (for cl100k_base
+`<|endoftext|>` 100257, `<|fim_prefix|>` 100258, `<|fim_middle|>` 100259, `<|fim_suffix|>` 100260 and `<|endofprompt|>`
+100276) and from Meta's tokenizer.py for Llama 3's 256 special tokens. GPT-2's encoder.json and vocab.bpe are read by
+`read_gpt2()`, which needs nothing from the description, and a file format of its own would be a reader binding in the
+tokenizer's library beside `specials()`. The library's tests hold the description to the classes, segmentation and
+known-answer fixtures, each alternative's combinators to its spelling over the class symbols in munch's pattern syntax,
+both compiled to the same minimal DFA state for state, the pinned vocabulary to its digest, and the vendor's special
+tokens to their quoted values.
+
+`lookup::tokenizers()` lists every tokenizer library by name, gpt2, cl100k, o200k and llama3, and `lookup::tokenizer()`
+finds one by its name. The list is one function naming the libraries explicitly, the simplest form that needs no
+registry. A library registering itself when it is loaded would rest on the order in which static objects are initialized
+and on the linker keeping an object nothing names, and munch's style has neither. The lookup links every tokenizer
+library, so a consumer of one tokenizer links that library alone and calls it directly.
+
+### **Adding a tokenizer**
+
+A tokenizer is added as a new directory under libs/, as o200k and Llama 3 were, and the stage libraries do not change.
 libs/o200k/ holds its CMakeLists.txt, `matisse/o200k/tokenizer.hpp` declaring `pattern()` and `specials()`,
 src/tokenizer.cpp with the description, its alternatives built with munch's combinators below the vendor's alternatives
 they describe, src/class_ranges.inc generated by tools/unicode/generate_classes.py with the sets its pattern names, and
-its tests, which check the lines of its universe in the shared fixtures the fixture script writes and hold each
-alternative's combinators to its spelling in munch's pattern syntax. Outside the directory it is named in five places:
-its `add_subdirectory()` in libs/CMakeLists.txt, its entry in `tokenizers()` with the link in
-libs/lookup/CMakeLists.txt, its alias and umbrella link in the top-level CMakeLists.txt, its target and include
-directory in the install rules, and its name in `matisse-validate`'s usage text. Its pattern must meet the class
-theorem's conditions above, which the fixtures, written by the engine, hold it to; where the pattern needs a reader of
-its own, the binding goes into the library beside `specials()`.
-
-### **The validator, matisse::validate**
-
-```cpp
-namespace matisse::validate
-{
-enum class Inventory : std::uint8_t
-{
-    factorization,
-    policy
-};
-
-inline constexpr std::size_t default_width{5};
-
-struct Certified_window
-{
-    std::string window{};
-
-    std::size_t origin{};
-};
-
-struct Window_table
-{
-    Inventory inventory{};
-
-    std::size_t width{};
-
-    std::vector<Certified_window> windows{};
-
-    std::size_t right_context{};
-
-    std::vector<munch::verifier::Truncation> failing{};
-};
-
-struct Report
-{
-    const Window_table factorization{};
-
-    const Window_table policy{};
-
-    const munch::verifier::Boundary_gap gap{};
-
-    const pretok::Pattern pattern{};
-
-private:
-    friend Report validate(const pretok::Pattern& pattern, std::size_t width);
-
-    Report(Window_table factorization, Window_table policy, munch::verifier::Boundary_gap gap, pretok::Pattern pattern);
-};
-
-[[nodiscard]] Report validate(const pretok::Pattern& pattern, std::size_t width = default_width);
-
-struct Supply
-{
-    std::size_t bytes{};
-
-    Anchors anchors{};
-
-    double boundary_share{};
-
-    std::size_t longest_piece{};
-};
-
-[[nodiscard]] Supply supply(const Report& report, Inventory inventory, std::string_view input);
-
-struct Merge_window
-{
-    std::string window{};
-
-    std::size_t origin{};
-
-    std::optional<munch::verifier::Miscovering> refutation{};
-};
-
-[[nodiscard]] std::vector<Merge_window> validate_merges(
-        const load::Definition& definition, std::span<const munch::verifier::Certified_pair> candidates);
-
-[[nodiscard]] std::string render(const Report& report);
-
-[[nodiscard]] std::string json(const Report& report);
-
-[[nodiscard]] std::string supply_section(const Supply& factorization, const Supply& policy, std::string_view path);
-
-[[nodiscard]] std::string supply_json(const Supply& factorization, const Supply& policy, std::string_view path);
-
-} // namespace matisse::validate
-```
-
-`validate()` decides every class window of a pattern of width two to `width` (five by default) under both certificates:
-the policy certificate of `munch::verifier::miscovering()` on the split verifier, the factorization certificate by
-`is_split_window()` on the factorization lexer. A table holds its certified windows as munch-audit's report holds them,
-`Certified_window` duplicated rather than linked, widths ascending and each width's windows in the order the class
-symbols give, which is the windows fixture's order; an index over the class strings is the encoder's to build, since
-windows of several widths share no single numbering. The policy certificate is decided for every window at once, as the
-Python reference decides it and as munch's `modulo_cuts()` decides its cuts: one walk over the windows, each carrying
-its cloud, the states of the split verifier an occurrence can leave it in with where the piece holding the occurrence's
-last symbol begins and whether a piece ends after it, extended by one symbol from its prefix's cloud, the window
-certified at an origin when every entry places the piece there. That is `miscovering()`'s certificate, and it takes
-`validate()` to width four in 0.19 s for GPT-2 and 0.45 s for cl100k, and to width five in 1.1 s and 2.4 s, where a
-`miscovering()` search per window would take 3.8 s and 9.3 s, and 92 s and 213 s. The default is five for that reason
-and because GPT-2's policy anchors are complete at width five, every cut a wider window certifies being one of them, as
-the report on pre-tokenizer certification proves. o200k's 30 classes make each further symbol thirty times the windows:
-`validate()` takes o200k to width three in 1.5 s, to four in 16 s and to five in 245 s and 2.9 GB, and width four adds
-to three's factorization anchors 23 on munch's C++ sources and none on twitter.json or wiki-zh, the policy inventory
-gaining 20,484 there, from 97.18 to 99.28 per cent of the boundaries, so o200k's tests, the corpus probe and the bench,
-which time the factorization inventory, decide its report to width three, the width of its windows fixture. Each table
-carries the right context its inventory needs, decided on the split verifier (section "What matisse needs from munch
-3.0.0"), with the shortest truncation at every context that fails, asked of the windows that hold no shorter certified
-window whose origin lands on the same symbol, since every cut of one that does is a cut of the shorter one; to width
-four, for GPT-2 that is 87 and 540 windows of 18,357 and 32,218, for cl100k 112 and 678 of 30,576 and 58,580. The report
-carries `boundary_gap()` of the split verifier, which is unbounded for every pattern in scope, since a run of letters of
-any length is one piece, of lower case letters under o200k. It also holds a copy of the pattern it was decided of, and
-its constructor is private with `validate()` its friend, as munch's `Lexer` exists only over what its `Builder`
-compiled, and its members are `const`, so that a report holds its window tables beside the pattern they were decided of
-for as long as it lives, copied and moved whole and never assigned to, and the encoder and `supply()` read the pattern
-from the report. A definition without a pre-tokenizer goes to `validate_merges()` instead, which builds
-`munch::verifier::token_automaton()` once and decides each candidate window by `miscovering()` on it, the lazy
-certification. Its candidates are given by the caller; the command line draws them from an input, every byte and the
-most frequent byte pairs and triples, since all byte windows of width three are too many to decide at full scale.
-
-`supply()` measures one inventory's anchors on an input, the interior positions where an occurrence of a certified
-window places its origin, counted at the byte offsets of their code points. It classes the input with the alphabet of
-the pattern the report holds and segments it with that pattern's segmenter for its pre-token boundaries. `Anchors` and
-`Gaps` are munch-audit's, duplicated rather than linked (count, per kibibyte, median, ninetieth and ninety-ninth
-percentile, longest): the gaps are the distances between consecutive anchors, the runs before the first and after the
-last left out, and a percentile is the order statistic at floor(q n) of the n gaps ascending. The report on
-pre-tokenizer certification measures its gaps otherwise, the two ends of the corpus counted as cuts, the percentiles at
-round(q (n - 1)) and the density per 1,000 bytes, so matisse's gap figures and density are not that report's and are not
-compared with its. `Supply` adds two figures beside them: the share of the serial pre-token boundaries that are anchors,
-and the longest piece, which is the floor no cut rule can go below. `validate_merges()` returns each candidate with its
-refutation or none. `render()` and `json()` follow munch-audit's report renderings: the text is rows of a label and a
-value, the verdict first, then each inventory's windows, counted by width with six examples, and its right context with
-the shortest truncation of every context that fails, then the boundary gap; the JSON is one object with a member per
-figure, class strings holding each byte as the code point of its value. `supply_section()` and `supply_json()` render
-the supply of both inventories on one input as munch-audit's renderings of its supply do, in supply.hpp beside the
-report, as munch-audit keeps its supply in a unit of its own.
-
-`matisse-validate` in tools/validate is the command line, modelled on munch-audit's (a `matisse_validate_cli` target
-with that output name): `matisse-validate FILE [--tiktoken PATTERN] [--windows N] [--input FILE] [--json]`, with
-`--tiktoken` naming the pattern of a rank file since the file names none, a tokenizer.json read under the first
-tokenizer of the lookup whose published spelling it holds, the report always, the supply section only with `--input`, so
-that runs without it are unchanged by it, as munch-audit's `--input` is. The pattern names are the lookup's, and the
-command line finds the pattern and the vendor's special tokens through `lookup::tokenizer()`. Until
-`read_tokenizer_json()` is written a FILE without `--tiktoken` is a command-line error, and GPT-2 reaches the command
-line only as a rank file under `--tiktoken gpt2`, since FILE is one file and encoder.json and vocab.bpe are two.
-`--windows` takes 2 to 5. The text heads the report with the file and the tokenizer it was read as, with its token
-counts, and `--json` writes one document holding the path, the tokenizer, the refusal or null, the token counts, the
-report and the supply. The exit status is munch-audit's: 0 when the definition was read and reported, 1 when the loader
-refused it, the refusal written in place of the report, and 2 on a command-line error, with the usage, or on a file or
-an input the command cannot read, an input that is not UTF-8 among them. Its tests run it on a rank file of the 256
-single bytes, which every pattern takes, and a short sample beside them, and hold its text at the default width and its
-JSON at width two to fixtures it wrote, each headed by the line that says how, as munch-audit's tests hold its own; the
-anchors and the share of the supply on the sample agree with the Python reference's measurement of the same text, and
-the gap figures and the density are munch-audit's, as `supply()` defines them.
-
-### **The encoder, matisse::encode**
-
-```cpp
-namespace matisse::encode
-{
-class Join_table
-{
-public:
-    explicit Join_table(const Joins_t& joins);
-
-    [[nodiscard]] static constexpr std::uint64_t key_of(load::Token_id_t left, load::Token_id_t right) noexcept;
-
-    [[nodiscard]] std::optional<Join> find(load::Token_id_t left, load::Token_id_t right) const noexcept;
-};
-
-class Spelling_table
-{
-public:
-    explicit Spelling_table(std::span<const std::string> spellings);
-
-    [[nodiscard]] std::optional<load::Token_id_t> find(std::string_view spelling) const noexcept;
-};
-
-class Token_trie
-{
-public:
-    Token_trie(std::span<const std::string> spellings, std::span<const load::Token_id_t> ids);
-
-    [[nodiscard]] Match longest(std::string_view text) const noexcept;
-
-    [[nodiscard]] std::optional<Match> shorter(load::Token_id_t id) const noexcept;
-};
-
-class Backtracker
-{
-public:
-    [[nodiscard]] static Backtracker of(
-            std::span<const std::string> spellings, std::span<const load::Token_id_t, 256> byte_ids,
-            const Join_table& joins);
-
-    [[nodiscard]] std::optional<std::vector<load::Token_id_t>> merged(std::string_view piece) const;
-};
-
-class Merger
-{
-public:
-    explicit Merger(const load::Definition& definition);
-
-    [[nodiscard]] std::optional<load::Token_id_t> whole_piece(std::string_view piece) const;
-
-    [[nodiscard]] std::vector<load::Token_id_t> merged(std::string_view piece) const;
-};
-
-inline constexpr std::size_t piece_cache_capacity{16384};
-
-inline constexpr std::size_t longest_cached_piece{255};
-
-class Encoder;
-
-class Piece_cache
-{
-public:
-    Piece_cache(const Encoder& encoder, std::size_t capacity);
-
-    Piece_cache(const Encoder&& encoder, std::size_t capacity) = delete;
-
-    [[nodiscard]] bool serves(const Encoder& encoder) const noexcept;
-
-    [[nodiscard]] std::optional<std::span<const load::Token_id_t>> find(std::string_view piece) const;
-
-    void store(std::string_view piece, std::vector<load::Token_id_t> ids);
-};
-
-class Window_index
-{
-public:
-    explicit Window_index(const validate::Window_table& table);
-
-    [[nodiscard]] std::size_t width() const noexcept;
-
-    [[nodiscard]] std::optional<std::size_t> first_anchor(
-            const pretok::Class_table& class_table, std::string_view stretch, std::size_t from) const;
-};
-
-class Verifier_table
-{
-public:
-    using State_t = std::uint32_t;
-
-    static constexpr State_t no_state{std::numeric_limits<State_t>::max()};
-
-    Verifier_table(const munch::verifier::Verifier& verifier, const pretok::Alphabet& alphabet);
-
-    [[nodiscard]] State_t start() const noexcept;
-
-    [[nodiscard]] State_t step(State_t state, pretok::Class_t symbol_class, bool boundary_after) const noexcept;
-
-    [[nodiscard]] bool accepts(State_t state) const noexcept;
-
-    [[nodiscard]] bool is_dead_end(State_t state) const noexcept;
-};
-
-class Encoder
-{
-public:
-    Encoder(load::Definition definition, const validate::Report& report, validate::Inventory inventory,
-            std::span<const std::string> allowed);
-
-    [[nodiscard]] std::vector<load::Token_id_t> encode(std::string_view text) const;
-
-    [[nodiscard]] std::vector<load::Token_id_t> encode(std::string_view text, Piece_cache& cache) const;
-
-    [[nodiscard]] std::vector<std::size_t> chunk_boundaries(std::string_view text, std::size_t chunks) const;
-
-    [[nodiscard]] std::vector<load::Token_id_t> encode_parallel(std::string_view text, std::size_t chunks) const;
-
-    [[nodiscard]] std::string decode(std::span<const load::Token_id_t> ids) const;
-
-    [[nodiscard]] const load::Definition& definition() const noexcept;
-
-    [[nodiscard]] const Merger& merger() const noexcept;
-
-    [[nodiscard]] std::span<const load::Special_token> allowed() const noexcept;
-
-    [[nodiscard]] const pretok::Class_table& class_table() const noexcept;
-
-    [[nodiscard]] const Verifier_table& verifier() const noexcept;
-
-    [[nodiscard]] std::span<const load::Token_id_t> spellings_sorted() const noexcept;
-
-    [[nodiscard]] std::span<const load::Token_id_t> unformed_sorted() const noexcept;
-};
-
-class Live_runs
-{
-public:
-    struct Marking
-    {
-        std::vector<std::size_t> ends{};
-
-        bool dead_end{};
-    };
-
-    explicit Live_runs(const Verifier_table& table);
-
-    void step(pretok::Class_t symbol_class, std::size_t end);
-
-    [[nodiscard]] std::optional<std::size_t> next_closed();
-
-    [[nodiscard]] std::vector<Marking> markings(std::size_t from) const;
-
-    [[nodiscard]] std::vector<std::size_t> accepted() const;
-
-    void reset();
-};
-
-class Stream_encoder
-{
-public:
-    explicit Stream_encoder(const Encoder& encoder);
-
-    explicit Stream_encoder(const Encoder&& encoder) = delete;
-
-    [[nodiscard]] std::vector<load::Token_id_t> push(std::string_view bytes);
-
-    [[nodiscard]] std::vector<load::Token_id_t> finish();
-};
-
-} // namespace matisse::encode
-```
-
-The names follow `core::Lexer`'s `tokenize_all()`, `chunk_boundaries()` and `tokenize_all_parallel()`. The constructor
-takes the report `validate()` decided of the pattern, as `supply()` takes it, and keeps the inventory's window table and
-right context, so that a pattern is validated once however many encoders are built, a fuzz harness's and the
-thread-sanitizer job's among them; it segments by the pattern the report holds, so a definition without a pre-tokenizer
-has no encoder in the first version, and it refuses an `allowed` spelling that is not one of the definition's special
-tokens. `encode()` is the sequential encoding: the text is split at every occurrence of an allowed special token, the
-earliest first and the longest of those that begin at one byte, which emits its id, and each stretch between them is
-segmented by the `Segmenter` as a complete input, every piece then looked up whole where the definition's whole-piece
-lookup says so and otherwise merged alone by its merge rule, the pair rule or tiktoken's rank merge. Special tokens not
-allowed are ordinary text, which is tiktoken's `encode()` with that `allowed_special` and an empty `disallowed_special`,
-encoder.py's behavior when none is allowed; tiktoken leaves the choice between allowed spellings that begin at one byte
-to the order of its table, and no allowed spelling begins another on any definition in scope. `decode()` spells each
-ordinary id's bytes and each special id's spelling as raw bytes, not checked to be UTF-8, since a run of ids cut inside
-a code point spells bytes that are not, and refuses an id that is neither with `std::out_of_range`, naming it and its
-index. `chunk_boundaries()` aims for `chunks` pieces of equal size, as `core::Lexer`'s does: each interior boundary is
-the first cut at or after the later of its equal-division target and one past the previous boundary, and a target with
-no cut after it ends the walk. A cut is an anchor, a position `t + o` for an occurrence at `t` inside one stretch of a
-window the table certifies at origin `o`, at least the width less one codepoints after the previous boundary, so that
-the occurrence certifying it begins in the chunk the cut ends, as the splice needs, and as far after the stretch's
-start, as the Python reference spaces its first cut from the text's start; or it is where an allowed special token
-begins or ends, a cut of its own. The spacing is the Python reference's, and it leaves out an anchor that stands closer
-than that to the previous boundary even when its occurrence begins after it. `Window_index` holds the table's windows by
-their class strings and finds the least anchor of a stretch at or after a byte, classing the text in blocks of 256 bytes
-from there, so that a walk reads the text near its target and no more. `encode_parallel()` finds the allowed special
-tokens once and gives each chunk to a worker, one `std::jthread` per chunk beyond the last, which runs on the calling
-thread, as `tokenize_all_parallel()` does (open choice 4). A worker segments its chunk's stretches as `encode()` does,
-the last one followed by `right_context` further codepoints of the real text, read as a complete input there unless a
-special token or the text's end comes first, keeps the pieces that end at or before its cut, and merges them with a
-piece cache of its own. The ids of the chunks, concatenated, are the result, and an exception a worker throws is
-rethrown on the calling thread once every worker has joined.
-
-`Merger` holds a definition's whole-piece lookup and its merge, built once: the id of every spelling and of every byte,
-and the rank and product of every pair of parts the merge may join, keyed by the ids of the parts: under the rank rule
-every split of a spelling into two spellings, joining at the rank of the spelling, which is its id, 233,378 pairs on
-cl100k's file, and under the pair rule every pair of the merge table, a pair listed twice taking its last rank as both
-vendors read it. It refuses a definition in which a byte is not a token and, under the pair rule, a merge whose part or
-product is not one, naming the byte, or the merge, its rank and the spelling. The id of every spelling is a
-`Spelling_table`, a flat table with open addressing over the spellings' bytes kept once in a string, each slot holding a
-spelling's hash, where its bytes stand, their length and its id, the least power of two of slots at least twice the
-spellings; a lookup hashes the piece by `std::hash<std::string_view>` once and compares bytes only in a slot of the same
-hash and length, and the tests hold it to a map keeping the first id of each spelling on 20,000 seeded random spellings.
-The whole-piece lookup reads it, which makes `encode()` on every corpus 1.08 to 1.28 times faster under cl100k. The
-merge keeps the parts of a piece as a doubly linked list over its bytes, as Hugging Face's `Word` keeps its symbols, and
-the candidate joins in a binary heap ordered by rank and then by where the left part starts, each entry recording that
-start and the ends of both parts; an entry popped whose parts no longer stand as recorded is discarded. The merge looks
-every pair up by its parts' ids, and the rule enters only in that table: under `Merge_rule::ranks` a pair is in it
-exactly when the parts' concatenation is a spelling, at that spelling's rank, and under `Merge_rule::pairs` exactly when
-the merge table lists it. That table is a `Join_table`, a flat table with open addressing built from the map of the
-joins: the least power of two of slots at least twice the joins, 524,288 on cl100k's file, a key's walk starting at its
-hash by `hash_combine` from Boost's container_hash, the header-only module munch fetches, and running to the next slot
-until it meets the key or a free one. Every key is placed at the first free slot of its walk; the slots that placement
-passed over were full then and no slot is ever emptied, so a lookup meets every key the map holds before a free slot and
-stops at a free slot for any other. The tests hold the table to its map on every pair of 300 ids, a third of the pairs
-drawn into the map. It is exact on every table and every piece. A part's end only grows and a part joined into the one
-before it never stands again, so an entry once stale stays stale, and every adjacent pair the rule can join has a live
-entry, since the initial pairs are pushed and each join pushes the two pairs it makes. So each join is of the pair of
-least rank present, the leftmost on a tie: under the rank rule that is tiktoken's `_byte_pair_merge`, a join that makes
-a pair of lower rank than its own, such as `.:.:` on Llama 3's rank file, needing no case of its own, and under the pair
-rule it is Hugging Face's `merge_all`. A piece of n bytes takes at most n - 1 joins and fewer than 3n entries, each
-entry's and each node's offsets held in 32 bits, so the heap merges a piece shorter than 2^32 bytes and
-`Merger::merged()` refuses a longer one. A piece of at most 128 bytes is merged instead by a scan of its parts, held in
-an array on the stack, each part with the join it makes with the next: the scan finds the least rank from the left, so
-the leftmost on a tie, makes that join and looks up the joined part's pairs with its two neighbours, which is the join
-the heap makes and the two pairs it pushes, so both make the same joins in the same order. With the scan and the heap
-alone, the encoding of Chinese with no cache gains as the threshold rises to 128 and no further. The heap and the scan
-read the first pairs, every part a byte to begin with, from a table of the joins of all 65,536 pairs of bytes, filled
-from the join table at construction, which makes `encode()` on Chinese 1.20 and 1.16 times faster under GPT-2 and cl100k
-with the scan and the heap alone. The tests hold the merge to the plain pair loop and to tiktoken's scan, written out in
-the tests, on every multi-byte token of GPT-2's, cl100k's, o200k's and Llama 3's files (50,001, 100,000, 199,742 and
-127,744 tokens) and on 20,000 seeded random pieces of each, one in 32 of them cut at 100 to 200 bytes, either side of
-the scan's threshold, GPT-2's to encoder.py's pass as well, and on 3,000 random tables over three symbols, every tenth
-with one piece of 100 to 160 symbols beside its short ones, which make ties, overlaps, joins that make a pair of lower
-rank, and tables on which the pass and one join at a time differ. The merge forms every multi-byte token from its own
-bytes on cl100k and o200k, all but `<|endoftext|>` on GPT-2, and all but 588 on Llama 3, which Llama 3's whole-piece
-lookup gives whole.
+its tests, which check the lines of its universe in the shared fixtures and hold each alternative's combinators to its
+spelling in munch's pattern syntax. Outside the directory it is named in five places: its `add_subdirectory()` in
+libs/CMakeLists.txt, its entry in `tokenizers()` with the link in libs/lookup/CMakeLists.txt, its alias and umbrella
+link in the top-level CMakeLists.txt, its target and include directory in the install rules, and its name in
+`matisse-validate`'s usage text. Its pattern must meet the conditions of the class theorem above, which the fixtures
+hold it to. `split_verifier()` refuses a pattern that is not total and names a shortest residual no alternative matches,
+which is where a wrong description shows first.
+
+## **Classes, not code points**
+
+A pattern reads a code point only through the sets and literals it names, so two code points of one class are
+interchangeable: the pattern segments a text exactly as it segments the text with every code point replaced by another
+member of its class. matisse therefore reads a text as its class string, and every automaton runs over a few class
+symbols instead of the code points.
+
+`pretok::Class_table` holds the class symbol of every code point under an alphabet, built once from its sets: a table of
+the ASCII bytes, and a table of blocks of 256 code points with each distinct block kept once and every block's index
+among them. A code point's symbol is then two loads and an ASCII byte's one. GPT-2's, cl100k's and Llama 3's alphabets
+have 127, 128 and 128 distinct blocks, 37 KB a table, and o200k's 135, 39 KB. `symbols()` returns a text's class string
+and `classes()` its classes, and `classes_of()` is `classes()` on a table built for the one text; the `Segmenter`, the
+encoder and `supply()` each build a table of their own. Malformed UTF-8 is refused with its byte offset, since the model
+is defined on code points and invalid text is outside it. The UTF-8 decoder is a small one of pretok's own, duplicated
+rather than shared. The tokenizer libraries' tests hold the table to the first set holding each of the 1,112,064 scalar
+values.
+
+The Unicode tables are generated, not ported by hand. tools/unicode/generate_classes.py is munch's generator of the same
+name, duplicated and changed to emit the sets named on its command line, each a general category or a property of
+PropList.txt under the name of its table, with the source digests and the `--version` guard munch's has. It writes into
+each tokenizer library's src/class_ranges.inc, which is checked in, so the build never touches the network. GPT-2's,
+cl100k's and Llama 3's tables are the same file generated three times from L, N and White_Space, duplicated rather than
+shared, so that a tokenizer whose pattern names other sets brings its own, as o200k brings Lu, Ll, Lt, Lm, Lo, M, N and
+White_Space. This follows munch-audit's precedent for logos, whose reader keeps tables of the Unicode version logos is
+locked to rather than the library's. munch's own tables are of Unicode 17.0.0 and have no L or N, and matisse does not
+use them.
+
+The tables are pinned to Unicode 15.0.0, the version of the Python reference the fixtures are written by, so that the
+fixtures replay. The classes, and therefore the verifiers, the certified windows and the right context, do not depend on
+the version. Only the map from code points to classes does, and with it the ids of a text holding a code point whose
+class moved between versions. tiktoken's and Hugging Face's engines carry versions of their own, and the vendor
+cross-check below shows no difference on any corpus, so the pin stays. Moving it changes the ids of some texts, so it is
+a major release, as the README's Versioning and Stability section says, with the fixtures regenerated under the new
+version.
+
+## **One automaton segments a text**
+
+`pretok::Segmenter` is the runtime pre-tokenizer, the gated commitment order of the gate-sufficiency proposition read
+over code points. At each boundary it commits the longest gate-passing accept of the first alternative that has one, an
+accept passing when the class symbol after it is in its gate or the input ends there. A gate reads one class symbol, so
+each alternative is compiled by munch as the DFA of its language followed by one symbol of its gate or a sentinel byte,
+0xFF, which no class symbol is and which `boundaries()` appends to the class string. munch's longest-match `run()` of
+that DFA at a boundary, less the one symbol, is the alternative's longest gate-passing accept, the end of the input
+passing through the sentinel.
+
+The alternatives' DFAs are walked at once as one automaton, their product, so that one `run()` at each boundary commits
+the piece. A state of the product is each alternative's state and the first alternative that has accepted so far, every
+later alternative stopped, and the product accepts where that alternative accepts. When the walk stops, the first
+alternative that has accepted is the first alternative with an accept anywhere. From that alternative's first accept on,
+the product accepts exactly where it does, and every accept before it is shorter, so the product's longest accept is
+that alternative's longest. The product has 36 states for GPT-2's twelve alternatives and 33 for cl100k's eight.
+`boundaries()` returns the piece ends as byte offsets.
+
+The segmenter takes a total pattern and does not check it. Totality is decided once, where the validator builds the
+verifier, and never in the segmenter's loop.
+
+## **The verifier and the two certificates**
+
+`pretok::split_verifier()` builds the verifier M of a pattern from the one-step relation Q of its alternatives,
+minimizes it and hands it to munch as a `Verifier` table over the class symbols, each marked with whether a piece ends
+after it. M accepts a marked class string exactly when its marking is the pattern's segmentation, so the marking the
+`Segmenter` produces is the one M accepts. The table munch's constructor makes of M has 21 states for GPT-2, 32 for
+cl100k, 46 for o200k and 33 for Llama 3, or 22, 33, 47 and 34 counting the dead state. As it builds Q, the construction
+decides that the pattern is total, every nonempty residual matched by some alternative, which is the verifier fixture's
+`covered` decision. It refuses a pattern that is not total, naming a shortest residual no alternative matches.
+
+`pretok::factorization_lexer()` compiles the gate-erased union U of the alternatives over the class symbols as a munch
+token set, each alternative's language one token ranked in the order of the pattern. Every piece the pattern commits is
+a word of U, a gate only withholding accepts, so `is_split_window()` on this lexer decides the factorization
+certificate.
+
+The two certificates give the two inventories a caller chooses between. The factorization inventory's cut holds for
+every complete factorization into the gate-erased languages, whatever the engine does inside its matches, and it needs
+one code point of right context. The policy inventory's cut holds for the pattern's own segmentation, decided on M, and
+so rests on Q, which is validated against the reference and not machine-checked; it needs two code points of right
+context and lands on more boundaries. At the default width of five, on the three corpora of the test strategy under
+GPT-2 and cl100k, the factorization anchors reach 57.30 to 92.88 percent of the pre-token boundaries and the policy
+anchors 96.09 to 100.00, and under both the longest gap between anchors is within 24 bytes of the longest piece. The
+encoder takes the inventory as an argument and has no default of its own. The recommended choice is the factorization
+inventory, which rests on less, with the policy inventory taken by choice where cuts are scarce, and the probes and the
+bench time the factorization inventory.
+
+The construction of M needs the product, the complement and the concatenation of DFAs, which munch does not offer
+publicly. By the division test a DFA kit is general and belongs in munch, and by the rule of duplicating rather than
+sharing unless really needed it stays with the one construction that uses it. It lives in pretok, as automata.hpp and
+its source, because nothing in munch calls it and a munch addition would wait for a munch release. The header is
+installed, since munch keeps no private headers under src, but it is not part of the stable surface: its file comment
+says so, the README's Versioning and Stability section names it outside the surface, and the kit moves if a second user
+appears.
+
+## **A pattern is validated once**
+
+`validate::validate()` decides every class window of a pattern of width two to `width`, five by default, under both
+certificates. The policy certificate is that of `munch::verifier::miscovering()` on the split verifier, and the
+factorization certificate is decided by `is_split_window()` on the factorization lexer. A table holds its certified
+windows as munch-audit's report holds them, `Certified_window` duplicated rather than linked, widths ascending and each
+width's windows in the order the class symbols give, which is the windows fixture's order. An index over the class
+strings is the encoder's to build, since windows of several widths share no single numbering.
+
+The policy certificate is decided for every window at once, as the Python reference decides it and as munch's
+`modulo_cuts()` decides its cuts. One walk over the windows carries each window's cloud: the states of the split
+verifier an occurrence can leave it in, each with where the piece holding the occurrence's last symbol begins and
+whether a piece ends after it. A window's cloud extends its prefix's by one symbol, and the window is certified at an
+origin when every entry places the piece there. That is `miscovering()`'s certificate, and the walk takes `validate()`
+to width four in 0.19 s for GPT-2 and 0.45 s for cl100k, and to width five in 1.1 s and 2.4 s, where a `miscovering()`
+search per window would take 3.8 s and 9.3 s, and 92 s and 213 s.
+
+The default width is five for that reason, and because GPT-2's policy anchors are complete at width five, every cut a
+wider window certifies being one of them, as the report on pre-tokenizer certification proves. o200k's 30 classes make
+each further symbol thirty times the windows. `validate()` takes o200k to width three in 1.5 s, to four in 16 s and to
+five in 245 s and 2.9 GB. Width four adds to width three's factorization anchors 23 on munch's C++ sources and none on
+twitter.json or wiki-zh, while the policy inventory gains 20,484 there, from 97.18 to 99.28 percent of the boundaries.
+o200k's tests, the corpus probe and the bench, which time the factorization inventory, therefore decide its report to
+width three, the width of its windows fixture.
+
+Each table carries the right context its inventory needs, decided by munch's `right_context()` on the split verifier,
+with the shortest truncation at every context that fails. It is asked of the windows that hold no shorter certified
+window whose origin lands on the same symbol, since every cut of one that does is a cut of the shorter one. To width
+four, for GPT-2 that is 87 and 540 windows of 18,357 and 32,218, and for cl100k 112 and 678 of 30,576 and 58,580. The
+report carries munch's `boundary_gap()` of the split verifier, which is unbounded for every pattern in scope, since a
+run of letters of any length is one piece, of lower case letters under o200k.
+
+A report also holds a copy of the pattern it was decided of. Its constructor is private with `validate()` its friend, as
+munch's `Lexer` exists only over what its `Builder` compiled, and its members are `const`. A report therefore holds its
+window tables beside the pattern they were decided of for as long as it lives, it is copied and moved whole and never
+assigned to, and the encoder and `supply()` read the pattern from the report. The encoder takes the report rather than
+deciding it, so a pattern is validated once however many encoders are built, a fuzz harness's and the thread-sanitizer
+job's among them.
+
+`validate::supply()` measures one inventory's anchors on an input: the interior positions where an occurrence of a
+certified window places its origin, counted at the byte offsets of their code points. It classes the input with the
+alphabet of the pattern the report holds and segments it with that pattern's segmenter for its pre-token boundaries.
+`Anchors` and `Gaps` are munch-audit's, duplicated rather than linked (count, per kibibyte, median, ninetieth and
+ninety-ninth percentile, longest). The gaps are the distances between consecutive anchors, the runs before the first and
+after the last left out, and a percentile is the order statistic at floor(q n) of the n gaps ascending. The report on
+pre-tokenizer certification measures its gaps otherwise, with the two ends of the corpus counted as cuts, the
+percentiles at round(q (n - 1)) and the density per 1,000 bytes, so matisse's gap figures and density are not that
+report's and are not compared with it. `Supply` adds two figures beside them: the share of the serial pre-token
+boundaries that are anchors, and the longest piece, which is the floor no cut rule can go below.
+
+`render()` and `json()` follow munch-audit's report renderings. The text is rows of a label and a value, the verdict
+first, then each inventory's windows, counted by width with six examples, and its right context with the shortest
+truncation of every context that fails, then the boundary gap. The JSON is one object with a member per figure, class
+strings holding each byte as the code point of its value. `supply_section()` and `supply_json()` render the supply of
+both inventories on one input as munch-audit's renderings of its supply do, in supply.hpp beside the report, as
+munch-audit keeps its supply in a unit of its own. `matisse-validate` in tools/validate is the command line, modeled on
+munch-audit's, with munch-audit's exit statuses and with the supply section only under `--input`, so that runs without
+it are unchanged by it, as munch-audit's `--input` is. [usage.md](usage.md) gives its options.
+
+## **Two merge rules, each a vendor's**
+
+A definition merges each piece by one of two rules. `Merge_rule::ranks` is tiktoken's rank merge, which joins the
+adjacent pair whose concatenation has the least rank, leftmost first, and needs only the ranks, so a definition
+`read_tiktoken()` reads has an empty merge table. `Merge_rule::pairs` is Hugging Face's rule, one join at a time, the
+adjacent pair of least rank at its leftmost occurrence, which is its BPE model's `merge_all`.
+
+GPT-2's encoder.py joins every occurrence of the least pair in one pass instead. Call C the condition that no part of a
+pair is formed by a pair of a later rank. On every piece of a table satisfying C the pass and one join at a time give
+the same tokens, each pass then being a run of single joins. Without C they can differ: under (ab, a) then (a, b), abab
+gives ab ab under the pass and aba b one join at a time, and a tokenizers model with that list loads. The agreement
+under C is not a new result. It is Lemma 1 of Berglund and van der Merwe's Formalizing BPE Tokenization (NCMA 2023), the
+equivalence of its Definition 3, one merge at a time at the leftmost occurrence, and its Definition 4, the pass, which
+holds under the ordering condition that clause (b) of their revised Definition 5 (2024) states, which is C. GPT-2's
+table satisfies C. `read_gpt2()` checks it once at load and refuses a table outside it, naming the merge, its rank and
+its line, so on every file `read_gpt2()` accepts the pair rule is encoder.py's. It also refuses a pair listed twice,
+which both vendors would read at its last rank.
+
+`whole_piece_lookup` says whether a piece that is itself an ordinary token is that one token, looked up before any
+merge. tiktoken looks every piece up, so `read_tiktoken()` sets it, and encoder.py never does, so `read_gpt2()` leaves
+it false. It changes nothing on cl100k, o200k or GPT-2, where every multi-byte token is formed by the merge rule from
+its own bytes, GPT-2's `<|endoftext|>` aside, which its pattern never leaves as one piece. It is load-bearing on Llama
+3, where 588 of 127,744 multi-byte tokens are not formed from their own bytes.
+
+A definition is held in raw bytes throughout, and it names no pattern, since the pattern is the tokenizer library's
+description, which the stages take beside the definition. GPT-2's byte-to-character map is undone by the loader, so
+`"Ġthe"` is read as `" the"`. `Token_id_t` is 32 bits because ids are what a model reads, and every vocabulary in scope
+fits.
+
+## **One merge, three routes, the same ids**
+
+`encode::Merger` holds a definition's whole-piece lookup and its merge, built once when the encoder is built. It refuses
+a definition in which a byte is not a token, since every piece starts as its bytes, and under the pair rule a merge
+whose part or product is not a token, naming the byte, or the merge, its rank and the spelling.
+
+The id of every spelling is a `Spelling_table`, a flat table with open addressing over the spellings' bytes kept once in
+a string, each slot holding a spelling's hash, where its bytes stand, their length and its id, with the least power of
+two of slots at least twice the spellings. A lookup hashes the piece by `std::hash<std::string_view>` once and compares
+bytes only in a slot of the same hash and length. The whole-piece lookup reads it, which makes `encode()` on every
+corpus 1.08 to 1.28 times faster under cl100k. The tests hold it to a map keeping the first id of each spelling on
+20,000 seeded random spellings.
+
+The merge keeps the parts of a piece as a doubly linked list over its bytes, as Hugging Face's `Word` keeps its symbols,
+and the candidate joins in a binary heap ordered by rank and then by where the left part starts. Each entry records that
+start and the ends of both parts, and an entry popped whose parts no longer stand as recorded is discarded. The merge
+looks every pair up by its parts' ids, and the rule enters only in that table. Under `Merge_rule::ranks` a pair is in it
+exactly when the parts' concatenation is a spelling, at that spelling's rank, which is its id, 233,378 pairs on cl100k's
+file. Under `Merge_rule::pairs` a pair is in it exactly when the merge table lists it, a pair listed twice taking its
+last rank as both vendors read it.
+
+That table is a `Join_table`, a flat table with open addressing built from the map of the joins, with the least power of
+two of slots at least twice the joins, 524,288 on cl100k's file. A key's walk starts at its hash, by `hash_combine` from
+Boost's container_hash, the header-only module munch fetches, and runs to the next slot until it meets the key or a free
+one. Every key is placed at the first free slot of its walk, and the slots that placement passed over were full then and
+no slot is ever emptied, so a lookup meets every key the map holds before a free slot and stops at a free slot for any
+other. The tests hold the table to its map on every pair of 300 ids, a third of the pairs drawn into the map.
+
+The heap merge is exact on every table and every piece. A part's end only grows and a part joined into the one before it
+never stands again, so an entry once stale stays stale. Every adjacent pair the rule can join has a live entry, since
+the initial pairs are pushed and each join pushes the two pairs it makes. So each join is of the pair of least rank
+present, the leftmost on a tie. Under the rank rule that is tiktoken's `_byte_pair_merge`, with a join that makes a pair
+of lower rank than its own, such as `.:.:` on Llama 3's rank file, needing no case of its own, and under the pair rule
+it is Hugging Face's `merge_all`. A piece of n bytes takes at most n - 1 joins and fewer than 3n entries, each entry's
+and each node's offsets held in 32 bits, so the heap merges a piece shorter than 2^32 bytes and `Merger::merged()`
+refuses a longer one.
+
+A piece of at most 128 bytes is merged instead by a scan of its parts, held in an array on the stack, each part with the
+join it makes with the next. The scan finds the least rank from the left, so the leftmost on a tie, makes that join and
+looks up the joined part's pairs with its two neighbors. That is the join the heap makes and the two pairs it pushes, so
+both make the same joins in the same order. With the scan and the heap alone, the encoding of Chinese with no cache
+gains as the threshold rises to 128 and no further. The heap and the scan read the first pairs, every part a byte to
+begin with, from a table of the joins of all 65,536 pairs of bytes, filled from the join table at construction, which
+makes `encode()` on Chinese 1.20 and 1.16 times faster under GPT-2 and cl100k with the scan and the heap alone.
+
+The tests hold the merge to the plain pair loop and to tiktoken's scan, written out in the tests, on every multi-byte
+token of GPT-2's, cl100k's, o200k's and Llama 3's files (50,001, 100,000, 199,742 and 127,744 tokens) and on 20,000
+seeded random pieces of each, one in 32 of them cut at 100 to 200 bytes, either side of the scan's threshold, GPT-2's to
+encoder.py's pass as well. They also hold it on 3,000 random tables over three symbols, every tenth with one piece of
+100 to 160 symbols beside its short ones, which make ties, overlaps, joins that make a pair of lower rank, and tables on
+which the pass and one join at a time differ. The merge forms every multi-byte token from its own bytes on cl100k and
+o200k, all but `<|endoftext|>` on GPT-2, and all but 588 on Llama 3, which Llama 3's whole-piece lookup gives whole.
+
+### **The backtracking**
 
 The `Merger` also builds a `Backtracker`, and a piece longer than 128 bytes, or one at least half of whose bytes lie
 outside ASCII, is merged by backtracking instead. A token encodes to itself when the merge of its spelling ends with it
-alone; its split is the pair of parts that merge joins last, and its order is the rank of that join plus one, zero for a
+alone. Its split is the pair of parts that merge joins last, and its order is the rank of that join plus one, zero for a
 byte. A token's own merge joins in order of rank when the parts of every split in it, its own among them, have lower
-orders than the token they make, and the constructor decides that once for every token, reading each token's split from
-the merge of its own spelling run until two parts are left and taking the tokens shortest first, so that both parts of a
-split are decided before the token they make. On GPT-2's, cl100k's and o200k's files every token's merge joins in order,
-and on Llama 3's 107 do not: 81 of its tokens have a split with a part of higher rank, `.:.:` at 100,421 the first,
-joined from `.:.` at 105,051 and `:`, and 26 more are built on them. The backtracking lays along the piece, from the
-left, the longest token that encodes to itself and begins the rest of the piece, read from a `Token_trie`, the trie of
-those tokens in a double array; it holds each token to the one before it by a pair test, tries the longest token that is
-a proper prefix of it when the test fails, and when no prefix is left takes the last token back and marks the position
-it went back from, to which no token is laid again. Where the pair test would be asked about a token whose own merge
-does not join in order, the search gives way, and the piece is merged by the scan or the heap as a piece the
-backtracking does not take is. The pieces it takes are where it pays: timed piece by piece on nine corpora under GPT-2
-and cl100k, it takes 0.28 to 0.90 times the scan's time on a piece of up to 128 bytes at least half outside ASCII, 0.10
-to 0.34 times the heap's on the pieces longer than 128 bytes, which only `twitter.json`, `wiki-zh` and enwik8 hold, and
-on the others 1.16 to 2.36 times under cl100k, whose whole-piece lookup leaves the merge only the pieces that are no
-token, and 0.60 to 1.38 times under GPT-2.
+orders than the token they make. The constructor decides that once for every token, reading each token's split from the
+merge of its own spelling run until two parts are left and taking the tokens shortest first, so that both parts of a
+split are decided before the token they make. On GPT-2's, cl100k's and o200k's files every token's merge joins in order.
+On Llama 3's 107 do not: 81 of its tokens have a split with a part of higher rank, `.:.:` at 100,421 the first, joined
+from `.:.` at 105,051 and `:`, and 26 more are built on them.
 
-Its ids are the heap merge's on every piece, in four steps. Interval projection: while no join of a run crosses either
-end of an interval, the joins inside it are a prefix of the run on the interval alone, the least pair inside being the
-least among the interval's own; so a run that forms a token forms it by its split, and no run forms a token that does
-not encode to itself. Order: a token's own merge joins in order of rank, the leftmost first among equal ranks, exactly
-when the parts of every split in it have lower orders than the token they make. If a join of rank r makes a part p and
-the next join has a lower rank, that join holds p, since every other pair stood when the join of rank r was the least,
-and it forms a token whose split has the part p of higher order than the token; a pair holding p at rank r would be the
-join that made p, which no pair holding p is, being longer than p; and a split whose part has a higher order than its
-token is a join of lower rank made after the join that made the part. The pair test: on two tokens whose own merges join
-in order, until a join crosses between them the run on their spellings is the joins of their own merges in order of rank
-and then of place, the left token's first on a tie, since the least pair on each side is the next join of that side's
-own merge, so the parts beside the boundary are one on the left token's right spine and one on the right token's left
-spine, and going back from the two tokens, each step undoing the later of the joins that made the two parts, lists every
-pair of them that stands beside the boundary, each until the join undone; the pair's join, if it has one, comes first
-exactly when its rank is below the undone join's on the left, which precedes it on a tie, or at most the undone join's
-on the right, which it precedes. So the test answers whether the merge of the two spellings ends with the two tokens,
-their compatibility. The first join of the replayed run that crosses is a join the real run makes, which is the split of
-the token it makes, whatever that token's own merge, so the test looks up the splits' pairs of every token that encodes
-to itself, and only where each part's 32 bits of hashed partners hold the other. The local characterization of byte-pair
-encoding is not new: Vieira et al. prove it for merge lists in Language Models over Canonical Byte-Pair Encodings (ICML
-2025), and it follows from the gluing corollary of Berglund and van der Merwe's Formalizing BPE Tokenization; the proof
-below, which also covers the rank rule, is a short one: tokens t_1 to t_k that encode to themselves, every adjacent pair
-compatible, are the merge of their concatenation x, under the rank rule and under the pair rule, with no condition on
-the table. Take the first join of the run on x that crosses a boundary between two of them, t_i and t_(i+1); before it
-every part lies inside one token, so the join lies inside t_i t_(i+1) and neither end of that interval has been crossed,
-and by interval projection the run on t_i t_(i+1) alone crosses its middle, against their compatibility. So no boundary
-is crossed, and the run ends with each token's own merge, the token itself. The search ends with such a sequence unless
-it gives way: until then every answer of the pair test it acted on was about two tokens whose own merges join in order,
-so it was their compatibility, and the search has made the moves of a search whose test is exact on every pair. The
-tokens that search has laid before a position are compatible and encode to themselves, so they are the merge of the
-bytes before it, one sequence however the search reaches the position, and a position from which no token fits once fits
-from none; every token that encodes to itself and begins at a position is tried there, longest first; and the merge of
-the piece is such a sequence, so the search reaches the piece's end, with the merge. A search that does not give way is
-that search to its end, and a piece on which it gives way is merged by the scan or the heap, so every piece has the heap
-merge's ids.
+The backtracking lays along the piece, from the left, the longest token that encodes to itself and begins the rest of
+the piece, read from a `Token_trie`, the trie of those tokens in a double array. It holds each token to the one before
+it by a pair test and tries the longest token that is a proper prefix of it when the test fails. When no prefix is left
+it takes the last token back and marks the position it went back from, at which no token is laid again. Where the pair
+test would be asked about a token whose own merge does not join in order, the search gives way, and the piece is merged
+by the scan or the heap as any piece the backtracking does not take is.
 
-What a split with a part of higher order breaks is the pair test alone: interval projection and the local
-characterization hold on every table, and the search asks of the test only that it answer compatibility. On a token
-whose own merge does not join in order a later join can rank below an earlier one, so going back by orders undoes the
-joins beside the boundary in the wrong order, and a pair beside the boundary can be joined while it stands though it
-ranks above the join that ends its stand, once the next joins of both sides have risen above it. Under aab and then aa
-after the bytes, aab, of order 257, is joined from aa, of order 258, and b, and the test reads the pair of aa and aab
-back as if the left aa were the later join and refuses it, though aa aab is the merge of aaaab. Three other ways were
-weighed. A pair test that read the run in its true order would need, for every pair beside the boundary, the greatest
-rank the lesser of the two sides' next joins reaches while the pair stands, which turns on how the two tokens' merges
-interleave and not on their spines alone, and the four steps would need a fifth for it. A routing test that sent to the
-scan or the heap every piece holding the spelling of a token whose split has a part of higher order, one of 81 on Llama
-3's file, keeps the proof as it stood on the pieces it lets through, but reads every piece for those spellings before
-merging it and sends on at least every piece on which the search gives way, since a token the search asks about lies in
-the piece and holds such a spelling. A trie without the tokens whose own merges do not join in order never asks about
-one and fails exactly on the pieces whose merge holds one, but only after searching every position it reaches, and the
-heap then merges the piece afresh. Giving way costs at most the search up to the first test it would ask about such a
-token, reads one flag a token beside the split the test reads anyway, and leaves the four steps as they stood but for
-the order they ask of the two tokens, so it is the change made.
+The pieces it takes are where it pays. Timed piece by piece on nine corpora under GPT-2 and cl100k, it takes 0.28 to
+0.90 times the scan's time on a piece of up to 128 bytes at least half outside ASCII, and 0.10 to 0.34 times the heap's
+on the pieces longer than 128 bytes, which only `twitter.json`, `wiki-zh` and enwik8 hold. On the other pieces it takes
+1.16 to 2.36 times the time under cl100k, whose whole-piece lookup leaves the merge only the pieces that are no token,
+and 0.60 to 1.38 times under GPT-2.
+
+### **Why the backtracking gives the merge's ids**
+
+The backtracking's ids are the heap merge's on every piece. The argument has four steps.
+
+1. **Interval projection.** While no join of a run crosses either end of an interval, the joins inside it are a prefix
+   of the run on the interval alone, the least pair inside being the least among the interval's own. So a run that forms
+   a token forms it by its split, and no run forms a token that does not encode to itself.
+2. **Order.** A token's own merge joins in order of rank, the leftmost first among equal ranks, exactly when the parts
+   of every split in it have lower orders than the token they make. If a join of rank r makes a part p and the next join
+   has a lower rank, that join holds p, since every other pair stood when the join of rank r was the least, and it forms
+   a token whose split has the part p of higher order than the token. A pair holding p at rank r would be the join that
+   made p, which no pair holding p is, being longer than p. Conversely, a split whose part has a higher order than its
+   token is a join of lower rank made after the join that made the part.
+3. **The pair test.** Take two tokens whose own merges join in order. Until a join crosses between them, the run on
+   their spellings is the joins of their own merges in order of rank and then of place, the left token's first on a tie,
+   since the least pair on each side is the next join of that side's own merge. The parts beside the boundary are then
+   one on the left token's right spine and one on the right token's left spine. Going back from the two tokens, each
+   step undoing the later of the joins that made the two parts, lists every pair of them that stands beside the
+   boundary, each until the join undone. The pair's join, if it has one, comes first exactly when its rank is below the
+   undone join's on the left, which precedes it on a tie, or at most the undone join's on the right, which it precedes.
+   So the test answers whether the merge of the two spellings ends with the two tokens, their compatibility. The first
+   join of the replayed run that crosses is a join the real run makes, which is the split of the token it makes,
+   whatever that token's own merge. The test therefore looks up the splits' pairs of every token that encodes to itself,
+   and only where each part's 32 bits of hashed partners hold the other.
+4. **The local characterization.** Tokens t_1 to t_k that encode to themselves, every adjacent pair compatible, are the
+   merge of their concatenation x, under the rank rule and under the pair rule, with no condition on the table. Take the
+   first join of the run on x that crosses a boundary between two of them, t_i and t_(i+1). Before it every part lies
+   inside one token, so the join lies inside t_i t_(i+1) and neither end of that interval has been crossed, and by
+   interval projection the run on t_i t_(i+1) alone crosses its middle, against their compatibility. So no boundary is
+   crossed, and the run ends with each token's own merge, the token itself. The local characterization of byte-pair
+   encoding is not new: Vieira et al. prove it for merge lists in Language Models over Canonical Byte-Pair Encodings
+   (ICML 2025), and it follows from the gluing corollary of Berglund and van der Merwe's Formalizing BPE Tokenization.
+   The proof here is a short one that also covers the rank rule.
+
+The search ends with such a sequence unless it gives way. Until then every answer of the pair test it acted on was about
+two tokens whose own merges join in order, so it was their compatibility, and the search has made the moves of a search
+whose test is exact on every pair. The tokens that search has laid before a position are compatible and encode to
+themselves, so they are the merge of the bytes before it, one sequence however the search reaches the position, and a
+position from which no token fits once fits from none. Every token that encodes to itself and begins at a position is
+tried there, longest first, and the merge of the piece is such a sequence, so the search reaches the piece's end with
+the merge. A search that does not give way is that search to its end, and a piece on which it gives way is merged by the
+scan or the heap, so every piece has the heap merge's ids.
+
+### **Where the backtracking gives way**
+
+A split with a part of higher order breaks the pair test alone. Interval projection and the local characterization hold
+on every table, and the search asks of the test only that it answer compatibility. On a token whose own merge does not
+join in order a later join can rank below an earlier one, so going back by orders undoes the joins beside the boundary
+in the wrong order. A pair beside the boundary can then be joined while it stands though it ranks above the join that
+ends its stand, once the next joins of both sides have risen above it. Under aab and then aa after the bytes, aab, of
+order 257, is joined from aa, of order 258, and b, and the test reads the pair of aa and aab back as if the left aa were
+the later join and refuses it, though aa aab is the merge of aaaab.
+
+Three other ways were weighed. A pair test that read the run in its true order would need, for every pair beside the
+boundary, the greatest rank the lesser of the two sides' next joins reaches while the pair stands. That turns on how the
+two tokens' merges interleave and not on their spines alone, and the four steps would need a fifth for it. A routing
+test could send to the scan or the heap every piece holding the spelling of a token whose split has a part of higher
+order, one of 81 on Llama 3's file. It keeps the proof as it stood on the pieces it lets through, but it reads every
+piece for those spellings before merging it and sends on at least every piece on which the search gives way, since a
+token the search asks about lies in the piece and holds such a spelling. A trie without the tokens whose own merges do
+not join in order never asks about one and fails exactly on the pieces whose merge holds one, but only after searching
+every position it reaches, and the heap then merges the piece afresh. Giving way costs at most the search up to the
+first test it would ask about such a token, reads one flag a token beside the split the test reads anyway, and leaves
+the four steps as they stood but for the order they ask of the two tokens, so it is the way taken.
 
 The method is GitHub's bpe crate's, bpe 0.2.3 at github/rust-gems 31331e8: the Corollaries III and IIIa of its README,
 its backtracking encoder with the table of each token's next shorter prefix and the marks of the positions given up, and
-its pair test that undoes joins. Its README assumes every multi-byte token is made from two tokens before it, its
-constructor checks only that every token encodes to itself, and its pair test reads a token's split as the longest
-prefix of lower rank whose rest is a token of lower rank and whose pair its own test accepts; on a table whose tokens
-all encode to themselves but where a split has a part of higher rank it returns other ids than the rule's, [aaa, b] on
-aaab for the ranks a, b, ab, aaa, aa, where the rule gives [aa, ab], and [aba, a] on abaa for aa, aba and ab after the
-bytes, where it gives [ab, aa]. matisse's additions are the order of each token's own merge decided at construction, the
-search giving way beside a token whose merge does not join in order, which sends those pieces to the scan or the heap,
-and the splits read from each token's own merge. The tests hold the backtracking to the plain loop over the joins,
-wherever it does not give way, on every multi-byte token of GPT-2's, cl100k's, o200k's and Llama 3's files and on 20,000
-seeded random pieces of each, on which it gives way only under Llama 3, on 20 of its tokens and 50 of its pieces, and on
-6,000 random tables over three symbols, never giving way on the 4,446 whose every token's merge joins in order and
-giving way on 6,402 of the pieces of the other 1,554; they read from the plain loop which tokens' merges join in order,
-107 of Llama 3's not, and on those two tables and a third, aab and then aa after the bytes, on which the pair test would
-refuse the rule's own aa aab on aaaab, they hold the search to give way where the test would be asked about the token
-out of order and the merge to the rule's ids. The merge's references hold the routed merge on every multi-byte token of
-the four files and on their random pieces.
+its pair test that undoes joins. Its README assumes every multi-byte token is made from two tokens before it, and its
+constructor checks only that every token encodes to itself. Its pair test reads a token's split as the longest prefix of
+lower rank whose rest is a token of lower rank and whose pair its own test accepts. On a table whose tokens all encode
+to themselves but where a split has a part of higher rank it returns other ids than the rule's: [aaa, b] on aaab for the
+ranks a, b, ab, aaa, aa, where the rule gives [aa, ab], and [aba, a] on abaa for aa, aba and ab after the bytes, where
+it gives [ab, aa]. matisse adds the order of each token's own merge decided at construction, the search giving way
+beside a token whose merge does not join in order, which sends those pieces to the scan or the heap, and the splits read
+from each token's own merge.
+
+The tests hold the backtracking to the plain loop over the joins, wherever it does not give way, on every multi-byte
+token of GPT-2's, cl100k's, o200k's and Llama 3's files and on 20,000 seeded random pieces of each. On those it gives
+way only under Llama 3, on 20 of its tokens and 50 of its pieces. They hold it as well on 6,000 random tables over three
+symbols, where it never gives way on the 4,446 whose every token's merge joins in order and gives way on 6,402 of the
+pieces of the other 1,554. The tests read from the plain loop which tokens' merges join in order, 107 of Llama 3's not.
+On those two tables and a third, aab and then aa after the bytes, on which the pair test would refuse the rule's own aa
+aab on aaaab, they hold the search to give way where the test would be asked about the token out of order and the merge
+to the rule's ids. The merge's references hold the routed merge on every multi-byte token of the four files and on their
+random pieces.
+
+## **A cache that never changes an id**
 
 `encode()` looks each piece up whole first where the definition says so, then in a `Piece_cache`, and only then merges
 it, storing its ids. The ids of a piece are a function of its bytes and the definition alone, the merge building its
 parts afresh for every piece, so a cache keyed by the whole of a piece's bytes and filled under one definition never
-changes an id. A cache serves one caller and has no lock: `encode(text)` makes one for the call, `encode(text, cache)`
-reads and fills one the caller keeps across its calls, one per thread, and every worker of `encode_parallel()` makes its
-own. A cache is made for the encoder it serves, which it borrows, and `encode(text, cache)` refuses one made for another
-encoder with `std::invalid_argument`, since its ids would be another definition's; it holds 16,384 pieces of up to 255
-bytes and then stops filling, with no eviction, as Hugging Face's BPE model's cache stops. The cache is a flat table
-with open addressing over the bytes and the ids of its pieces, each kept once in a string and a vector of its own: a
-slot holds a piece's hash, where its bytes and ids stand and their lengths, the slots a power of two in number from 64
-on, doubled when the pieces fill half of them, so that a call that stores nothing takes no memory and a lookup hashes
-the piece once and compares its bytes only in a slot of the same hash and length; a piece's ids are valid until the next
-store. On the three corpora of the test strategy GPT-2's pattern makes 3,684 to 14,032 distinct pieces and cl100k's
-leaves 1,527 to 9,218 distinct pieces that are not looked up whole, so the bound holds every piece the merge makes on
-them. The tests hold `encode()` to the known answers and to every piece looked up or merged with no cache, on seeded
-random texts and on a text whose distinct pieces fill the cache past its bound, encoded twice more with one kept cache,
-and `decode()` of `encode()` to the text, special tokens allowed and not; and they hold `encode()` with a cache kept
-across 500 seeded texts, and on four threads each keeping a cache of its own, to `encode()` with a cache of its own.
+changes an id.
 
-The encoder claims one thing. For every text the definition accepts, `encode_parallel()` returns the ids `encode()`
-returns, at every chunk count. That is the splice theorem with the proposition that the cut transfers and the decided
-right context, given the four hypotheses (N), (S), (P) and (B), which the loader's refusals enforce, and given that the
-`Segmenter` is the engine's segmentation. The tests hold the claim on seeded texts under both inventories, at every
-chunk count from one to sixteen, at sixty-four and at every cut the rule takes, on a pattern of the tests' own and on
-GPT-2's, cl100k's, o200k's and Llama 3's with their pinned vocabularies, special tokens allowed and not on the tests'
-pattern and on cl100k's, o200k's and Llama 3's; they hold `chunk_boundaries()` on the tests' pattern to brute force over
-every certified cut of the report, and a cut in white space, at the right-context counterexamples, to the right context
-each inventory decided. Its speed is what [benchmarks.md](benchmarks.md) measures, and nothing is claimed about the
-vendors' own implementations beyond the ids and the speeds measured there.
+A cache serves one caller and has no lock. `encode(text)` makes one for the call, `encode(text, cache)` reads and fills
+one the caller keeps across its calls, one per thread, and every worker of `encode_parallel()` makes its own. A cache is
+made for the encoder it serves, which it borrows, and `encode(text, cache)` refuses one made for another encoder with
+`std::invalid_argument`, since its ids would be another definition's. It holds 16,384 pieces of up to 255 bytes and then
+stops filling, with no eviction, as Hugging Face's BPE model's cache stops. On the three corpora of the test strategy
+GPT-2's pattern makes 3,684 to 14,032 distinct pieces and cl100k's leaves 1,527 to 9,218 distinct pieces that are not
+looked up whole, so the bound holds every piece the merge makes on them.
 
-`Stream_encoder` encodes a text that arrives in parts. It is made from an `Encoder` it borrows, which must outlive it
-and not be moved while the stream reads it, so the constructor taking a temporary encoder is deleted, and allows the
-encoder's special tokens; `push()` takes the next bytes and returns the ids that have become final, and `finish()` ends
-the text and returns the rest, after which the stream reads a new text. A push may end inside a UTF-8 sequence or inside
-a special token's spelling, and those bytes are held until a later push completes them; a sequence that cannot be
-completed is refused as `classes_of()` refuses it. The stream claims one thing: after every push the ids it has returned
-are a prefix of `encode()` of the whole text, whatever the rest of the text turns out to be, and after `finish()` they
-are `encode()` of it. What a push returns is the longest such prefix, the greatest stable prefix of Dalirrooyfard and
-Ye's online tokenization, with three exceptions: while the bytes read end in a proper prefix of an allowed spelling
-those bytes are held, fewer than the longest allowed spelling, and not classed, as their online special-token
-segmentation holds them, so that a push returns the longest prefix final for the bytes before them and the ids can lag
-by more than the held bytes, a word before a held `<` staying an open piece when `<|endoftext|>` is allowed; while they
-end inside a UTF-8 sequence its bytes are held and not classed until the sequence completes, so that a push returns the
-longest prefix final for the code points before it, even where an id of those bytes is final under every completion, as
-GPT-2's byte token for `\xF4` is, since no token of two or more bytes begins with it; and inside a piece an id is held
-against every byte continuation of the piece where the pattern allows fewer. One `Encoder` serves any number of streams
-on as many threads with no lock, since a stream keeps its runs, its held bytes and its piece cache to itself and reads
-the encoder through `const` accessors alone.
+The cache is a flat table with open addressing over the bytes and the ids of its pieces, each kept once in a string and
+a vector of its own. A slot holds a piece's hash, where its bytes and ids stand and their lengths. The slots are a power
+of two in number from 64 on, doubled when the pieces fill half of them, so a call that stores nothing takes no memory,
+and a lookup hashes the piece once and compares its bytes only in a slot of the same hash and length. A piece's ids are
+valid until the next store.
+
+The tests hold `encode()` to the known answers and to every piece looked up or merged with no cache, on seeded random
+texts and on a text whose distinct pieces fill the cache past its bound, encoded twice more with one kept cache, and
+`decode()` of `encode()` to the text, special tokens allowed and not. They hold `encode()` with a cache kept across 500
+seeded texts, and on four threads each keeping a cache of its own, to `encode()` with a cache of its own.
+
+## **Cut only where a cut is certified**
+
+The constructor of `encode::Encoder` takes the report `validate()` decided of the pattern, as `supply()` takes it, and
+keeps the inventory's window table and right context. It segments by the pattern the report holds, so a definition
+without a pre-tokenizer has no encoder. It refuses an `allowed` spelling that is not one of the definition's special
+tokens. The names follow munch's `core::Lexer`, whose `tokenize_all()`, `chunk_boundaries()` and
+`tokenize_all_parallel()` are `encode()`, `chunk_boundaries()` and `encode_parallel()` here.
+
+`encode()` is the sequential encoding. The text is split at every occurrence of an allowed special token, the earliest
+first and the longest of those that begin at one byte, which emits its id. Each stretch between them is segmented by the
+`Segmenter` as a complete input, and every piece is then looked up whole where the definition's whole-piece lookup says
+so and otherwise merged alone by its merge rule. Special tokens not allowed are ordinary text, which is tiktoken's
+`encode()` with that `allowed_special` and an empty `disallowed_special`, and encoder.py's behavior when none is
+allowed. tiktoken leaves the choice between allowed spellings that begin at one byte to the order of its table, and no
+allowed spelling begins another on any definition in scope. `decode()` spells each ordinary id's bytes and each special
+id's spelling as raw bytes, not checked to be UTF-8, since a run of ids cut inside a code point spells bytes that are
+not.
+
+`chunk_boundaries()` aims for `chunks` pieces of equal size, as `core::Lexer`'s does. Each interior boundary is the
+first cut at or after the later of its equal-division target and one past the previous boundary, and a target with no
+cut after it ends the walk. A cut is an anchor, a position `t + o` for an occurrence at `t`, inside one stretch, of a
+window the table certifies at origin `o`, standing at least the width less one code points after the previous boundary.
+The occurrence certifying it then begins in the chunk the cut ends, as the splice needs. An anchor stands as far after
+its stretch's start as well, as the Python reference spaces its first cut from the text's start. A cut is also where an
+allowed special token begins or ends, a cut of its own. The spacing is the Python reference's, and it leaves out an
+anchor that stands closer than that to the previous boundary even when its occurrence begins after it. `Window_index`
+holds the table's windows by their class strings and finds the least anchor of a stretch at or after a byte, classing
+the text in blocks of 256 bytes from there, so that a walk reads the text near its target and no more.
+
+`encode_parallel()` finds the allowed special tokens once and gives each chunk to a worker, one `std::jthread` per chunk
+beyond the last, which runs on the calling thread, as munch's `tokenize_all_parallel()` does. A worker segments its
+chunk's stretches as `encode()` does, the last one followed by `right_context` further code points of the real text,
+read as a complete input there unless a special token or the text's end comes first. It keeps the pieces that end at or
+before its cut and merges them with a piece cache of its own. The ids of the chunks, concatenated, are the result, and
+an exception a worker throws is rethrown on the calling thread once every worker has joined.
+
+There is no pool and no executor, and the caller chooses the chunk count. A pool is a question for later, to be settled
+by measurement. 24 workers encode enwik9 at 557.5 and 626.1 MiB/s under GPT-2 and cl100k in the fairness section of
+[benchmarks.md](benchmarks.md), where `encode()` on one thread runs at 54.6 and 57.1. A chunking at every anchor of
+munch's C++ sources, 559,642 chunks, fails with `std::system_error` where the system cannot start that many threads, so
+the corpus probe asks for at most 32,768 chunks.
+
+## **Every streamed id is final**
+
+`encode::Stream_encoder` encodes a text that arrives in parts. It is made from an `Encoder` it borrows, which must
+outlive it and not be moved while the stream reads it, so the constructor taking a temporary encoder is deleted, and it
+allows the encoder's special tokens. `push()` takes the next bytes and returns the ids that have become final, and
+`finish()` ends the text and returns the rest, after which the stream reads a new text. A push may end inside a UTF-8
+sequence or inside a special token's spelling, and those bytes are held until a later push completes them. A sequence
+that cannot be completed is refused as `classes_of()` refuses it.
+
+The stream claims one thing. After every push the ids it has returned are a prefix of `encode()` of the whole text,
+whatever the rest of the text turns out to be, and after `finish()` they are `encode()` of it. What a push returns is
+the longest such prefix, the greatest stable prefix of Dalirrooyfard and Ye's online tokenization, with three
+exceptions.
+
+- While the bytes read end in a proper prefix of an allowed spelling, those bytes are held, fewer than the longest
+  allowed spelling, and not classed, as their online special-token segmentation holds them. A push then returns the
+  longest prefix final for the bytes before them, and the ids can lag by more than the held bytes: a word before a held
+  `<` stays an open piece when `<|endoftext|>` is allowed.
+- While the bytes read end inside a UTF-8 sequence, its bytes are held and not classed until the sequence completes. A
+  push then returns the longest prefix final for the code points before it, even where an id of those bytes is final
+  under every completion, as GPT-2's byte token for `\xF4` is, since no token of two or more bytes begins with it.
+- Inside a piece an id is held against every byte continuation of the piece, where the pattern allows fewer.
+
+One `Encoder` serves any number of streams on as many threads with no lock, since a stream keeps its runs, its held
+bytes and its piece cache to itself and reads the encoder through `const` accessors alone.
+
+### **What the encoder builds for a stream**
 
 The encoder builds what a stream reads once, beside the `Segmenter`: the class table of the pattern's alphabet, the
-split verifier M of `split_verifier()` as a `Verifier_table`, a flat array of its steps by state, class and mark with
-the states that accept and the dead ends, the accepting states with no move, the ids of the ordinary tokens in the order
-of their spellings, and, where the definition looks pieces up whole, the tokens of two or more bytes that the merge does
-not form from their own bytes, Llama 3's 588. That adds 9, 36, 69 and 49 milliseconds to building GPT-2's, cl100k's,
-o200k's and Llama 3's encoders, and a stream is then made in about ten nanoseconds. A step of the table returns a state,
-`no_state` where M has no move, rather than an empty `std::optional`, which GCC 13 returns through a byte and a word
-stored apart and read back as one word, which stalls every step.
+split verifier M of `split_verifier()` as a `Verifier_table`, the ids of the ordinary tokens in the order of their
+spellings, and, where the definition looks pieces up whole, the tokens of two or more bytes that the merge does not form
+from their own bytes, Llama 3's 588. The `Verifier_table` is a flat array of M's steps by state, class and mark, with
+the states that accept and the dead ends, the accepting states with no move. Building these adds 9, 36, 69 and 49
+milliseconds to building GPT-2's, cl100k's, o200k's and Llama 3's encoders, and a stream is then made in about ten
+nanoseconds. A step of the table returns a state, `no_state` where M has no move, rather than an empty `std::optional`.
+GCC 13 returns an optional through a byte and a word stored apart and read back as one word, which stalls every step.
 
-The stream has three layers, each exact at its level. The first cuts the special tokens: an occurrence of an allowed
-spelling, the earliest and the longest at its byte, as `encode()` finds it, is committed once no proper prefix of an
-allowed spelling begins at or before it in the bytes read, so that the stretches between special tokens are `encode()`'s
-on every completion of the text, and only the whole code points before the earliest such prefix reach the second layer.
+### **The three layers**
+
+The stream has three layers, each exact at its level.
+
+The first cuts the special tokens. An occurrence of an allowed spelling, the earliest and the longest at its byte as
+`encode()` finds it, is committed once no proper prefix of an allowed spelling begins at or before it in the bytes read.
+The stretches between special tokens are then `encode()`'s on every completion of the text, and only the whole code
+points before the earliest such prefix reach the second layer.
+
 The second keeps the live runs of M over the stretch, a `Live_runs`. A run is a path of M over a marking of the code
-points read, and since every state of M is reachable and reaches acceptance the runs are exactly the restrictions of the
-segmentations of every continuation, at most one per state of M. They are kept as a tree, one layer per code point since
-the last stable one, each node a state, the mark that led to it and the number of its live children, held in two vectors
-dropped from the front and erased in bulk, and the front layer is stable once only one of its nodes is live. At the last
-code point read every run must say the same of a piece ending there: a marked run says it ends, an unmarked one in a
-state that does not accept says it does not, an unmarked one in an accepting state says both unless the state is a dead
-end, as after cl100k's three digits, where it ends. A piece that ends at a stable code point is closed and its ids
-returned. The third layer works inside each run's open piece. The ids returned of it are those of its merge up to the
-last boundary that every byte continuation keeps, and by interval projection that is decided by the continuations a
-token can straddle the piece's end with, the empty one and the rest of every token that begins with a nonempty suffix of
-the piece: a continuation's merge is the merge of the piece followed by one of them up to its first boundary at or after
-the piece's end. The test runs from the right and stops at the first boundary that holds, since the boundaries every
-continuation keeps are closed downward; a boundary across which no token begins inside the token before it, a token that
-is a suffix of it followed by a prefix of the bytes after the boundary or by all of them and more, holds with no merge,
-since the first join that crosses a boundary joins such a suffix, and is taken first. Where pieces are looked up whole
-no id is stable while a token the merge does not form begins with the piece. A push returns the common prefix over the
-runs of each run's closed pieces followed by its open piece's stable ids, less what has been returned.
+points read, and since every state of M is reachable and reaches acceptance, the runs are exactly the restrictions of
+the segmentations of every continuation, at most one per state of M. They are kept as a tree, one layer per code point
+since the last stable one, each node a state, the mark that led to it and the number of its live children, held in two
+vectors dropped from the front and erased in bulk. The front layer is stable once only one of its nodes is live. At the
+last code point read every run must say the same of a piece ending there. A marked run says it ends, and an unmarked one
+in a state that does not accept says it does not. An unmarked one in an accepting state says both unless the state is a
+dead end, as after cl100k's three digits, where it ends. A piece that ends at a stable code point is closed and its ids
+returned.
+
+The third layer works inside each run's open piece. The ids returned of it are those of its merge up to the last
+boundary that every byte continuation keeps. By interval projection that is decided by the continuations a token can
+straddle the piece's end with, which are the empty one and the rest of every token that begins with a nonempty suffix of
+the piece: a continuation's merge is the merge of the piece followed by one of them, up to its first boundary at or
+after the piece's end. The test runs from the right and stops at the first boundary that holds, since the boundaries
+every continuation keeps are closed downward. A boundary holds with no merge when no token runs across it from inside
+the token before it, that is, when no token is a suffix of the token before the boundary followed by a prefix of the
+bytes after it, or by all of them and more. The first join that crosses a boundary joins such a suffix, so such a
+boundary holds, and it is tested first. Where pieces are looked up whole, no id is stable while a token the merge does
+not form begins with the piece. A push returns the common prefix over the runs of each run's closed pieces followed by
+its open piece's stable ids, less what has been returned.
+
+### **The cursor**
 
 The stream keeps one cursor, the byte that the ids returned since the stretch began reach, and works from it alone.
 Those ids are a prefix of `encode()` of every continuation, so every continuation keeps the boundary at the cursor and
@@ -1067,76 +668,117 @@ nothing before it is read again. A piece of a run, open or closed by the run, ad
 end, and where the cursor stands inside it only the rest after the cursor is merged, with no whole-piece lookup. Each
 node of the live runs keeps the byte its code point ends at and a link to the last node before it on its run after which
 a piece ends, and a push reads each run's piece ends back from the last one only as far as the last at or before the
-cursor. The bytes before the cursor are erased in bulk, after each code point fed and after each push, once they are
-half of the stretch's bytes held and at least 64, so that each byte is moved a constant number of times on average, and
-a piece closed behind the cursor costs nothing but its end, even where one code point closes a long run of pieces: on a
-pattern whose alternatives are `a+` anchored at the end of the text, then `a`, then any other code point, a run of `a`
-is held as one-byte pieces until a code point other than `a` closes them all. What a push reads of the runs and merges
-therefore grows with the bytes not yet returned, and not with the part of a piece already returned or with the code
+cursor.
+
+The bytes before the cursor are erased in bulk, after each code point fed and after each push, once they are half of the
+stretch's bytes held and at least 64, so each byte is moved a constant number of times on average. A piece closed behind
+the cursor costs nothing but its end, even where one code point closes a long run of pieces. On a pattern whose
+alternatives are `a+` anchored at the end of the text, then `a`, then any other code point, a run of `a` is held as
+one-byte pieces until a code point other than `a` closes them all. What a push reads of the runs and merges therefore
+grows with the bytes not yet returned. It does not grow with the part of a piece already returned or with the code
 points the runs have read since they parted, however long they stay apart, as after a line feed and a run of tabs under
 cl100k's pattern.
 
+### **Where the construction comes from**
+
 The third layer rests on results stated for one join at a time, the pair rule. They hold for the rank rule too, which
-makes on every piece the joins one join at a time makes on the dictionary of the tokens' self splits, the last join of
-the merge of each token's own bytes, in the same order: by interval projection a join the rank rule makes is the self
+makes on every piece the joins that one join at a time makes on the dictionary of the tokens' self splits, the last join
+of the merge of each token's own bytes, in the same order. By interval projection a join the rank rule makes is the self
 split of the token it makes, and among the pairs of self splits standing in the piece the rank rule's choice is the
-least, the leftmost on a tie. The problem and its frame are Dalirrooyfard and Ye's, in Online Tokenization with Optimal
-Delay in Linear Time (arXiv:2610.19139): the stable prefix of an online tokenizer and its delay, the special-token
-segmentation, the pre-tokenization and the byte-pair encoding as three stages, the observation that across hard segment
-boundaries the stable output is the output of every segment but the last and the stable prefix of the last, zero delay
-for the composed pipeline NP-hard, and an algorithm of delay O(mt) in near-linear time; they leave open whether
-byte-pair encoding alone has zero delay. The report *The Left Ripple of Byte-Pair Encoding* answers that for the
-byte-pair stage: the stable prefix of a piece is the common prefix of its merge followed by the empty string and by each
+least, the leftmost on a tie.
+
+The problem and its frame are Dalirrooyfard and Ye's, in Online Tokenization with Optimal Delay in Linear Time
+(arXiv:2610.19139). They define the stable prefix of an online tokenizer and its delay, treat the special-token
+segmentation, the pre-tokenization and the byte-pair encoding as three stages, and observe that across hard segment
+boundaries the stable output is the output of every segment but the last and the stable prefix of the last. They show
+zero delay for the composed pipeline NP-hard, give an algorithm of delay O(mt) in near-linear time, and leave open
+whether byte-pair encoding alone has zero delay. The report *The Left Ripple of Byte-Pair Encoding* answers that for the
+byte-pair stage. The stable prefix of a piece is the common prefix of its merge followed by the empty string and by each
 proper suffix of a token, a finite set, and a zero-delay streamer holds at most the right span radius of the dictionary
-past what it has returned, 129 bytes for GPT-2's table. What matisse adds is the combination and three steps it needs.
-The split verifier M, built for the report on pre-tokenizer certification, decides the pre-token boundaries every
-continuation keeps exactly and with no delay, where an online pre-tokenizer that commits a match once it cannot extend
-pays a delay. The rank rule is carried to one join at a time on the self splits. And the continuations are restricted to
-those that can straddle the piece's end, from every proper suffix of every token to the tokens that extend the piece's
-last bytes, with the whole-piece lookup folded in, which makes the exact rule affordable at every push.
+past what it has returned, 129 bytes for GPT-2's table.
+
+matisse adds the combination and three steps it needs. The split verifier M, built for the report on pre-tokenizer
+certification, decides the pre-token boundaries every continuation keeps exactly and with no delay, where an online
+pre-tokenizer that commits a match once it cannot extend pays a delay. The rank rule is carried to one join at a time on
+the self splits. And the continuations are restricted to those that can straddle the piece's end, from every proper
+suffix of every token to the tokens that extend the piece's last bytes, with the whole-piece lookup folded in, which
+makes the exact rule affordable at every push.
+
+### **How the stream is tested**
 
 The tests hold the stream to `encode()` on seeded texts pushed in random parts of up to 9, 24 and 64 bytes, a byte at a
-time and whole, every push's ids a prefix of `encode()` of the whole text and all of them `encode()` of it, on the
-tests' pattern and definition, special tokens allowed and not, and on GPT-2's, cl100k's, o200k's and Llama 3's pinned
-files, for cl100k, o200k and Llama 3 the vendors' special tokens allowed and not. On letter runs of the tests' pattern
-pushed in parts they hold the ids returned to the common prefix of the merges of the run followed by the empty string
-and by every proper suffix of every token, the stable prefix of the report on the left ripple over its whole finite set.
-On the tests' pattern they hold every push to brute force over every continuation of up to four fragments: its ids are a
-prefix of the encoding of each, and unless the bytes read end in a proper prefix of an allowed spelling they reach every
-boundary the encodings of all of them keep. They hold the live runs over seeded class strings to the segmentations of
-every continuation of up to five code points, the pieces closed to the boundaries those share, the verifier table to
-munch's verifier, and streams on four threads over one encoder to `encode()`; the bench holds every streamed corpus to
-`encode()`'s ids.
+time and whole, every push's ids a prefix of `encode()` of the whole text and all of them `encode()` of it. They run on
+the tests' pattern and definition, special tokens allowed and not, and on GPT-2's, cl100k's, o200k's and Llama 3's
+pinned files, for cl100k, o200k and Llama 3 with the vendors' special tokens allowed and not. On letter runs of the
+tests' pattern pushed in parts they hold the ids returned to the common prefix of the merges of the run followed by the
+empty string and by every proper suffix of every token, the stable prefix of the report on the left ripple over its
+whole finite set. On the tests' pattern they hold every push to brute force over every continuation of up to four
+fragments: its ids are a prefix of the encoding of each, and unless the bytes read end in a proper prefix of an allowed
+spelling they reach every boundary the encodings of all of them keep. They hold the live runs over seeded class strings
+to the segmentations of every continuation of up to five code points, the pieces closed to the boundaries those share,
+the verifier table to munch's verifier, and streams on four threads over one encoder to `encode()`. The bench holds
+every streamed corpus to `encode()`'s ids.
 
-## **The vendor verifiers, from Python into C++**
+## **How exactness is guaranteed**
 
-The Python reference implementation holds everything the port needs: the class alphabets, the per-alternative languages
-and the one-step relation Q, the verifier M with its functionality and totality decisions, the one-codepoint gate, the
-certificates, the right-context decisions and the references and end-to-end run, over a small DFA kit. Each moves as one
-C++ unit of pretok or validate, written in munch's style and modelled on its nearest munch neighbour: the verifier
-construction on `merge_tower()` and `trie_chain()`, the window tables on munch-audit's report, the supply on
-munch-audit's supply. The DFA kit the construction of M needs (product, complement, concatenation, minimization over a
-small alphabet) moves as one file of pretok; where it lives is open choice 7.
+The encoder claims one thing: for every text the definition accepts, `encode_parallel()` returns the ids `encode()`
+returns, at every chunk count. That is the splice theorem of the report on pre-tokenizer certification, with the
+proposition that a certified cut transfers from class strings to the text and with the decided right context. It holds
+given the theorem's four hypotheses (N), (S), (P) and (B), which the loaders' refusals enforce, and given that the
+`Segmenter` is the engine's segmentation. The construction behind the verifier, the gate-sufficiency proposition, the
+transfer of a cut and the splice theorem are results of that report, which is not yet published.
 
-The Unicode tables are generated, not ported by hand. tools/unicode/generate_classes.py is munch's generator of the same
-name duplicated and changed to emit the sets named on its command line, each a general category or a property of
-PropList.txt under the name of its table, with the source digests and the `--version` guard munch's has, into each
-tokenizer library's src/class_ranges.inc, checked in, so the build never touches the network; GPT-2's, cl100k's and
-Llama 3's tables are the same file generated three times from L, N and White_Space, duplicated rather than shared, so
-that a tokenizer whose pattern names other sets brings its own, o200k's Lu, Ll, Lt, Lm, Lo, M, N and White_Space. This
-is munch-audit's precedent for logos, whose reader keeps tables of the Unicode version logos is locked to rather than
-the library's. The tables are pinned to Unicode 15.0.0, the version of the Python reference, so that the fixtures replay
-(open choice 6). The classes and therefore the verifiers, the certified windows and the right context do not depend on
-the version; only the map from codepoints to classes does, and with it the ids of text holding a codepoint whose class
-moved between versions.
+The rest of the chain is held in the code and its tests. The loaders refuse what they cannot take exactly. The segmenter
+is held to the engine's own segmentation of every short class string. The merge is exact on every table and piece by the
+arguments above and is held to the plain loop and to tiktoken's scan. The stream's claim is held to `encode()` and to
+brute force over continuations. And `encode()` is held to the vendors' own ids on fourteen corpora, as the next section
+describes.
 
-The ported units stay exact through fixtures written by the reference and held byte for byte, as munch's verifier tests
-hold `token_automaton_reference.txt`. A fixture script beside the reference code writes each fixture with a header line
-naming the script and saying to regenerate with it, never by hand, one fact per line, bytes and class strings in hex,
-and the C++ tests read every line, check the answer, and count the lines of each kind. Each fixture file holds every
-tokenizer's universe and stays as the script writes it, under the tests/data of the stage its subject belongs to, and
-each tokenizer library's tests check the lines of its own universe and skip the rest, so that every universe's lines are
-checked by its tokenizer's tests. The fixtures, one per subject:
+The parallel claim is tested on seeded texts under both inventories, at every chunk count from one to sixteen, at
+sixty-four and at every cut the rule takes, on a pattern of the tests' own and on GPT-2's, cl100k's, o200k's and Llama
+3's with their pinned vocabularies, special tokens allowed and not on the tests' pattern and on cl100k's, o200k's and
+Llama 3's. The tests hold `chunk_boundaries()` on the tests' pattern to brute force over every certified cut of the
+report, and a cut in white space, at the right-context counterexamples, to the right context each inventory decided. Its
+speed is what [benchmarks.md](benchmarks.md) measures, and nothing is claimed about the vendors' own implementations
+beyond the ids and the speeds measured there.
+
+## **Testing against the real tokenizers**
+
+Each library has a GoogleTest suite registered with CTest, as hopper's do. The reference vocabularies are pinned by
+SHA-256:
+
+| File | SHA-256 |
+|---|---|
+| gpt2-merges.txt (vocab.bpe) | 1ce1664773c50f3e0cc8842619a93edc4624525b728b188a9e0be33b7726adc5 |
+| gpt2-vocab.json (encoder.json) | 196139668be63f3b5d6574427317ae82f612a97c5d1cdaf36ed2256dbf636783 |
+| cl100k_base.tiktoken | 223921b76ee99bde995b7ff738513eef100fb51d18c93597a113bcffe865b2a7 |
+| o200k_base.tiktoken | 446a9538cb6c348e3516120d7c08b09f57c36495e2acfffe59a5bf8b0cfb1a2d |
+| llama3.tiktoken | 82e9d31979e92ab929cd544440f129d9ecd797b69e327f80f17e1c50d5551b55 |
+| twitter.json | 30721e496a8d73cfc50658923c34eb2c0fbe15ee6835005e43ee624d8dedf200 |
+
+The vocabulary files are not in the tree. CTest without network needs them on disk, and their own terms would have to be
+checked before they were vendored, so `MATISSE_VOCAB_DIR` names a directory holding them, each held to its digest, and
+nothing is fetched at test time. Every test program of the libraries and the validator registers with CTest whether or
+not a directory is named, and the tests in it that read the files skip when none is. The corpus probe and the bench in
+tools/probes read all four tokenizers, so they register only when the directory holds every pinned file, Llama 3's
+included. The tokenizer.json files [benchmarks.md](benchmarks.md) runs Hugging Face tokenizers on are pinned there by
+their digests.
+
+### **The fixtures**
+
+The ported units stay exact through fixtures written by the Python reference and held byte for byte, as munch's verifier
+tests hold `token_automaton_reference.txt`. The reference, kept outside this repository, holds everything the port
+needed: the class alphabets, the per-alternative languages and the one-step relation Q, the verifier M with its
+functionality and totality decisions, the one-code-point gate, the certificates, the right-context decisions, and the
+references and end-to-end run, over a small DFA kit. Each moved as one C++ unit of pretok or validate, written in
+munch's style and modeled on its nearest munch neighbor: the verifier construction on `merge_tower()` and
+`trie_chain()`, the window tables on munch-audit's report, the supply on munch-audit's supply.
+
+A fixture script beside the reference code writes each fixture with a header line naming the script and saying to
+regenerate with it, never by hand, one fact per line, bytes and class strings in hex. The C++ tests read every line,
+check the answer, and count the lines of each kind. Each fixture file holds every tokenizer's universe and stays as the
+script writes it, under the tests/data of the stage its subject belongs to, and each tokenizer library's tests check the
+lines of its own universe and skip the rest. The fixtures, one per subject:
 
 - **Classes**: the Unicode version, the class numbering by symbol, the range count and SHA-256 of each set the tables
   hold, L, N and White_Space, for o200k Lu, Ll, Lt, Lm, Lo and M in place of L, and the class of every code point on
@@ -1151,255 +793,202 @@ checked by its tokenizer's tests. The fixtures, one per subject:
   covers every nonempty residual.
 - **Windows**: every certified window to width four under both certificates with its origin (18,357 and 32,218 for
   GPT-2, 30,576 and 58,580 for cl100k and for Llama 3), and to width three for o200k (10,365 and 17,888), and every
-  refused one by count; the tokenizers' report tests decide theirs at the fixture's width to hold them to it, the
+  refused one by count. The tokenizers' report tests decide theirs at the fixture's width to hold them to it, the
   default being five.
 - **Right context**: the decided R of each inventory, and the counterexample of each failing R with its replay
-  (`"\t\t!"` at cut two for R = 0, `"\t !"`, `"\t\tA"` and, for o200k, the tabs before the other letter `#` at cut one
-  for the policy inventory at R = 1).
+  (`"\t\t!"` at cut two for R = 0, and `"\t !"`, `"\t\tA"` and, for o200k, the tabs before the other letter `#` at cut
+  one for the policy inventory at R = 1).
 - **Known answers**: the ids of short strings under each reference, among them the published `"Hello world"`, 15496 995
-  for GPT-2, `"tiktoken is great!"`, 83 1609 5963 374 2294 0 for cl100k and 83 8251 2488 382 2212 0 for o200k with three
-  more of OpenAI's examples, from its openai-cookbook's How_to_count_tokens_with_tiktoken.ipynb at db31449, and Meta's
-  `"This is a test sentence."`, 2028 374 264 1296 11914 13 for Llama 3, from meta-llama/llama3's llama/test_tokenizer.py
-  at a0940f9, less the beginning and end of text ids it adds.
+  for GPT-2, and `"tiktoken is great!"`, 83 1609 5963 374 2294 0 for cl100k and 83 8251 2488 382 2212 0 for o200k, with
+  three more of OpenAI's examples from its openai-cookbook's How_to_count_tokens_with_tiktoken.ipynb at db31449, and
+  Meta's `"This is a test sentence."`, 2028 374 264 1296 11914 13 for Llama 3, from meta-llama/llama3's
+  llama/test_tokenizer.py at a0940f9, less the beginning and end of text ids it adds.
 - **Vendors**: the fourteen corpora of [benchmarks.md](benchmarks.md) by file name, each with its bytes, the documents
   its NUL bytes separate and its SHA-256, held to the corpus directory's manifest, and under each tokenizer the count
   and digest of the ids tiktoken, Hugging Face tokenizers and the bpe crate gave on each corpus, its documents' ids
-  concatenated, with the vendors that ran on it, read from the ids lines of the sessions the page's exactness table
-  comes from, the vendors agreeing on every corpus and, on the three corpora of the test strategy, with the reference.
-- **Lazy certification**: the verdicts and refutations of the lazy certification's validation set at the depths it
-  records.
+  concatenated, with the vendors that ran on it. They are read from the ids lines of the sessions the page's exactness
+  table comes from, the vendors agreeing on every corpus and, on the three corpora of the test strategy, with the
+  reference.
 
-Where a C++ answer and a fixture line disagree, the test fails with both; the fix goes into whichever side is wrong, and
+Where a C++ answer and a fixture line disagree, the test fails with both, the fix goes into whichever side is wrong, and
 a fixture changes only by rerunning its script.
 
-## **Test strategy against the real tokenizers**
+### **Three layers of tests**
 
-Each library has a GoogleTest suite registered with CTest, as hopper's do. The reference vocabularies are pinned by
-SHA-256:
+The tests run in three layers, each against something independent of the code under test.
 
-| File | SHA-256 |
-|---|---|
-| gpt2-merges.txt (vocab.bpe) | 1ce1664773c50f3e0cc8842619a93edc4624525b728b188a9e0be33b7726adc5 |
-| gpt2-vocab.json (encoder.json) | 196139668be63f3b5d6574427317ae82f612a97c5d1cdaf36ed2256dbf636783 |
-| cl100k_base.tiktoken | 223921b76ee99bde995b7ff738513eef100fb51d18c93597a113bcffe865b2a7 |
-| o200k_base.tiktoken | 446a9538cb6c348e3516120d7c08b09f57c36495e2acfffe59a5bf8b0cfb1a2d |
-| llama3.tiktoken | 82e9d31979e92ab929cd544440f129d9ecd797b69e327f80f17e1c50d5551b55 |
-| twitter.json | 30721e496a8d73cfc50658923c34eb2c0fbe15ee6835005e43ee624d8dedf200 |
-
-No GPT-2 or cl100k tokenizer.json is pinned for the loader's tests yet, which need one of each, taken once and pinned
-the same way; the tokenizer.json files [benchmarks.md](benchmarks.md) runs Hugging Face tokenizers on are pinned there
-by their digests. Nothing is fetched at test time: the test data is in the tree, or given to the probe as paths. Whether
-the vocabulary files themselves go into the tree is open choice 8.
-
-Three layers, each against something independent of the code under test:
-
-1. **The fixtures** of the previous section, in CTest: classes, segmentation, M, windows, right context, known answers,
-   lazy verdicts.
+1. **The fixtures** of the previous section, in CTest: classes, segmentation, M, windows, right context and known
+   answers.
 2. **Self-consistency**, in CTest, on texts generated with a fixed seed as hopper's probe generates its corpus:
    `encode_parallel()` against `encode()` under both inventories at every chunk count from one to sixteen, at
    sixty-four, and at every cut the rule takes; the cuts of `chunk_boundaries()` against brute force over the report;
    `decode(encode(x)) == x`; M accepts the `Segmenter`'s marking of every text; every anchor is a `Segmenter` boundary;
    the streaming encoder's pushes against `encode()` under random parts, and against brute force over the continuations
-   on the tests' pattern. The texts mix the known counterexample shapes, whitespace runs before letters and punctuation,
-   newlines followed by tab runs, long letter runs, contractions in both cases, and allowed and disallowed special
-   tokens.
-3. **The corpora**, by the probe in tools/probes: `matisse_corpus` takes the vocabulary directory and corpus files,
+   on the tests' pattern. The texts mix the known counterexample shapes, white space runs before letters and
+   punctuation, newlines followed by tab runs, long letter runs, contractions in both cases, and allowed and disallowed
+   special tokens.
+3. **The corpora**, by the probe in tools/probes. `matisse_corpus` takes the vocabulary directory and corpus files,
    holds GPT-2's, cl100k's, o200k's and Llama 3's pinned files to their digests, a corpus the fixtures name to the
    digest of its text, and the ids of `encode()` to the known-answer fixture's digest of the reference ids (the SHA-256
-   of the ids as little-endian 32-bit words, with their count), written by the fixture script. On every corpus it checks
-   the ids of every piece merged with no cache and `decode()`, and for both inventories `encode_parallel()` at the
-   worker counts past one that the bench times, at the 4,096- and 65,536-codepoint chunkings and at every anchor,
-   skipping a chunk count past 32,768 since every chunk is a thread. At every anchor it also holds the pieces a worker
-   keeps to the serial pieces, with no thread per chunk. Given the vocabulary directory alone it runs the generated
-   texts of layer 2, which is the form registered with CTest, as hopper_edit_relex does, and `-DMATISSE_CORPUS_DIR`
-   registers the three corpora as well. The corpora are twitter.json, and munch's 10 tracked Python files and its 306
-   tracked C++ sources and headers at 15b2863c, concatenated in path order by the fixture script and pinned by digest;
-   [benchmarks.md](benchmarks.md) adds eleven more, and the probe's ids lines are what the vendors' ids are compared by.
-   The probe prints the supply table, which [benchmarks.md](benchmarks.md) quotes from its output.
+   of the ids as little-endian 32-bit words, with their count). On every corpus it checks the ids of every piece merged
+   with no cache and `decode()`, and for both inventories `encode_parallel()` at the worker counts past one that the
+   bench times, at the 4,096- and 65,536-code-point chunkings and at every anchor, skipping a chunk count past 32,768
+   since every chunk is a thread. At every anchor it also holds the pieces a worker keeps to the serial pieces, with no
+   thread per chunk. Given the vocabulary directory alone it runs the generated texts of layer 2, which is the form
+   registered with CTest, as hopper_edit_relex does, and `-DMATISSE_CORPUS_DIR` registers the three corpora as well. The
+   corpora are twitter.json, and munch's 10 tracked Python files and its 306 tracked C++ sources and headers at
+   15b2863c, concatenated in path order by the fixture script and pinned by digest. [benchmarks.md](benchmarks.md) adds
+   eleven more, and the probe's ids lines are what the vendors' ids are compared by. The probe prints the supply table,
+   which [benchmarks.md](benchmarks.md) quotes from its output.
 
-The reference ids in the fixtures are the Python references, encoder.py's loop and tiktoken's rank merge restated over
-Python's engine with Unicode 15.0, which are held to the published known answers and not run against the vendors' code
-on the corpora. Step 15 of the order of work closes that: tiktoken, Hugging Face tokenizers and the bpe crate were run
-on the fourteen corpora of [benchmarks.md](benchmarks.md) outside the tree, and the fixture script records the digests
-of their ids in the vendor fixture beside the known-answer fixture, holding them to the restated references' on the
-three corpora of the test strategy, so that matisse is held to the vendors themselves. Given the corpus directory with
-`-DMATISSE_CORPUS_DIR`, each tokenizer's tests encode every corpus of the fixture the directory holds, each document
-pushed to a stream in parts of a mebibyte, whose ids between two `finish()` calls are `encode()`'s of the bytes pushed
-between them, so that each push and the ids it returns stay bounded whatever the corpus's size, though the test reads
-the whole corpus first, and hold the corpus to its digest and the ids to the vendors'; a corpus the directory lacks is
-skipped by name, and every one is skipped when no directory is named. A difference would be the Unicode version or a
-vendor's engine; on every corpus each vendor ran on there is none.
+### **The vendors themselves**
 
-The fuzz harnesses, step 17 of the order of work, live in tools/fuzz and follow hopper's contract (a refusal is the
-answer to bad input, a crash, a sanitizer report or a hang is a finding), each its own target with its own seeds under
-tools/fuzz/seeds, so that each corpus holds inputs of one format. `matisse_tiktoken_fuzzer` writes arbitrary bytes to
-the rank file `read_tiktoken()` reads, and `matisse_gpt2_fuzzer` to the encoder.json and the vocab.bpe `read_gpt2()`
-reads, the input cut at its first NUL byte, which no encoder.json holds; a `std::invalid_argument` is the answer, and a
-definition read is held to what its reader promises, the merge rule and the lookup, tokens none empty and none spelled
-twice, and under GPT-2 no pair listed twice. The tokenizer.json reader gets its harness when it is written.
+The reference ids in the known-answer fixture are the Python references, encoder.py's loop and tiktoken's rank merge
+restated over Python's engine with Unicode 15.0, which are held to the published known answers. The vendor fixture holds
+matisse to the vendors' own code as well. tiktoken, Hugging Face tokenizers and the bpe crate were run on the fourteen
+corpora of [benchmarks.md](benchmarks.md) outside the tree, and the fixture script records the digests of their ids in
+libs/load/tests/data/vendors_reference.txt, beside the known-answer fixture, holding them to the restated references' on
+the three corpora of the test strategy. The fixture holds the fourteen corpora with their digests and the 56 counts and
+digests of ids under the four tokenizers.
+
+Given the corpus directory with `-DMATISSE_CORPUS_DIR`, each tokenizer's tests encode every corpus of the fixture the
+directory holds and hold the corpus to its digest and the ids to the vendors'. Each document is pushed to a stream in
+parts of a mebibyte, whose ids between two `finish()` calls are `encode()`'s of the bytes pushed between them, so each
+push and the ids it returns stay bounded whatever the corpus's size, though the test reads the whole corpus first. A
+corpus the directory lacks is skipped by name, and every one is skipped when no directory is named. On all fourteen,
+4.14 GB, every digest holds, in 228 seconds under GPT-2, 235 under cl100k, 243 under o200k and 254 under Llama 3, each
+test within 2.2 GB resident. A difference would be the Unicode version or a vendor's engine, and on every corpus each
+vendor ran on there is none.
+
+### **Fuzzing**
+
+The fuzz harnesses in tools/fuzz follow hopper's contract: a refusal is the answer to bad input, and a crash, a
+sanitizer report or a hang is a finding. Each is its own target with its own seeds under tools/fuzz/seeds, so that each
+corpus holds inputs of one format. `matisse_tiktoken_fuzzer` writes arbitrary bytes to the rank file `read_tiktoken()`
+reads, and `matisse_gpt2_fuzzer` to the encoder.json and the vocab.bpe `read_gpt2()` reads, the input cut at its first
+NUL byte, which no encoder.json holds. A `std::invalid_argument` is the answer, and a definition read is held to what
+its reader promises: the merge rule and the lookup, tokens none empty and none spelled twice, and under GPT-2 no pair
+listed twice.
+
 `matisse_encoder_fuzzer` feeds arbitrary well-formed UTF-8 to the encoder, each maximal ill-formed subpart of the input
-replaced by U+FFFD, and asserts that `encode_parallel()` equals `encode()` at a chunk count drawn from the input, from
+replaced by U+FFFD. It asserts that `encode_parallel()` equals `encode()` at a chunk count drawn from the input, from
 zero to 255, and that `decode()` spells the text back, which turns the encoder's one claim into a fuzz property. Its
 sixteen encoders are GPT-2's, cl100k's, o200k's and Llama 3's patterns, each report decided to width three before the
-first input, under both inventories and a synthetic definition of each merge rule built in the harness: the 256 bytes,
-every string of two and three bytes over a, b, the space, the line feed and the two bytes of é in a seeded order of
-rank, three tokens that only the whole-piece lookup gives, and the vendor's special tokens, all of them allowed. No
-harness reads a vocabulary file, so the fuzz job runs without one.
+first input, under both inventories and a synthetic definition of each merge rule built in the harness. The synthetic
+definition holds the 256 bytes, every string of two and three bytes over a, b, the space, the line feed and the two
+bytes of é in a seeded order of rank, three tokens that only the whole-piece lookup gives, and the vendor's special
+tokens, all of them allowed. No harness reads a vocabulary file, so the fuzz job runs without one.
 
-## **What matisse needs from munch 3.0.0**
+### **Continuous integration**
 
-Used as munch 3.0.0 has it:
+CI follows hopper's workflow with munch's sanitizer matrix. It checks the format with clang-format-19, and builds and
+tests with GCC 13.3 with coverage, with GCC in strict C++23, extensions off and warnings as errors, as munch's strict
+job builds, and with Clang 19. An ARM64 job builds where plain char is unsigned. The address and undefined-behavior
+sanitizers run, and so does munch's thread-sanitizer job, because the encoder spawns threads, which is also why the
+coverage build takes munch's `-fprofile-update=atomic` flag. The fuzz job runs each harness for a minute, and an
+installed-consumer job builds a consumer against the installed package. Every job runs on each push to master and each
+pull request against it, and CodeQL runs on both and weekly. The coverage job fetches the four public vocabulary files
+the tests pin, held to their digests, so the real-vocabulary tests of the loaders, the encoders and the command line run
+in the measured build. Llama 3's file is gated by its vendor, so its tests skip there and the two probes' tests are not
+registered. Under the instrumented build each tokenizer's suite runs for many minutes, so that job runs the suites four
+at a time, each given an hour.
 
-- `munch::regex::Regex` and its combinators for the alternatives' languages, and `munch::pattern::parse()` reading a
-  spelling of one into the same nodes.
+## **What matisse needs from munch**
+
+matisse builds against munch 3.0.0 and uses:
+
+- `munch::regex::Regex` and its combinators for the alternatives' languages, and, in the tests,
+  `munch::pattern::parse()` reading a spelling of one into the same nodes.
+- `core::Builder` and `Lexer::simulator()`, which compile each alternative and its gate into a DFA, and `dfa::Builder`
+  and `dfa::Simulator`, which build and run the `Segmenter`'s product automaton. The `Simulator` is from the layer munch
+  keeps outside its stable surface, so matisse's promise holds with the munch release it names.
 - `munch::verifier::Verifier`, built from a table, for M over the class symbols, which fit the byte alphabet (16 of 256
   for cl100k).
 - `Verifier::step()` and `state_count()`, which validate's walk over the windows reads to decide the certificate of
-  `miscovering(const Verifier&, window, origin)` for every window at once, and `boundary_gap()` for the gap verdict.
-- `core::Builder` and `Lexer::is_split_window()` for the factorization certificate on U, the procedure cross-checked
-  against munch-audit exactly.
-- `Merge`, `token_automaton()` and `miscovering(const Token_automaton&, window, origin)` for the lazy certification,
-  with their refusal of a table that recreates a token passed through as the loader's.
+  `miscovering(const Verifier&, window, origin)` for every window at once, with `miscovering()` itself in the tests, and
+  `boundary_gap()` for the gap verdict.
+- `Lexer::is_split_window()` for the factorization certificate on U, the procedure cross-checked against munch-audit
+  exactly.
 - `right_context(const Verifier&, window, origin)` for the right context of each certified pair, an inventory's being
-  the largest of its pairs', and `dependence()` for the suffix half beside the case R = 0; the Python reference's
-  decision is the reference and its counterexamples the fixture, as context_reference.txt holds `right_context()`.
-  `dependence()` returns the shortest refutation of either side, so at a window whose prefix already fails with no
-  symbol past the cut it leaves the suffix half open: at 12 of the 87 and 12 of the 540 windows GPT-2's right contexts
-  are asked of, under the factorization and the policy certificate, and at 4 of the 112 and 24 of the 678 of cl100k's,
-  every other one refuting neither side.
+  the largest of its pairs', and, in the tests, `dependence()` for the suffix half beside the case R = 0. The Python
+  reference's decision is the reference and its counterexamples the fixture, as munch's context_reference.txt holds
+  `right_context()`. `dependence()` returns the shortest refutation of either side, so at a window whose prefix already
+  fails with no symbol past the cut it leaves the suffix half open. That happens at 12 of the 87 and 12 of the 540
+  windows GPT-2's right contexts are asked of, under the factorization and the policy certificate, and at 4 of the 112
+  and 24 of the 678 of cl100k's, every other one refuting neither side.
+- `munch::verifier::Merge` as the entry of a definition's merge table.
 
-Missing, each with where it would go by the division:
+matisse does not need munch's Unicode tables, which are of version 17.0.0 and have no L or N, a UTF-8 decoder, of which
+pretok has a small one of its own, or a runtime, which is matisse's by the division.
+
+munch does not yet offer four things matisse could use. Each is general, so it would go into munch by the division.
 
 - **Every window's origin at once.** `miscovering()` decides one window at one origin, and validate's walk decides the
-  certified origin of every window to a width in one pass, the shape of `modulo_cuts()`; a decision beside it returning
-  each window's certified origin would hold the walk. General, so munch, later.
+  certified origin of every window to a width in one pass, the shape of `modulo_cuts()`. A decision beside it returning
+  each window's certified origin would hold the walk.
 - **The suffix half alone.** The Python reference decides it for every boundary of M, and `dependence()` decides it only
-  together with the prefix at R = 0, so the fixture's suffix line is held at every certified cut except at those open
-  windows, and not at the boundaries of M that no certified window places. A decision of the suffix side alone, the
-  restarted copy of `dependence()`'s product without the prefix flag, would close it. General, so munch, later.
+  together with the prefix at R = 0. The fixture's suffix line is therefore held at every certified cut except at those
+  open windows, and not at the boundaries of M that no certified window places. A decision of the suffix side alone, the
+  restarted copy of `dependence()`'s product without the prefix flag, would close it.
 - **Functionality and totality of a verifier.** The Python reference decides both for M, and `divergence()` presumes the
-  first. The first version does not need them, since M's table is held state for state to the fixture whose M was
-  decided functional and total; they would let a new pattern's Q be checked by the validator itself. General, so munch,
-  later.
+  first. matisse does not need them, since M's table is held state for state to the fixture whose M was decided
+  functional and total, but they would let a new pattern's Q be checked by the validator itself.
 - **Alphabets beyond bytes.** `Marked` carries an `unsigned char`, which holds every class alphabet in sight, o200k's
-  included. It does not hold a character-level merge table: SentencePiece BPE tokenizers without a pre-tokenizer, Llama
-  2 among them, merge Unicode characters, and `token_automaton()` refuses a part that is not a byte or an earlier
-  product. They also carry a normalizer and byte fallback. So the lazy route of the first version covers byte-level
-  merge tables, and character-level ones wait for a decision about munch's alphabet.
+  included. It does not hold a character-level merge table, which the open questions below come back to.
 
-Not needed from munch: the Unicode tables (munch's own are 17.0.0 and have no L or N; matisse keeps its own, as the
-logos reader does), a UTF-8 decoder (a small one in pretok, duplicated rather than shared), and the runtime, which is
-matisse's by the division.
+## **Open questions**
 
-## **Open choices**
+**A tokenizer.json reader.** load reads GPT-2's files and tiktoken rank files. A reader of Hugging Face's tokenizer.json
+with a BPE model is planned and not written, as `read_tokenizer_json(path, published)`, taking the published spelling of
+the pattern the file is read under, which the tokenizer library's description would carry. It would recognize a
+pre-tokenizer only by that exact spelling. A ByteLevel pre-tokenizer with `use_regex` true and `add_prefix_space` false
+is GPT-2's, and a Split on cl100k's published pattern, isolated and not inverted, followed by ByteLevel without its
+regex is cl100k's. An empty spelling would read a null pre-tokenizer, for the merge tables below. The `added_tokens`
+marked special would become the special tokens. It would refuse, naming the member, a model other than BPE, a normalizer
+other than null, any other pre-tokenizer or pattern, `byte_fallback`, a post-processor that adds tokens, ordinary ids
+that are not dense from zero, and an empty token. The cl100k pattern as tiktoken shipped it before its possessive
+rewrite is a different pattern, Llama 3's, which the llama3 library's verifier covers. On a tokenizer.json the pair rule
+is Hugging Face's rule itself, Llama 3's list included, which violates C in 149,956 places. The reader would set the
+whole-piece lookup to the BPE model's `ignore_merges`, which is true for Llama 3's file and absent, so false, in
+GPT-2's. Its tests would need a GPT-2 and a cl100k tokenizer.json, taken once and pinned by digest, and it would get a
+fuzz harness of its own. Until it exists, `matisse-validate` treats a file named without `--tiktoken` as a command-line
+error, and GPT-2 reaches the command line only as a rank file under `--tiktoken gpt2`, since encoder.json and vocab.bpe
+are two files.
 
-1. **License.** munch and hopper are MIT, with a THIRD_PARTY_NOTICES.md for what they carry under other terms.
-   Recommendation: MIT, with notices for the Unicode data (Unicode License v3, munch's notice), for the published
-   patterns and special tokens quoted from openai/gpt-2 and openai/tiktoken, and for any vendored vocabulary (choice 8).
-2. **Python bindings.** Neither munch nor hopper has any, and the PyPI name matisse is taken, so a binding could be
-   called matisse-tok. Recommendation: later, once the validator has been used and the C++ surface has settled, so that
-   a binding does not fix names before the stability boundary is stated.
-3. **Tokenizers after GPT-2 and cl100k.** Settled for the first two, each a library of its own held to the fixtures and
-   to the vendors' ids: o200k, whose classes are more (Lu, Ll, Lt, Lm, Lo, M) but whose pattern is still a regex without
-   lookbehind, its 30 classes the partition by every set and literal the pattern names, and Llama 3, whose published
-   pattern is the cl100k pattern as tiktoken shipped it before the possessive rewrite, read over cl100k's classes; that
-   pattern differs from the current one only on text ending in white space that holds a newline. Recommendation for the
-   rest: WordPiece through munch's `trie_chain()` with bert-vocab.txt, which brings BERT's normalizer and so the first
-   normalizer. Character-level SentencePiece waits on munch's alphabet.
-4. **Threading model.** munch's `tokenize_all_parallel()` spawns one `std::jthread` per chunk beyond the last, runs the
-   last on the calling thread, joins at scope end, and rethrows the first exception on the calling thread. Settled: the
-   same, with no pool and no executor, the caller choosing the chunk count; a pool is a question for later, settled by
-   measurement. Measured ([benchmarks.md](benchmarks.md)): 24 workers encode enwik9 11.2 times faster than `encode()`,
-   and a chunking at every anchor of munch's C++ sources, 559,642 chunks, fails with `std::system_error` where the
-   system cannot start that many threads, so the corpus probe asks for at most 32,768 chunks.
-5. **The JSON reader.** tokenizer.json and encoder.json are JSON, with `\u` escapes, and a JSON reader must take
-   surrogate pairs, though GPT-2's byte-map characters lie at or below U+0143 and its vocabulary needs none. hopper has
-   a complete RFC 8259 parser (`hopper::json::Parser`, held to the JSONTestSuite), munch has none, and a third-party
-   library would be a new vendored dependency. Taking hopper means a second submodule, and hopper's
-   external/CMakeLists.txt adds its own munch submodule unless hopper is built against a system munch, which would
-   define munch's targets twice beside matisse's own submodule. Recommendation: hopper's parser, with matisse keeping
-   its own munch submodule as hopper does and hopper skipping its submodule when `munch::munch` already exists, a
-   one-line change in hopper's next release, which has to build against munch 3.0.0 anyway (as 1.0.1 lifted hopper to
-   2.1.0). A third JSON parser in the family would duplicate a tested one.
-6. **The Unicode version of the class tables.** The fixtures come from Python 3.12, Unicode 15.0.0; tiktoken's and
-   Hugging Face's engines carry their own versions. Settled: 15.0.0, so that the fixtures replay, since the vendor
-   cross-check (layer 3) shows no version to matter: on every corpus of the vendor fixture each vendor's ids are
-   matisse's. Moving the pin changes the ids of a text holding a code point whose class moved, so it is a major release,
-   as the README's Versioning and Stability section says, with the fixtures regenerated under the new version.
-7. **Where the DFA kit lives.** The construction of M needs product, complement and concatenation of DFAs, which munch
-   does not offer publicly. By the division test a DFA kit is general and belongs in munch; by the rule of duplicating
-   rather than sharing unless really needed it stays with the one construction that uses it. Settled: in matisse's
-   pretok, as automata.hpp and its source, because nothing in munch calls it and a munch addition would wait for a munch
-   release; the header is installed, as munch keeps no private headers under src, and the kit moves if a second user
-   appears. So automata.hpp is not part of the stable surface. Its file comment says so, and the README's Versioning and
-   Stability section names it outside the surface.
-8. **Vocabulary files in the tree.** CTest without network needs the pinned files on disk: about 1.5 MB for GPT-2's pair
-   and 1.7 MB for cl100k, plus the two tokenizer.json files. hopper vendors the JSONTestSuite cases with their licence
-   and provenance. The vocabulary files' own terms need checking first. As far as is known, GPT-2's are published with
-   the model under MIT on its Hugging Face card, and cl100k_base.tiktoken is served by OpenAI without a licence file of
-   its own. Settled: the files are not in the tree, and the `MATISSE_VOCAB_DIR` option names a directory holding them,
-   each held to its digest, with nothing fetched at test time. Every test program of the libraries and the validator
-   registers with CTest whether or not a directory is named, the tests in it that read the files skipping when none is,
-   and the corpus probe and the bench in tools/probes register only when one is named, as the README's Testing section
-   says.
-9. **The encoder's default inventory.** The factorization inventory needs one codepoint of right context and rests on
-   less, its cut holding for every complete factorization into the gate-erased languages whatever the engine does inside
-   its matches; the policy inventory needs two and rests on Q, validated and not machine-checked, but lands on more
-   boundaries (93.91 to 100.00 per cent against 57.30 to 92.88 at width four, and 96.09 to 100.00 against 57.30 to 92.88
-   at the default width of five, as [benchmarks.md](benchmarks.md) quotes the probe). Both reach a longest uncut stretch
-   within 24 bytes of the longest piece on all six runs, at width four. Recommendation: the factorization inventory by
-   default, the policy inventory by choice.
+The reader needs a JSON reader, and which one is open. tokenizer.json and encoder.json are JSON with `\u` escapes, and a
+JSON reader must take surrogate pairs, though GPT-2's byte-map characters lie at or below U+0143 and its vocabulary
+needs none. hopper has a complete RFC 8259 parser, `hopper::json::Parser`, held to the JSONTestSuite, munch has none,
+and a third-party library would be a new vendored dependency. Taking hopper means a second submodule, and hopper's
+external/CMakeLists.txt adds its own munch submodule unless hopper is built against a system munch, which would define
+munch's targets twice beside matisse's own submodule. The recommendation is hopper's parser, with matisse keeping its
+own munch submodule as hopper does and hopper skipping its submodule when `munch::munch` already exists, a one-line
+change in hopper's next release, which has to build against munch 3.0.0 anyway. A third JSON parser in the family would
+duplicate a tested one.
 
-## **Order of work**
+**Merge tables without a pre-tokenizer.** The `Encoder` segments by a pattern, so a definition without a pre-tokenizer
+has no encoder. Certifying the windows of such a byte-level merge table is planned and not written, as
+`validate_merges()`, the lazy certification: it would build munch's `token_automaton()` once and decide each candidate
+window by `miscovering()` on it, returning each candidate with its refutation or none. munch's `token_automaton()`
+refuses a table that recreates a token, and that refusal would pass through as the loader's. The candidates would be
+given by the caller, and the command line would draw them from an input, every byte and the most frequent byte pairs and
+triples, since all byte windows of width three are too many to decide at full scale.
 
-Each step lands green on its own, its tests first where a fixture exists.
+**Character-level merge tables.** SentencePiece BPE tokenizers without a pre-tokenizer, Llama 2 among them, merge
+Unicode characters, and munch's `token_automaton()` refuses a part that is not a byte or an earlier product. They also
+carry a normalizer and byte fallback. The lazy route would cover byte-level merge tables, and character-level ones wait
+for a decision about munch's alphabet. A SentencePiece loader would give munch the self-split table: for every piece,
+the pair its own characters merge last under SentencePiece's loop, ranked by score, highest first. SentencePiece forms
+every piece by that split, so with distinct product scores the score-ranked self-split table reproduces its encoder,
+which is Yi's case. Equal scores are harder. Mistral's tied group of whitespace runs admits a split-and-rank compilation
+proved equivalent on every run, while the two equal-scored pieces ab and ba admit no rank order at all, so a loader
+would search each tie group for an output-equivalent table and refuse a model whose group admits none, naming the group.
+Whether a candidate table is equivalent is decidable by a finite test over canonical tokens and adjacent pairs, so what
+remains open is the cost of synthesis. Certification needs no table at all, since munch's lazy certification needs only
+the canonical tokens and the adjacency relation, which SentencePiece's own encoder supplies as a pair oracle, once munch
+takes that relation directly.
 
-1. munch 3.0.0 released (no matisse work before it).
-2. The right-context decision in munch, with its fixture from the Python reference (3.0.0).
-3. The fixture script beside the Python reference, writing the fixtures of the vendor section and the corpus digests.
-4. The repository skeleton: hopper's CMake, CI, README and docs pages with the names changed, the munch submodule at the
-   release, an empty library, a green CI.
-5. load: the tiktoken reader and `read_gpt2()`, with the known-answer spellings; then `read_tokenizer_json()` after
-   choice 5, with its refusals.
-6. pretok: the generated class tables and `classes_of()`, held to the classes fixture.
-7. pretok: the `Segmenter`, held to the segmentation fixture.
-8. pretok: the DFA kit and `split_verifier()`, held to the verifier fixture state for state; `factorization_lexer()`.
-9. validate: the window tables under both certificates, held to the windows fixture; the right context through munch,
-   held to its fixture.
-10. validate: `supply()`, `render()`, `json()`, and `matisse-validate` with `--input`.
-11. encode: the `Encoder` constructed from a definition, a report decided once and its pattern; `encode()` and
-    `decode()` with both merge rules, the whole-piece lookup and special-token cuts, held to the known answers; a fast
-    BPE merge, linear or near-linear per piece in the manner of the GitHub bpe crate and tiktoken's rank merge, held
-    byte-identical to the simple pair loop and to the known answers, with its exactness argued before it lands; and a
-    bounded piece cache keyed by pre-token bytes, one per caller, a call, a thread or a worker, which never changes an
-    id.
-12. encode: `chunk_boundaries()` and `encode_parallel()`, with the self-consistency suite of layer 2 and the
-    thread-sanitizer job.
-13. The corpus probe on the three corpora, its figures into [benchmarks.md](benchmarks.md). The timing compares against
-    tiktoken, Hugging Face tokenizers and the bpe crate. Built: `matisse_corpus` and `matisse_bench` in tools/probes,
-    the figures in [benchmarks.md](benchmarks.md). On fourteen corpora, from twitter.json to a mixed file of 1.98 GB,
-    matisse's ids under GPT-2 and cl100k equal tiktoken's, Hugging Face's and the bpe crate's by digest wherever each
-    ran. At the default width of five the supply on the three corpora reaches 57.30 to 92.88 per cent of the pre-token
-    boundaries under the factorization inventory and 96.09 to 100.00 under the policy inventory, the longest gap between
-    anchors within 24 bytes of the longest piece. The timings are the first implementation's, at 97aa503, before the
-    performance iterations whose figures [benchmarks.md](benchmarks.md) gives after them: on one core `encode()` runs at
-    9.0 to 37.1 MiB/s, 0.42 to 1.74 times tiktoken's rate, and the bpe crate runs 1.8 to 5.1 times faster than matisse.
-    A call on a prompt of about a kilobyte costs matisse a mean of 94 microseconds under GPT-2 and 116 under cl100k,
-    against tiktoken's 58 and 63 and the bpe crate's 26 and 25. `encode_parallel()` encodes enwik9 at 162.7 and 177.9
-    MiB/s with 24 workers, 11.2 times `encode()`. The profile puts the class of a code point first on prose and code, 35
-    to 58 per cent of the time, and the merge first on Chinese under cl100k, 76 per cent.
-14. validate: `validate_merges()`, the lazy route for byte-level tables without a pre-tokenizer, held to the lazy
-    fixture.
-15. The vendor cross-check (tiktoken, Hugging Face tokenizers), its digests into the fixture, the Unicode version
-    settled (choice 6). Built: the fixture script reads the ids lines of tiktoken, Hugging Face tokenizers and the bpe
-    crate from the sessions of [benchmarks.md](benchmarks.md) into the vendor fixture,
-    libs/load/tests/data/vendors_reference.txt, the fourteen corpora with their digests and the 56 counts and digests of
-    ids under the four tokenizers, every one the page's, and each tokenizer's tests hold matisse's ids to them on the
-    corpora `-DMATISSE_CORPUS_DIR` holds. On all fourteen, 4.14 GB, every digest holds, in 228 seconds under GPT-2, 235
-    under cl100k, 243 under o200k and 254 under Llama 3, each test within 2.2 GB resident. The pin stays at Unicode
-    15.0.0.
-16. The README's Versioning and Stability section naming the stable surface; then the first release.
-17. The fuzz harnesses and their CI job, in tools/fuzz, after the first release. Built: `matisse_tiktoken_fuzzer`,
-    `matisse_gpt2_fuzzer` and `matisse_encoder_fuzzer` in tools/fuzz, under `MATISSE_BUILD_FUZZER` with the address and
-    undefined-behavior sanitizers, and the fuzz job, which runs each for a minute on every push; five minutes of each
-    found nothing.
+**Further tokenizers.** After GPT-2, cl100k, o200k and Llama 3, the recommendation is WordPiece through munch's
+`trie_chain()` with bert-vocab.txt, which brings BERT's normalizer and so the first normalizer.
+
+**Python bindings.** Neither munch nor hopper has any, and the PyPI name matisse is taken, so a binding could be called
+matisse-tok. The recommendation is to write one later, once the validator has been used and the C++ surface has settled.

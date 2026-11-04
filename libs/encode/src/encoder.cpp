@@ -25,55 +25,6 @@ namespace matisse::encode
 namespace
 {
 /**
- * @brief Returns the window table of an inventory in a report.
- * @param report The report.
- * @param inventory The inventory.
- * @return The table.
- */
-[[nodiscard]] const validate::Window_table& table_of(
-        const validate::Report& report, const validate::Inventory inventory) noexcept
-{
-    return inventory == validate::Inventory::factorization ? report.factorization : report.policy;
-}
-
-/**
- * @brief Returns whether a byte continues a UTF-8 sequence rather than beginning one.
- * @param byte The byte.
- * @return True for a continuation byte, `10xxxxxx`.
- */
-[[nodiscard]] constexpr bool is_continuation(const unsigned char byte) noexcept
-{
-    return (byte & 0xC0U) == 0x80U;
-}
-
-/**
- * @brief Returns the byte offset a number of code points after an offset of a UTF-8 text, or a limit when fewer stand
- *        before it.
- * @param text The text.
- * @param from The offset, at the start of a code point.
- * @param points The number of code points.
- * @param limit The offset not passed, at the start of a code point or at the text's end, at or after the offset.
- * @return The offset, at the start of a code point.
- */
-[[nodiscard]] std::size_t byte_after(
-        const std::string_view text, const std::size_t from, const std::size_t points, const std::size_t limit) noexcept
-{
-    auto byte{from};
-
-    for (std::size_t point{0}; point < points && byte < limit; ++point)
-    {
-        ++byte;
-
-        while (byte < limit && is_continuation(static_cast<unsigned char>(text[byte])))
-        {
-            ++byte;
-        }
-    }
-
-    return byte;
-}
-
-/**
  * @brief The equal-division targets of a text, the offsets size * index / parts for index 1, 2 and so on, in turn.
  *
  * The product overflows for a large text divided very finely, and so does any form that multiplies the remainder by the
@@ -139,6 +90,55 @@ private:
      */
     std::size_t carry_{0};
 };
+
+/**
+ * @brief Returns the window table of an inventory in a report.
+ * @param report The report.
+ * @param inventory The inventory.
+ * @return The table.
+ */
+[[nodiscard]] const validate::Window_table& table_of(
+        const validate::Report& report, const validate::Inventory inventory) noexcept
+{
+    return inventory == validate::Inventory::factorization ? report.factorization : report.policy;
+}
+
+/**
+ * @brief Returns whether a byte continues a UTF-8 sequence rather than beginning one.
+ * @param byte The byte.
+ * @return True for a continuation byte, `10xxxxxx`.
+ */
+[[nodiscard]] constexpr bool is_continuation(const unsigned char byte) noexcept
+{
+    return (byte & 0xC0U) == 0x80U;
+}
+
+/**
+ * @brief Returns the byte offset a number of code points after an offset of a UTF-8 text, or a limit when fewer stand
+ *        before it.
+ * @param text The text.
+ * @param from The offset, at the start of a code point.
+ * @param points The number of code points.
+ * @param limit The offset not passed, at the start of a code point or at the text's end, at or after the offset.
+ * @return The offset, at the start of a code point.
+ */
+[[nodiscard]] std::size_t byte_after(
+        const std::string_view text, const std::size_t from, const std::size_t points, const std::size_t limit) noexcept
+{
+    auto byte{from};
+
+    for (std::size_t point{0}; point < points && byte < limit; ++point)
+    {
+        ++byte;
+
+        while (byte < limit && is_continuation(static_cast<unsigned char>(text[byte])))
+        {
+            ++byte;
+        }
+    }
+
+    return byte;
+}
 
 /**
  * @brief Returns the first offset of a UTF-8 text at or after an offset at which a code point begins, or the text's

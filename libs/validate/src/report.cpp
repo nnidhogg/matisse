@@ -28,63 +28,6 @@ namespace
 using Origins_t = std::map<std::string, std::size_t, std::less<>>;
 
 /**
- * @brief Returns every string of a width over the class symbols, in the order the symbols give.
- * @param symbols The class symbols, ascending.
- * @param width The width.
- * @return The strings.
- */
-[[nodiscard]] std::vector<std::string> windows_of(const std::string_view symbols, const std::size_t width)
-{
-    std::vector<std::string> windows{{}};
-
-    for (std::size_t length{0}; length < width; ++length)
-    {
-        std::vector<std::string> longer{};
-
-        for (const auto& window : windows)
-        {
-            for (const auto symbol : symbols)
-            {
-                longer.push_back(window + symbol);
-            }
-        }
-
-        windows = std::move(longer);
-    }
-
-    return windows;
-}
-
-/**
- * @brief Returns the windows the factorization certificate certifies, by is_split_window() on the factorization lexer.
- * @param pattern The pattern.
- * @param width The widest window decided.
- * @return The certified windows, widths ascending, each width's in the order the class symbols give.
- */
-[[nodiscard]] std::vector<Certified_window> factorization_windows(
-        const pretok::Pattern& pattern, const std::size_t width)
-{
-    const auto lexer{pretok::factorization_lexer(pattern)};
-
-    std::vector<Certified_window> certified{};
-
-    for (std::size_t length{2}; length <= width; ++length)
-    {
-        for (auto& window : windows_of(pattern.alphabet.symbols, length))
-        {
-            const auto origin{lexer.is_split_window(window)};
-
-            if (origin)
-            {
-                certified.push_back({.window = std::move(window), .origin = *origin});
-            }
-        }
-    }
-
-    return certified;
-}
-
-/**
  * @brief One entry of a window's policy cloud: a state the split verifier can be in after an occurrence of the window
  *        read so far, where the piece holding the occurrence's last symbol begins, and whether a piece ends after it.
  */
@@ -209,6 +152,63 @@ private:
     std::vector<std::vector<Certified_window>> found_{};
 };
 
+/**
+ * @brief Returns every string of a width over the class symbols, in the order the symbols give.
+ * @param symbols The class symbols, ascending.
+ * @param width The width.
+ * @return The strings.
+ */
+[[nodiscard]] std::vector<std::string> windows_of(const std::string_view symbols, const std::size_t width)
+{
+    std::vector<std::string> windows{{}};
+
+    for (std::size_t length{0}; length < width; ++length)
+    {
+        std::vector<std::string> longer{};
+
+        for (const auto& window : windows)
+        {
+            for (const auto symbol : symbols)
+            {
+                longer.push_back(window + symbol);
+            }
+        }
+
+        windows = std::move(longer);
+    }
+
+    return windows;
+}
+
+/**
+ * @brief Returns the windows the factorization certificate certifies, by is_split_window() on the factorization lexer.
+ * @param pattern The pattern.
+ * @param width The widest window decided.
+ * @return The certified windows, widths ascending, each width's in the order the class symbols give.
+ */
+[[nodiscard]] std::vector<Certified_window> factorization_windows(
+        const pretok::Pattern& pattern, const std::size_t width)
+{
+    const auto lexer{pretok::factorization_lexer(pattern)};
+
+    std::vector<Certified_window> certified{};
+
+    for (std::size_t length{2}; length <= width; ++length)
+    {
+        for (auto& window : windows_of(pattern.alphabet.symbols, length))
+        {
+            const auto origin{lexer.is_split_window(window)};
+
+            if (origin)
+            {
+                certified.push_back({.window = std::move(window), .origin = *origin});
+            }
+        }
+    }
+
+    return certified;
+}
+
 Policy_search::Policy_search(
         const munch::verifier::Verifier& verifier, const std::string_view symbols, const std::size_t width)
     : width_{width}, state_count_{verifier.state_count()}, symbols_{symbols}, found_(width + 1)
@@ -254,24 +254,27 @@ Cloud_t Policy_search::initial() const
 
     Cloud_t cloud{{.origin = std::nullopt, .state = 0, .boundary = true}};
 
+    constexpr std::array bits{false, true};
+
+    const auto symbol_indices{std::views::iota(0UZ, symbols_.size())};
+
+    const auto steps{std::views::cartesian_product(symbol_indices, bits)};
+
     for (std::size_t index{0}; index < cloud.size(); ++index)
     {
         const auto [origin, state, boundary]{cloud[index]};
 
-        for (std::size_t symbol{0}; symbol < symbols_.size(); ++symbol)
+        for (const auto [symbol, bit] : steps)
         {
-            for (const auto bit : {false, true})
+            const auto next{move(state, symbol, bit)};
+
+            if (!next || seen[*next][bit ? 1 : 0])
             {
-                const auto next{move(state, symbol, bit)};
-
-                if (!next || seen[*next][bit ? 1 : 0])
-                {
-                    continue;
-                }
-
-                seen[*next][bit ? 1 : 0] = true;
-                cloud.push_back({.origin = std::nullopt, .state = *next, .boundary = bit});
+                continue;
             }
+
+            seen[*next][bit ? 1 : 0] = true;
+            cloud.push_back({.origin = std::nullopt, .state = *next, .boundary = bit});
         }
     }
 
@@ -377,7 +380,14 @@ Cloud_t Policy_search::extended(const Cloud_t& cloud, const std::size_t at, cons
 
             const auto shorter{origins.find(inner)};
 
-            if (shorter != origins.end() && from + shorter->second == origin)
+            if (shorter == origins.end())
+            {
+                continue;
+            }
+
+            const auto& [shorter_window, shorter_origin]{*shorter};
+
+            if (from + shorter_origin == origin)
             {
                 return true;
             }
@@ -414,6 +424,19 @@ Cloud_t Policy_search::extended(const Cloud_t& cloud, const std::size_t at, cons
 
     std::map<std::size_t, munch::verifier::Truncation> shortest{};
 
+    const auto shortest_so_far{[&shortest](const munch::verifier::Truncation& truncation) {
+        const auto known{shortest.find(truncation.context)};
+
+        if (known == shortest.end())
+        {
+            return true;
+        }
+
+        const auto& [context, held]{*known};
+
+        return truncation.segmentation.bytes.size() < held.segmentation.bytes.size();
+    }};
+
     for (const auto& [window, origin] : windows)
     {
         if (holds_shorter(origins, window, origin))
@@ -435,13 +458,7 @@ Cloud_t Policy_search::extended(const Cloud_t& cloud, const std::size_t at, cons
 
         for (const auto& truncation : truncations)
         {
-            const auto known{shortest.find(truncation.context)};
-
-            const auto shortest_so_far{
-                    known == shortest.end() ||
-                    truncation.segmentation.bytes.size() < known->second.segmentation.bytes.size()};
-
-            if (shortest_so_far)
+            if (shortest_so_far(truncation))
             {
                 shortest.insert_or_assign(truncation.context, truncation);
             }

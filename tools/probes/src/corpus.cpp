@@ -134,28 +134,6 @@ constexpr std::size_t generated_fragments{200};
 constexpr std::size_t least_generated_cuts{50};
 
 /**
- * @brief Expectations that did not hold, which decide the exit status.
- */
-std::size_t failures{0};
-
-/**
- * @brief Records an expectation, printing the failed ones.
- * @param condition Whether it held.
- * @param what What was expected, printed when it did not.
- */
-void expect(const bool condition, const std::string_view what)
-{
-    if (condition)
-    {
-        return;
-    }
-
-    ++failures;
-
-    std::printf("FAIL: %.*s\n", static_cast<int>(what.size()), what.data());
-}
-
-/**
  * @brief A tokenizer under measure: its name as the fixtures write it, its pattern, the widest window its report is
  *        decided to and its definition.
  */
@@ -197,6 +175,28 @@ struct References
      */
     std::map<std::pair<std::string, std::string>, std::pair<std::size_t, std::string>> ids{};
 };
+
+/**
+ * @brief Expectations that did not hold, which decide the exit status.
+ */
+std::size_t failures{0};
+
+/**
+ * @brief Records an expectation, printing the failed ones.
+ * @param condition Whether it held.
+ * @param what What was expected, printed when it did not.
+ */
+void expect(const bool condition, const std::string_view what)
+{
+    if (condition)
+    {
+        return;
+    }
+
+    ++failures;
+
+    std::printf("FAIL: %.*s\n", static_cast<int>(what.size()), what.data());
+}
 
 /**
  * @brief Returns the whole of a file.
@@ -270,23 +270,29 @@ std::vector<Tokenizer> tokenizers(const std::filesystem::path& directory)
             .width = matisse::validate::default_width,
             .definition = matisse::load::read_gpt2(encoder, vocab)});
 
+    const auto cl100k_specials{matisse::cl100k::specials()};
+
     read.push_back(Tokenizer{
             .name = "cl100k",
             .pattern = matisse::cl100k::pattern(),
             .width = matisse::validate::default_width,
-            .definition = matisse::load::read_tiktoken(cl100k_ranks, matisse::cl100k::specials())});
+            .definition = matisse::load::read_tiktoken(cl100k_ranks, cl100k_specials)});
+
+    const auto o200k_specials{matisse::o200k::specials()};
 
     read.push_back(Tokenizer{
             .name = "o200k",
             .pattern = matisse::o200k::pattern(),
             .width = o200k_width,
-            .definition = matisse::load::read_tiktoken(o200k_ranks, matisse::o200k::specials())});
+            .definition = matisse::load::read_tiktoken(o200k_ranks, o200k_specials)});
+
+    const auto llama3_specials{matisse::llama3::specials()};
 
     read.push_back(Tokenizer{
             .name = "llama3",
             .pattern = matisse::llama3::pattern(),
             .width = matisse::validate::default_width,
-            .definition = matisse::load::read_tiktoken(llama3_ranks, matisse::llama3::specials())});
+            .definition = matisse::load::read_tiktoken(llama3_ranks, llama3_specials)});
 
     return read;
 }
@@ -800,7 +806,9 @@ void check_corpus(
 
     if (reference != found.ids.end())
     {
-        const auto& [count, reference_digest]{reference->second};
+        const auto& [reference_key, reference_entry]{*reference};
+
+        const auto& [count, reference_digest]{reference_entry};
 
         expect(ids.size() == count && digest == reference_digest,
                std::format(
@@ -901,7 +909,9 @@ int main(const int argc, char** argv)
 
             if (reference != found.texts.end())
             {
-                expect(digest == reference->second, std::format("{} is the text the fixtures pin", name));
+                const auto& [pinned_name, pinned_digest]{*reference};
+
+                expect(digest == pinned_digest, std::format("{} is the text the fixtures pin", name));
             }
         }
 

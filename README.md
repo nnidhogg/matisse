@@ -35,9 +35,9 @@ o200k_base and Llama 3 sequentially, in parallel at certified cuts and as a stre
 out where they are allowed, and decodes ids back to bytes; validate decides each pattern's certified windows, and
 `matisse-validate` reports them for a rank file. The ids are held to the vendors' on pinned vocabularies, fixtures and
 corpora, with the classes of code points pinned to Unicode 15.0.0, while a Hugging Face tokenizer.json reader and the
-certification of merge tables without a pre-tokenizer are planned and not yet written. What each library will hold, the
-proved results the loaders rest on and the order of work are in [docs/design.md](docs/design.md), and what every call
-guarantees is in [docs/limits.md](docs/limits.md).
+certification of merge tables without a pre-tokenizer are planned and not yet written. How the libraries fit together
+and the decisions behind them are in [docs/design.md](docs/design.md), how each is called is in
+[docs/usage.md](docs/usage.md), and what every call guarantees is in [docs/limits.md](docs/limits.md).
 
 ## **Libraries**
 
@@ -153,10 +153,12 @@ target_link_libraries(first PRIVATE matisse::cl100k matisse::encode)
 
 ## **Documentation**
 
-- [docs/design.md](docs/design.md): what matisse is and is not, the repository and its build, the sketched interfaces of
-  the libraries, how a tokenizer is added, the loaders' proved results, how the vendor verifiers move from their
-  reference into C++, the test strategy against the real tokenizers, what matisse needs from munch 3.0.0, the open
-  choices, and the order of work.
+- [docs/design.md](docs/design.md): what matisse is and is not, how its libraries fit together, the decisions behind
+  each of them with their reasons, how exactness is guaranteed and tested against the real tokenizers, what matisse
+  needs from munch, and the questions still open.
+- [docs/usage.md](docs/usage.md): consuming matisse from CMake; loading a definition; choosing a tokenizer by its
+  library or by name; validating a pattern; encoding sequentially, with a kept cache and in parallel; streaming;
+  describing a pattern; the `matisse-validate` command line.
 - [docs/limits.md](docs/limits.md): the library's scope, what every call guarantees, and the escape hatches.
 - [docs/benchmarks.md](docs/benchmarks.md): the ids matisse gives on fourteen corpora beside tiktoken, Hugging Face
   tokenizers and the bpe crate, how fast each encodes on one core, on short prompts and in parallel, the profile of
@@ -185,12 +187,12 @@ cl100k_base.tiktoken, o200k_base.tiktoken and llama3.tiktoken, are not in the tr
 with `-DMATISSE_VOCAB_DIR=DIR`, each file is held to the SHA-256 docs/design.md gives, and the tests that need them skip
 when no directory is named; nothing is fetched at test time.
 
-The corpus probe and the bench in `tools/probes` register with CTest when the vocabulary directory is named, the probe
-on generated texts and the bench for one pass on a sample. `-DMATISSE_CORPUS_DIR=DIR` names a directory of the corpora
-of [docs/benchmarks.md](docs/benchmarks.md), which are not in the tree either and which the page says how to build: it
-adds the probe on the three corpora of the test strategy, and each tokenizer's tests hold matisse's ids of every corpus
-the directory holds to the vendors', whose digests libs/load/tests/data/vendors_reference.txt records, skipping by name
-the corpora the directory lacks.
+The corpus probe and the bench in `tools/probes` register with CTest when the vocabulary directory holds every pinned
+file, Llama 3's included, the probe on generated texts and the bench for one pass on a sample.
+`-DMATISSE_CORPUS_DIR=DIR` names a directory of the corpora of [docs/benchmarks.md](docs/benchmarks.md), which are not
+in the tree either and which the page says how to build: it adds the probe on the three corpora of the test strategy,
+and each tokenizer's tests hold matisse's ids of every corpus the directory holds to the vendors', whose digests
+libs/load/tests/data/vendors_reference.txt records, skipping by name the corpora the directory lacks.
 
 Three libFuzzer harnesses under `tools/fuzz/` feed arbitrary bytes to the tiktoken reader and to the GPT-2 reader, a
 `std::invalid_argument` being a loader's answer to a file it cannot take exactly, and arbitrary well-formed UTF-8 to the

@@ -28,73 +28,13 @@ namespace
 constexpr std::size_t byte_count{256};
 
 /**
- * @brief Returns a spelling as a refusal quotes it: a printable ASCII byte as itself, the quote and the backslash
- *        escaped, and every other byte as `\xHH`, so that a spelling outside ASCII reads the same in every terminal.
- * @param spelling The spelling's bytes.
- * @return The spelling, quoted.
- */
-[[nodiscard]] std::string quoted_spelling(const std::string_view spelling)
-{
-    constexpr unsigned char first_printable{0x20};
-    constexpr unsigned char last_printable{0x7E};
-
-    std::string out{'"'};
-
-    for (const auto byte : spelling)
-    {
-        const auto value{static_cast<unsigned char>(byte)};
-
-        const auto printable{value >= first_printable && value <= last_printable};
-
-        if (byte == '"' || byte == '\\')
-        {
-            out += std::format(R"(\{})", byte);
-        }
-        else if (printable)
-        {
-            out += byte;
-        }
-        else
-        {
-            out += std::format(R"(\x{:02X})", value);
-        }
-    }
-
-    out += '"';
-
-    return out;
-}
-
-/**
  * @brief The longest piece merged by a scan of its parts, a longer piece by the heap.
  *
- * Measured with no cache and the scan and the heap alone, Russian gains 12 and 20 per cent under GPT-2 and cl100k from
- * a threshold of 16 bytes to 32, Chinese 6 to 9 per cent from 64 to 128, and neither gains beyond, 256, 512 and 1,024
+ * Measured with no cache and the scan and the heap alone, Russian gains 12 and 20 percent under GPT-2 and cl100k from a
+ * threshold of 16 bytes to 32, Chinese 6 to 9 percent from 64 to 128, and neither gains beyond, 256, 512 and 1,024
  * measuring level with 128; the other corpora measure level from 16 bytes on.
  */
 constexpr std::size_t longest_scanned_piece{128};
-
-/**
- * @brief Returns whether at least half of a piece's bytes lie outside ASCII, which makes it a piece the backtracking
- *        merges faster than the scan.
- *
- * Timed piece by piece on nine corpora under GPT-2 and cl100k, the backtracking takes 0.28 to 0.90 times the scan's
- * time on such pieces of up to 128 bytes; on the others it takes 1.16 to 2.36 times under cl100k, whose whole-piece
- * lookup leaves the merge only the pieces that are no token, and 0.60 to 1.38 times under GPT-2.
- * @param piece The piece's bytes.
- * @return True when the bytes of 0x80 or above are half of the piece or more.
- */
-[[nodiscard]] bool mostly_outside_ascii(const std::string_view piece) noexcept
-{
-    constexpr unsigned char first_outside{0x80};
-
-    const auto outside{std::ranges::count_if(
-            piece, [](const char byte) { return static_cast<unsigned char>(byte) >= first_outside; })};
-
-    const auto twice_outside{2 * static_cast<std::size_t>(outside)};
-
-    return twice_outside >= piece.size();
-}
 
 /**
  * @brief The rank of no join, above every rank a join table holds, a definition holding fewer than 2^32 tokens and
@@ -124,133 +64,6 @@ struct Scanned_part
 };
 
 /**
- * @brief Returns the index of the pair of a piece's bytes at an offset in the table of byte pairs.
- * @param piece The piece's bytes.
- * @param at The offset of the left byte, the right byte after it.
- * @return The left byte's value times 256 plus the right byte's.
- */
-[[nodiscard]] std::size_t byte_pair_of(const std::string_view piece, const std::size_t at) noexcept
-{
-    const auto left{static_cast<unsigned char>(piece[at])};
-
-    const auto right{static_cast<unsigned char>(piece[at + 1])};
-
-    return left * byte_count + right;
-}
-
-/**
- * @brief Returns the ids of a piece merged by a scan of its parts: each part holding the join it makes with the part
- *        after it, the least rank found by a scan from the left, that join made, and the joins of the joined part with
- *        its neighbours looked up again.
- *
- * The scan makes the join the heap makes: the heap's entries that stand are one for every adjacent pair with a join,
- * and it joins the least of them by rank and then by start, which is the least rank the scan finds, the leftmost on a
- * tie since a later part replaces the least only at a rank below it; and both look up the same two pairs after a join,
- * the joined part's with the part before it and with the part after it, every other pair standing as it stood.
- * @param piece The piece's bytes, at most longest_scanned_piece.
- * @param byte_ids The id of every byte as a token of one byte.
- * @param byte_pairs The join of every pair of bytes as tokens of one byte, by the left byte's value times 256 plus the
- *        right byte's.
- * @param joins The join of every pair of parts the merge may join.
- * @return The ids of the parts the merge ends with, in order.
- */
-[[nodiscard]] std::vector<load::Token_id_t> merged_by_scan(
-        const std::string_view piece, const std::span<const load::Token_id_t, byte_count> byte_ids,
-        const std::span<const Join_table::Join> byte_pairs, const Join_table& joins)
-{
-    std::array<Scanned_part, longest_scanned_piece> parts{};
-
-    auto count{piece.size()};
-
-    // Sets the join of the part at an index with the part after it, none after the last part.
-    const auto look_up{[&](const std::size_t at) {
-        auto& [id, rank, product]{parts[at]};
-
-        rank = no_rank;
-
-        if (at + 1 == count)
-        {
-            return;
-        }
-
-        const auto next_id{parts[at + 1].id};
-
-        const auto join{joins.find(id, next_id)};
-
-        if (!join)
-        {
-            return;
-        }
-
-        rank = join->rank;
-
-        product = join->product;
-    }};
-
-    for (std::size_t at{0}; at < count; ++at)
-    {
-        const auto byte{static_cast<unsigned char>(piece[at])};
-
-        parts[at].id = byte_ids[byte];
-
-        parts[at].rank = no_rank;
-    }
-
-    // Every part is a byte to begin with, so the first pairs are read from the table of byte pairs.
-    for (std::size_t at{0}; at + 1 < count; ++at)
-    {
-        const auto pair{byte_pair_of(piece, at)};
-
-        const auto [rank, product]{byte_pairs[pair]};
-
-        parts[at].rank = rank;
-
-        parts[at].product = product;
-    }
-
-    while (true)
-    {
-        auto least{count};
-
-        auto least_rank{no_rank};
-
-        for (std::size_t at{0}; at < count; ++at)
-        {
-            if (parts[at].rank < least_rank)
-            {
-                least = at;
-
-                least_rank = parts[at].rank;
-            }
-        }
-
-        if (least == count)
-        {
-            break;
-        }
-
-        parts[least].id = parts[least].product;
-
-        const auto rest{std::ranges::subrange(parts.begin() + least + 2, parts.begin() + count)};
-
-        std::ranges::copy(rest, parts.begin() + least + 1);
-
-        --count;
-
-        look_up(least);
-
-        if (least > 0)
-        {
-            look_up(least - 1);
-        }
-    }
-
-    const auto merged{std::span{parts}.first(count) | std::views::transform(&Scanned_part::id)};
-
-    return {merged.begin(), merged.end()};
-}
-
-/**
  * @brief A byte offset into a piece the heap merges, which is shorter than 2^32 bytes.
  */
 using Offset_t = std::uint32_t;
@@ -264,6 +77,9 @@ using Offset_t = std::uint32_t;
  */
 struct Entry
 {
+    /** @brief Ordered by rank, then by start, then by the fields after them. */
+    [[nodiscard]] auto operator<=>(const Entry& other) const = default;
+
     /**
      * @brief The join's rank.
      */
@@ -288,9 +104,6 @@ struct Entry
      * @brief The id of the token the join makes.
      */
     load::Token_id_t product{};
-
-    /** @brief Ordered by rank, then by start, then by the fields after them. */
-    [[nodiscard]] auto operator<=>(const Entry& other) const = default;
 };
 
 /**
@@ -404,6 +217,193 @@ private:
      */
     std::vector<Node> nodes_;
 };
+
+/**
+ * @brief Returns a spelling as a refusal quotes it: a printable ASCII byte as itself, the quote and the backslash
+ *        escaped, and every other byte as `\xHH`, so that a spelling outside ASCII reads the same in every terminal.
+ * @param spelling The spelling's bytes.
+ * @return The spelling, quoted.
+ */
+[[nodiscard]] std::string quoted_spelling(const std::string_view spelling)
+{
+    constexpr unsigned char first_printable{0x20};
+    constexpr unsigned char last_printable{0x7E};
+
+    std::string out{'"'};
+
+    for (const auto byte : spelling)
+    {
+        const auto value{static_cast<unsigned char>(byte)};
+
+        const auto printable{value >= first_printable && value <= last_printable};
+
+        if (byte == '"' || byte == '\\')
+        {
+            out += std::format(R"(\{})", byte);
+        }
+        else if (printable)
+        {
+            out += byte;
+        }
+        else
+        {
+            out += std::format(R"(\x{:02X})", value);
+        }
+    }
+
+    out += '"';
+
+    return out;
+}
+
+/**
+ * @brief Returns whether at least half of a piece's bytes lie outside ASCII, which makes it a piece the backtracking
+ *        merges faster than the scan.
+ *
+ * Timed piece by piece on nine corpora under GPT-2 and cl100k, the backtracking takes 0.28 to 0.90 times the scan's
+ * time on such pieces of up to 128 bytes; on the others it takes 1.16 to 2.36 times under cl100k, whose whole-piece
+ * lookup leaves the merge only the pieces that are no token, and 0.60 to 1.38 times under GPT-2.
+ * @param piece The piece's bytes.
+ * @return True when the bytes of 0x80 or above are half of the piece or more.
+ */
+[[nodiscard]] bool mostly_outside_ascii(const std::string_view piece) noexcept
+{
+    constexpr unsigned char first_outside{0x80};
+
+    const auto outside{std::ranges::count_if(
+            piece, [](const char byte) { return static_cast<unsigned char>(byte) >= first_outside; })};
+
+    const auto twice_outside{2 * static_cast<std::size_t>(outside)};
+
+    return twice_outside >= piece.size();
+}
+
+/**
+ * @brief Returns the index of the pair of a piece's bytes at an offset in the table of byte pairs.
+ * @param piece The piece's bytes.
+ * @param at The offset of the left byte, the right byte after it.
+ * @return The left byte's value times 256 plus the right byte's.
+ */
+[[nodiscard]] std::size_t byte_pair_of(const std::string_view piece, const std::size_t at) noexcept
+{
+    const auto left{static_cast<unsigned char>(piece[at])};
+
+    const auto right{static_cast<unsigned char>(piece[at + 1])};
+
+    return left * byte_count + right;
+}
+
+/**
+ * @brief Returns the ids of a piece merged by a scan of its parts: each part holding the join it makes with the part
+ *        after it, the least rank found by a scan from the left, that join made, and the joins of the joined part with
+ *        its neighbors looked up again.
+ *
+ * The scan makes the join the heap makes: the heap's entries that stand are one for every adjacent pair with a join,
+ * and it joins the least of them by rank and then by start, which is the least rank the scan finds, the leftmost on a
+ * tie since a later part replaces the least only at a rank below it; and both look up the same two pairs after a join,
+ * the joined part's with the part before it and with the part after it, every other pair standing as it stood.
+ * @param piece The piece's bytes, at most longest_scanned_piece.
+ * @param byte_ids The id of every byte as a token of one byte.
+ * @param byte_pairs The join of every pair of bytes as tokens of one byte, by the left byte's value times 256 plus the
+ *        right byte's.
+ * @param joins The join of every pair of parts the merge may join.
+ * @return The ids of the parts the merge ends with, in order.
+ */
+[[nodiscard]] std::vector<load::Token_id_t> merged_by_scan(
+        const std::string_view piece, const std::span<const load::Token_id_t, byte_count> byte_ids,
+        const std::span<const Join_table::Join> byte_pairs, const Join_table& joins)
+{
+    std::array<Scanned_part, longest_scanned_piece> parts{};
+
+    auto count{piece.size()};
+
+    // Sets the join of the part at an index with the part after it, none after the last part.
+    const auto look_up{[&](const std::size_t at) {
+        auto& [id, rank, product]{parts[at]};
+
+        rank = no_rank;
+
+        if (at + 1 == count)
+        {
+            return;
+        }
+
+        const auto next_id{parts[at + 1].id};
+
+        const auto join{joins.find(id, next_id)};
+
+        if (!join)
+        {
+            return;
+        }
+
+        rank = join->rank;
+
+        product = join->product;
+    }};
+
+    for (std::size_t at{0}; at < count; ++at)
+    {
+        const auto byte{static_cast<unsigned char>(piece[at])};
+
+        parts[at].id = byte_ids[byte];
+
+        parts[at].rank = no_rank;
+    }
+
+    // Every part is a byte to begin with, so the first pairs are read from the table of byte pairs.
+    for (std::size_t at{0}; at + 1 < count; ++at)
+    {
+        const auto pair{byte_pair_of(piece, at)};
+
+        const auto [rank, product]{byte_pairs[pair]};
+
+        parts[at].rank = rank;
+
+        parts[at].product = product;
+    }
+
+    while (true)
+    {
+        auto least{count};
+
+        auto least_rank{no_rank};
+
+        for (std::size_t at{0}; at < count; ++at)
+        {
+            if (parts[at].rank < least_rank)
+            {
+                least = at;
+
+                least_rank = parts[at].rank;
+            }
+        }
+
+        if (least == count)
+        {
+            break;
+        }
+
+        parts[least].id = parts[least].product;
+
+        const auto rest{std::ranges::subrange(parts.begin() + least + 2, parts.begin() + count)};
+
+        std::ranges::copy(rest, parts.begin() + least + 1);
+
+        --count;
+
+        look_up(least);
+
+        if (least > 0)
+        {
+            look_up(least - 1);
+        }
+    }
+
+    const auto merged{std::span{parts}.first(count) | std::views::transform(&Scanned_part::id)};
+
+    return {merged.begin(), merged.end()};
+}
 
 Parts::Parts(const std::string_view piece, const std::span<const load::Token_id_t, byte_count> byte_ids)
     : nodes_(piece.size())
@@ -611,35 +611,37 @@ Join_table::Joins_t Merger::joins_of(const load::Definition& definition, const S
 
     Join_table::Joins_t joins{};
 
+    // Every split of a spelling into two spellings joins them into it, at its rank, its id; a pair of parts is met only
+    // at the spellings equal to its concatenation, and emplace keeps the first, the id ids holds.
+    const auto join_splits{[&joins, &ids](const std::string_view whole, const load::Token_id_t product_id) {
+        for (std::size_t split{1}; split < whole.size(); ++split)
+        {
+            const auto left{whole.substr(0, split)};
+
+            const auto right{whole.substr(split)};
+
+            const auto left_found{ids.find(left)};
+
+            const auto right_found{ids.find(right)};
+
+            if (!left_found || !right_found)
+            {
+                continue;
+            }
+
+            const auto key{Join_table::key_of(*left_found, *right_found)};
+
+            joins.emplace(key, Join_table::Join{.rank = product_id, .product = product_id});
+        }
+    }};
+
     if (merge_rule == load::Merge_rule::ranks)
     {
-        // Every split of a spelling into two spellings joins them into it, at its rank, its id; a pair of parts is met
-        // only at the spellings equal to its concatenation, and emplace keeps the first, the id ids holds.
         for (const auto [id, spelling] : std::views::enumerate(spellings))
         {
-            const std::string_view whole{spelling};
-
             const auto product_id{static_cast<load::Token_id_t>(id)};
 
-            for (std::size_t split{1}; split < whole.size(); ++split)
-            {
-                const auto left{whole.substr(0, split)};
-
-                const auto right{whole.substr(split)};
-
-                const auto left_found{ids.find(left)};
-
-                const auto right_found{ids.find(right)};
-
-                if (!left_found || !right_found)
-                {
-                    continue;
-                }
-
-                const auto key{Join_table::key_of(*left_found, *right_found)};
-
-                joins.emplace(key, Join_table::Join{.rank = product_id, .product = product_id});
-            }
+            join_splits(spelling, product_id);
         }
 
         return joins;

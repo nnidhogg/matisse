@@ -3,9 +3,11 @@
 #include <cstddef>
 #include <cstdint>
 #include <random>
+#include <ranges>
 #include <span>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -235,8 +237,9 @@ Definition synthetic(const Merge_rule merge_rule, std::vector<Special_token> spe
     {
         for (const auto& spelling : merged)
         {
-            merges.push_back(
-                    {.left = spelling.substr(0, spelling.size() - 1), .right = spelling.substr(spelling.size() - 1)});
+            const auto last{spelling.size() - 1};
+
+            merges.push_back({.left = spelling.substr(0, last), .right = spelling.substr(last)});
         }
     }
 
@@ -271,23 +274,24 @@ std::vector<Encoder> built_encoders()
 
     std::vector<Encoder> built{};
 
-    for (const auto merge_rule : {Merge_rule::ranks, Merge_rule::pairs})
+    constexpr std::array merge_rules{Merge_rule::ranks, Merge_rule::pairs};
+
+    constexpr std::array inventories{Inventory::factorization, Inventory::policy};
+
+    for (const auto [merge_rule, inventory] : std::views::cartesian_product(merge_rules, inventories))
     {
-        for (const auto inventory : {Inventory::factorization, Inventory::policy})
+        for (std::size_t index{0}; index < tokenizers.size(); ++index)
         {
-            for (std::size_t index{0}; index < tokenizers.size(); ++index)
+            const auto& specials{tokenizers[index].specials};
+
+            std::vector<std::string> allowed{};
+
+            for (const auto& [spelling, id] : specials)
             {
-                const auto& specials{tokenizers[index].specials};
-
-                std::vector<std::string> allowed{};
-
-                for (const auto& [spelling, id] : specials)
-                {
-                    allowed.push_back(spelling);
-                }
-
-                built.emplace_back(synthetic(merge_rule, specials), reports[index], inventory, allowed);
+                allowed.push_back(spelling);
             }
+
+            built.emplace_back(synthetic(merge_rule, specials), reports[index], inventory, allowed);
         }
     }
 
@@ -316,7 +320,7 @@ const std::vector<Encoder>& encoders()
  */
 extern "C" int LLVMFuzzerInitialize([[maybe_unused]] int* const argc, [[maybe_unused]] char*** const argv)
 {
-    static_cast<void>(encoders());
+    std::ignore = encoders();
 
     return 0;
 }

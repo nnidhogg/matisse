@@ -116,7 +116,7 @@ private:
      * @brief One step of a run: the state it reached and how.
      *
      * The two flags stand beside the state, which packs a node into 40 bytes; in 56, a stream in pushes of 4 KiB runs
-     * 13 per cent slower on cl100k.
+     * 13 percent slower on cl100k.
      */
     struct Node
     {

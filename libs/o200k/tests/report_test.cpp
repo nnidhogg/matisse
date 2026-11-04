@@ -258,7 +258,14 @@ bool holds_shorter(const Origins_t& origins, const std::string_view window, cons
 
             const auto shorter{origins.find(inner)};
 
-            if (shorter != origins.end() && from + shorter->second == origin)
+            if (shorter == origins.end())
+            {
+                continue;
+            }
+
+            const auto& [shorter_window, shorter_origin]{*shorter};
+
+            if (from + shorter_origin == origin)
             {
                 return true;
             }
@@ -365,7 +372,9 @@ std::string text_of(const std::string_view symbols)
             continue;
         }
 
-        text += found->second;
+        const auto& [found_symbol, spelling]{*found};
+
+        text += spelling;
     }
 
     return text;
@@ -387,7 +396,9 @@ std::vector<std::size_t> points_of(const std::string_view text, const std::vecto
     {
         const auto prefix{text.substr(0, end)};
 
-        points.push_back(static_cast<std::size_t>(std::ranges::count_if(prefix, begins_one)));
+        const auto prefix_points{std::ranges::count_if(prefix, begins_one)};
+
+        points.push_back(static_cast<std::size_t>(prefix_points));
     }
 
     return points;
@@ -475,8 +486,11 @@ void expect_failing_context(
     EXPECT_EQ(truncation.cut, cut) << context;
 
     const auto lands{[&](const Certified_window& certified) {
-        return std::string_view{text}.substr(truncation.occurrence).starts_with(certified.window) &&
-               truncation.occurrence + certified.origin == cut;
+        const auto from_occurrence{std::string_view{text}.substr(truncation.occurrence)};
+
+        const auto window_at_occurrence{from_occurrence.starts_with(certified.window)};
+
+        return window_at_occurrence && truncation.occurrence + certified.origin == cut;
     }};
 
     EXPECT_TRUE(std::ranges::any_of(table.windows, lands)) << context;

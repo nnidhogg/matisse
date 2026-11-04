@@ -7,6 +7,7 @@
 #include <iterator>
 #include <map>
 #include <optional>
+#include <ranges>
 #include <set>
 #include <stdexcept>
 #include <string>
@@ -248,26 +249,25 @@ std::map<std::string, std::optional<std::size_t>> brute_windows(const Segmented_
 {
     std::map<std::string, std::set<std::optional<std::size_t>>> seen{};
 
+    const auto widths{std::views::iota(2UZ, default_width + 1)};
+
     for (const auto& [text, all] : segmentations)
     {
-        for (const auto& starts : all)
+        for (const auto [starts, width] : std::views::cartesian_product(all, widths))
         {
-            for (std::size_t width{2}; width <= default_width; ++width)
+            for (std::size_t at{0}; at + width <= text.size(); ++at)
             {
-                for (std::size_t at{0}; at + width <= text.size(); ++at)
-                {
-                    const auto last{at + width - 1};
+                const auto last{at + width - 1};
 
-                    const auto after{std::ranges::upper_bound(starts, last)};
+                const auto after{std::ranges::upper_bound(starts, last)};
 
-                    const auto covering{*std::ranges::prev(after)};
+                const auto covering{*std::ranges::prev(after)};
 
-                    const auto origin{covering < at ? std::nullopt : std::optional{covering - at}};
+                const auto origin{covering < at ? std::nullopt : std::optional{covering - at}};
 
-                    const auto window{text.substr(at, width)};
+                const auto window{text.substr(at, width)};
 
-                    seen[window].insert(origin);
-                }
+                seen[window].insert(origin);
             }
         }
     }
@@ -302,7 +302,16 @@ void expect_brute_table(const Window_table& table, const std::map<std::string, s
     {
         const auto found{certified.find(window)};
 
-        const auto decided{found == certified.end() ? std::nullopt : std::optional{found->second}};
+        const auto decided{[&]() -> std::optional<std::size_t> {
+            if (found == certified.end())
+            {
+                return std::nullopt;
+            }
+
+            const auto& [certified_window, certified_origin]{*found};
+
+            return certified_origin;
+        }()};
 
         EXPECT_EQ(decided, origin) << window;
 
@@ -380,6 +389,22 @@ std::map<std::size_t, std::size_t> brute_failing(const Window_table& table, cons
 
     std::map<std::size_t, std::size_t> failing{};
 
+    const auto record_failing{[&segmenter, &failing](const std::string& text, const std::size_t cut) {
+        const auto whole{ends_up_to(segmenter, text, cut)};
+
+        for (std::size_t context{0}; cut > 0 && cut + context < text.size(); ++context)
+        {
+            const auto shortened{std::string_view{text}.substr(0, cut + context)};
+
+            const auto truncated{ends_up_to(segmenter, shortened, cut)};
+
+            if (truncated != whole)
+            {
+                failing.try_emplace(context, text.size());
+            }
+        }
+    }};
+
     for (const auto& text : texts_to(longest_text))
     {
         for (const auto& [window, origin] : table.windows)
@@ -388,19 +413,7 @@ std::map<std::size_t, std::size_t> brute_failing(const Window_table& table, cons
             {
                 const auto cut{at + origin};
 
-                const auto whole{ends_up_to(segmenter, text, cut)};
-
-                for (std::size_t context{0}; cut > 0 && cut + context < text.size(); ++context)
-                {
-                    const auto shortened{std::string_view{text}.substr(0, cut + context)};
-
-                    const auto truncated{ends_up_to(segmenter, shortened, cut)};
-
-                    if (truncated != whole)
-                    {
-                        failing.try_emplace(context, text.size());
-                    }
-                }
+                record_failing(text, cut);
             }
         }
     }
@@ -441,7 +454,16 @@ void expect_brute_context(const Window_table& table, const Pattern& pattern)
         EXPECT_NE(whole, truncated) << bytes;
     }
 
-    const auto expected{brute.empty() ? 0 : brute.rbegin()->first + 1};
+    const auto expected{[&brute]() -> std::size_t {
+        if (brute.empty())
+        {
+            return 0;
+        }
+
+        const auto& [last_context, length]{*brute.rbegin()};
+
+        return last_context + 1;
+    }()};
 
     EXPECT_EQ(decided, brute);
     EXPECT_EQ(table.right_context, expected);

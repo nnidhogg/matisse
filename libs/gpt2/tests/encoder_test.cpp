@@ -221,8 +221,6 @@ const matisse::validate::Report& decided_report()
  */
 Encoder gpt2_encoder(Definition definition)
 {
-    const auto pattern{matisse::gpt2::pattern()};
-
     return {std::move(definition), decided_report(), matisse::validate::Inventory::factorization, {}};
 }
 
@@ -681,8 +679,10 @@ void expect_streamed(const Encoder& encoder, const std::string_view text, const 
         start = cut;
 
         ASSERT_LE(returned.size(), expected.size()) << text << " after " << cut;
-        ASSERT_TRUE(std::ranges::equal(returned, std::span{expected}.first(returned.size())))
-                << text << " after " << cut;
+
+        const auto expected_prefix{std::span{expected}.first(returned.size())};
+
+        ASSERT_TRUE(std::ranges::equal(returned, expected_prefix)) << text << " after " << cut;
     }
 
     const auto rest{stream.finish()};
@@ -807,7 +807,9 @@ TEST(Encoder_test, Every_corpus_of_the_vendor_fixture_the_corpus_directory_holds
 
         ASSERT_NE(vendor, vendor_ids.end()) << name;
 
-        const auto& [vendor_count, vendor_digest]{vendor->second};
+        const auto& [vendor_name, vendor_entry]{*vendor};
+
+        const auto& [vendor_count, vendor_digest]{vendor_entry};
 
         EXPECT_EQ(parts, documents) << name;
         EXPECT_EQ(count, vendor_count) << name;
@@ -942,8 +944,6 @@ TEST(Encoder_test, A_cut_in_white_space_holds_with_the_right_context_each_invent
         GTEST_SKIP() << "MATISSE_VOCAB_DIR names no directory holding gpt2-vocab.json and gpt2-merges.txt";
     }
 
-    const auto pattern{matisse::gpt2::pattern()};
-
     const auto& report{decided_report()};
 
     const Encoder factorization{*definition, report, Inventory::factorization, {}};
@@ -988,7 +988,9 @@ TEST(Encoder_test, A_stream_pushed_in_parts_of_every_size_returns_prefixes_of_en
 
         for (const auto& encoder : encoders)
         {
-            expect_streamed(encoder, text, random_cuts(random, text.size(), 24));
+            const auto cuts{random_cuts(random, text.size(), 24)};
+
+            expect_streamed(encoder, text, cuts);
             expect_streamed(encoder, text, one_byte_cuts);
             expect_streamed(encoder, text, std::array{text.size()});
         }

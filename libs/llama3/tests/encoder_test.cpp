@@ -50,6 +50,11 @@ namespace
 constexpr std::string_view llama3_digest{"82e9d31979e92ab929cd544440f129d9ecd797b69e327f80f17e1c50d5551b55"};
 
 /**
+ * @brief The rank of no join, above every rank.
+ */
+constexpr std::uint32_t no_rank{std::numeric_limits<std::uint32_t>::max()};
+
+/**
  * @brief What the known-answer fixture holds, counted as it is checked.
  */
 struct Fixture_counts
@@ -154,6 +159,23 @@ struct Vendor_fixture
 };
 
 /**
+ * @brief The tables the backtracking takes beside a definition's spellings: the id of every byte and the joins of the
+ *        rank rule, every split of a spelling into two spellings joining at the spelling's rank, which is its id.
+ */
+struct Rank_tables
+{
+    /**
+     * @brief The id of every byte, by its value.
+     */
+    std::array<Token_id_t, 256> byte_ids{};
+
+    /**
+     * @brief The joins, keyed by the ids of their parts.
+     */
+    Join_table joins;
+};
+
+/**
  * @brief Returns the whole of a file.
  * @param path The file's path.
  * @return Its bytes.
@@ -222,8 +244,6 @@ const matisse::validate::Report& decided_report()
  */
 Encoder llama3_encoder(Definition definition, const std::vector<std::string>& allowed = {})
 {
-    const auto pattern{matisse::llama3::pattern()};
-
     return {std::move(definition), decided_report(), matisse::validate::Inventory::factorization, allowed};
 }
 
@@ -659,28 +679,6 @@ void expect_anchors_are_boundaries(
 }
 
 /**
- * @brief The rank of no join, above every rank.
- */
-constexpr std::uint32_t no_rank{std::numeric_limits<std::uint32_t>::max()};
-
-/**
- * @brief The tables the backtracking takes beside a definition's spellings: the id of every byte and the joins of the
- *        rank rule, every split of a spelling into two spellings joining at the spelling's rank, which is its id.
- */
-struct Rank_tables
-{
-    /**
-     * @brief The id of every byte, by its value.
-     */
-    std::array<Token_id_t, 256> byte_ids{};
-
-    /**
-     * @brief The joins, keyed by the ids of their parts.
-     */
-    Join_table joins;
-};
-
-/**
  * @brief Returns the tables of a definition under the rank rule, built as the merger builds them.
  * @param definition The definition, read from a rank file.
  * @return The tables.
@@ -744,28 +742,30 @@ std::vector<Token_id_t> plain_merge(const std::string_view piece, const Rank_tab
 
     while (true)
     {
-        std::pair best{no_rank, std::size_t{0}};
+        auto best_rank{no_rank};
+
+        std::size_t best_at{0};
 
         for (std::size_t at{0}; at + 1 < parts.size(); ++at)
         {
             const auto join{tables.joins.find(parts[at], parts[at + 1])};
 
-            if (join && join->rank < best.first)
+            if (join && join->rank < best_rank)
             {
-                best = {join->rank, at};
+                best_rank = join->rank;
+
+                best_at = at;
             }
         }
 
-        const auto [rank, at]{best};
-
-        if (rank == no_rank)
+        if (best_rank == no_rank)
         {
             return parts;
         }
 
-        parts[at] = rank;
+        parts[best_at] = best_rank;
 
-        parts.erase(parts.begin() + static_cast<std::ptrdiff_t>(at) + 1);
+        parts.erase(parts.begin() + static_cast<std::ptrdiff_t>(best_at) + 1);
     }
 }
 
@@ -819,8 +819,10 @@ void expect_streamed(const Encoder& encoder, const std::string_view text, const 
         start = cut;
 
         ASSERT_LE(returned.size(), expected.size()) << text << " after " << cut;
-        ASSERT_TRUE(std::ranges::equal(returned, std::span{expected}.first(returned.size())))
-                << text << " after " << cut;
+
+        const auto expected_prefix{std::span{expected}.first(returned.size())};
+
+        ASSERT_TRUE(std::ranges::equal(returned, expected_prefix)) << text << " after " << cut;
     }
 
     const auto rest{stream.finish()};
@@ -945,7 +947,9 @@ TEST(Encoder_test, Every_corpus_of_the_vendor_fixture_the_corpus_directory_holds
 
         ASSERT_NE(vendor, vendor_ids.end()) << name;
 
-        const auto& [vendor_count, vendor_digest]{vendor->second};
+        const auto& [vendor_name, vendor_entry]{*vendor};
+
+        const auto& [vendor_count, vendor_digest]{vendor_entry};
 
         EXPECT_EQ(parts, documents) << name;
         EXPECT_EQ(count, vendor_count) << name;
@@ -1077,29 +1081,30 @@ TEST(Encoder_test, Encode_parallel_gives_encode_s_ids_under_both_inventories_and
 
     const matisse::pretok::Class_table class_table{pattern.alphabet};
 
-    for (const auto inventory : {Inventory::factorization, Inventory::policy})
+    constexpr std::array inventories{Inventory::factorization, Inventory::policy};
+
+    const std::vector<std::vector<std::string>> allowed_lists{{}, special_spellings()};
+
+    for (const auto [inventory, allowed] : std::views::cartesian_product(inventories, allowed_lists))
     {
-        for (const auto& allowed : {std::vector<std::string>{}, special_spellings()})
+        const Encoder encoder{*definition, report, inventory, allowed};
+
+        const Window_index index{inventory == Inventory::factorization ? report.factorization : report.policy};
+
+        std::mt19937 random{23};
+
+        for (std::size_t count{0}; count < 60; ++count)
         {
-            const Encoder encoder{*definition, report, inventory, allowed};
+            const auto text{random_text(random, 60)};
 
-            const Window_index index{inventory == Inventory::factorization ? report.factorization : report.policy};
+            const auto ids{encoder.encode(text)};
 
-            std::mt19937 random{23};
-
-            for (std::size_t count{0}; count < 60; ++count)
+            for (const auto chunks : chunk_counts(text))
             {
-                const auto text{random_text(random, 60)};
-
-                const auto ids{encoder.encode(text)};
-
-                for (const auto chunks : chunk_counts(text))
-                {
-                    EXPECT_EQ(encoder.encode_parallel(text, chunks), ids) << text << " in " << chunks;
-                }
-
-                expect_anchors_are_boundaries(index, class_table, segmenter, text);
+                EXPECT_EQ(encoder.encode_parallel(text, chunks), ids) << text << " in " << chunks;
             }
+
+            expect_anchors_are_boundaries(index, class_table, segmenter, text);
         }
     }
 }
@@ -1112,8 +1117,6 @@ TEST(Encoder_test, A_cut_in_white_space_holds_with_the_right_context_each_invent
     {
         GTEST_SKIP() << "MATISSE_VOCAB_DIR names no directory holding llama3.tiktoken";
     }
-
-    const auto pattern{matisse::llama3::pattern()};
 
     const auto& report{decided_report()};
 
@@ -1220,7 +1223,9 @@ TEST(Encoder_test, A_stream_pushed_in_parts_of_every_size_returns_prefixes_of_en
 
         for (const auto& encoder : encoders)
         {
-            expect_streamed(encoder, text, random_cuts(random, text.size(), 24));
+            const auto cuts{random_cuts(random, text.size(), 24)};
+
+            expect_streamed(encoder, text, cuts);
             expect_streamed(encoder, text, one_byte_cuts);
             expect_streamed(encoder, text, std::array{text.size()});
         }

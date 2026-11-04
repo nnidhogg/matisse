@@ -155,7 +155,9 @@ Run run(const std::vector<std::string>& arguments)
  */
 std::string fixture(const std::string_view name)
 {
-    const auto text{contents(data(std::format("tools/validate/tests/data/{}", name)))};
+    const auto path{std::format("tools/validate/tests/data/{}", name)};
+
+    const auto text{contents(data(path))};
 
     return text.substr(text.find('\n') + 1);
 }

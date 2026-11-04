@@ -260,8 +260,10 @@ void expect_streamed(const Encoder& encoder, const std::string_view text, const 
         start = cut;
 
         ASSERT_LE(returned.size(), expected.size()) << text << " after " << cut;
-        ASSERT_TRUE(std::ranges::equal(returned, std::span{expected}.first(returned.size())))
-                << text << " after " << cut;
+
+        const auto expected_prefix{std::span{expected}.first(returned.size())};
+
+        ASSERT_TRUE(std::ranges::equal(returned, expected_prefix)) << text << " after " << cut;
     }
 
     const auto rest{stream.finish()};
@@ -383,7 +385,9 @@ bool ends_in_spelling(const std::string_view text, const std::vector<std::string
     {
         for (std::size_t length{1}; length < spelling.size() && length <= text.size(); ++length)
         {
-            if (spelling.starts_with(text.substr(text.size() - length)))
+            const auto tail{text.substr(text.size() - length)};
+
+            if (spelling.starts_with(tail))
             {
                 return true;
             }
@@ -475,8 +479,10 @@ void expect_brute_force(const std::vector<std::string>& allowed, const unsigned 
             }
 
             ASSERT_LE(returned.size(), bound.size()) << text << " after " << cut;
-            ASSERT_TRUE(std::ranges::equal(returned, std::span{bound}.first(returned.size())))
-                    << text << " after " << cut;
+
+            const auto bound_prefix{std::span{bound}.first(returned.size())};
+
+            ASSERT_TRUE(std::ranges::equal(returned, bound_prefix)) << text << " after " << cut;
 
             if (ends_in_spelling(read, allowed) || kept.empty())
             {
@@ -510,9 +516,17 @@ TEST(Stream_encoder_test, Pushes_of_every_size_return_prefixes_of_encode_and_con
         {
             const auto text{random_text(random, 30)};
 
-            expect_streamed(encoder, text, random_cuts(random, text.size(), 9));
-            expect_streamed(encoder, text, random_cuts(random, text.size(), 64));
-            expect_streamed(encoder, text, one_byte_cuts(text.size()));
+            const auto narrow_cuts{random_cuts(random, text.size(), 9)};
+
+            expect_streamed(encoder, text, narrow_cuts);
+
+            const auto wide_cuts{random_cuts(random, text.size(), 64)};
+
+            expect_streamed(encoder, text, wide_cuts);
+
+            const auto byte_cuts{one_byte_cuts(text.size())};
+
+            expect_streamed(encoder, text, byte_cuts);
             expect_streamed(encoder, text, std::array{text.size()});
         }
     }

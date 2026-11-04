@@ -93,33 +93,36 @@ std::size_t expect_as_verifier(const Pattern& pattern)
 
     std::size_t dead_ends{0};
 
+    constexpr std::array boundaries{false, true};
+
+    const auto marks{std::views::cartesian_product(std::views::enumerate(pattern.alphabet.symbols), boundaries)};
+
     for (munch::verifier::Verifier::State_t state{0}; state < verifier.state_count(); ++state)
     {
         const auto at{static_cast<Verifier_table::State_t>(state)};
 
         auto moves{false};
 
-        for (const auto [symbol_class, symbol] : std::views::enumerate(pattern.alphabet.symbols))
+        for (const auto [class_and_symbol, boundary_after] : marks)
         {
-            for (const auto boundary_after : {false, true})
+            const auto [symbol_class, symbol]{class_and_symbol};
+
+            const munch::verifier::Marked marked{
+                    .byte = static_cast<unsigned char>(symbol),
+                    .boundary_after = boundary_after};
+
+            const auto expected{verifier.step(state, marked)};
+
+            const auto stepped{table.step(at, static_cast<matisse::pretok::Class_t>(symbol_class), boundary_after)};
+
+            const auto as_optional{
+                    stepped == Verifier_table::no_state ? std::nullopt : std::optional<std::size_t>{stepped}};
+
+            EXPECT_EQ(as_optional, expected) << state << " " << symbol;
+
+            if (expected)
             {
-                const munch::verifier::Marked marked{
-                        .byte = static_cast<unsigned char>(symbol),
-                        .boundary_after = boundary_after};
-
-                const auto expected{verifier.step(state, marked)};
-
-                const auto stepped{table.step(at, static_cast<matisse::pretok::Class_t>(symbol_class), boundary_after)};
-
-                const auto as_optional{
-                        stepped == Verifier_table::no_state ? std::nullopt : std::optional<std::size_t>{stepped}};
-
-                EXPECT_EQ(as_optional, expected) << state << " " << symbol;
-
-                if (expected)
-                {
-                    moves = true;
-                }
+                moves = true;
             }
         }
 

@@ -65,6 +65,131 @@ constexpr std::size_t first_merge_line{2};
 using Entries_t = std::vector<std::pair<std::string, Token_id_t>>;
 
 /**
+ * @brief A reader over encoder.json, the one flat JSON object of GPT-2's spellings and ids, read with JSON's escapes
+ *        and each spelling's byte map undone.
+ *
+ * A refusal names the file and the byte offset where the reading stopped: what the object's syntax expected there, the
+ * opening quote of an empty token, or the start of bytes that are not UTF-8 or of a character the byte map does not
+ * carry.
+ */
+class Encoder_reader
+{
+public:
+    /**
+     * @brief Binds the reader to a file's bytes.
+     * @param text The file's bytes.
+     * @param name The file's path, for the refusals.
+     */
+    Encoder_reader(std::string_view text, std::string_view name) noexcept;
+
+    /**
+     * @brief Reads the whole object, its spellings placed by id.
+     * @return The bytes of every token, by id.
+     * @throws std::invalid_argument If the text is not one object of quoted spellings and decimal ids, a spelling is
+     *         empty, is not UTF-8 or holds a character the byte map does not carry, or the ids are not dense from zero.
+     */
+    [[nodiscard]] std::vector<std::string> read();
+
+private:
+    /**
+     * @brief Consumes a symbol after white space or refuses, naming what the syntax expected.
+     * @param symbol The symbol required.
+     * @param expected What the syntax expected, for the refusal.
+     * @throws std::invalid_argument If the symbol does not stand there.
+     */
+    void expect(char symbol, std::string_view expected);
+
+    /**
+     * @brief Skips the white space at the current position, the space, tab, line feed and carriage return JSON allows.
+     */
+    void skip_space() noexcept;
+
+    /**
+     * @brief Refuses the file at the current position.
+     * @param expected What the syntax expected there.
+     * @throws std::invalid_argument Always.
+     */
+    [[noreturn]] void fail(std::string_view expected) const;
+
+    /**
+     * @brief Consumes a symbol after white space when it stands there.
+     * @param symbol The symbol.
+     * @return True when it stood there and was consumed.
+     */
+    [[nodiscard]] bool accept(char symbol) noexcept;
+
+    /**
+     * @brief Reads the object's members up to its closing brace: quoted spellings and their ids, separated by commas.
+     * @return Every spelling with its id, in the file's order.
+     * @throws std::invalid_argument If a member is not a quoted spelling, a colon and an id, a spelling is empty, is
+     *         not UTF-8 or holds a character the byte map does not carry, or the members are not closed by a brace.
+     */
+    [[nodiscard]] Entries_t members();
+
+    /**
+     * @brief Reads a quoted spelling, each character's byte map undone.
+     * @return The spelling's bytes, at least one.
+     * @throws std::invalid_argument If no quote opens or closes it, an escape is not JSON's, its bytes are not UTF-8,
+     *         a character is one the byte map does not carry, or it is empty.
+     */
+    [[nodiscard]] std::string spelling();
+
+    /**
+     * @brief Reads one character of a spelling, raw as UTF-8 or as a JSON escape.
+     * @return The character's code point.
+     * @throws std::invalid_argument If an escape is not JSON's or the bytes are not UTF-8.
+     */
+    [[nodiscard]] char32_t character();
+
+    /**
+     * @brief Reads a JSON escape after its backslash.
+     * @return The code point the escape stands for.
+     * @throws std::invalid_argument If the escape is not JSON's.
+     */
+    [[nodiscard]] char32_t escaped();
+
+    /**
+     * @brief Reads a `\uXXXX` escape after its backslash, four hexadecimal digits after the `u`.
+     * @return The code point the escape stands for.
+     * @throws std::invalid_argument If the escape is not `u` and four hexadecimal digits.
+     */
+    [[nodiscard]] char32_t hex_escape();
+
+    /**
+     * @brief Reads a decimal id after white space, as Python's json reads a JSON number as a non-negative integer:
+     *        `-?(0|[1-9][0-9]*)` with no fraction and no exponent, its value at most the 32 bits of an id and zero
+     *        when the minus sign stands, so that `-0` is zero; a fraction, an exponent or a digit after a leading
+     *        zero is left unread and refused by the syntax after it.
+     * @return The id.
+     * @throws std::invalid_argument If no such number stands there.
+     */
+    [[nodiscard]] Token_id_t id();
+
+    /**
+     * @brief Returns the spellings placed by id.
+     * @param entries Every spelling with its id.
+     * @return The bytes of every token, by id.
+     * @throws std::invalid_argument If the ids are not dense from zero.
+     */
+    [[nodiscard]] std::vector<std::string> by_id(Entries_t entries) const;
+
+    /**
+     * @brief The file's bytes.
+     */
+    std::string_view text_;
+
+    /**
+     * @brief The file's path, for the refusals.
+     */
+    std::string_view name_;
+
+    /**
+     * @brief The current position, a byte offset into the text.
+     */
+    std::size_t at_{0};
+};
+
+/**
  * @brief Returns whether a byte stands for itself in GPT-2's byte map: the printable bytes `!` to `~`, `¡` to `¬` and
  *        `®` to `ÿ`, as encoder.py's bytes_to_unicode() lists them.
  * @param byte The byte.
@@ -250,131 +375,6 @@ constexpr Byte_map_t byte_map{byte_map_of()};
             "read_gpt2: {} holds U+{:04X}, which GPT-2's byte map does not carry", where,
             static_cast<std::uint32_t>(character))};
 }
-
-/**
- * @brief A reader over encoder.json, the one flat JSON object of GPT-2's spellings and ids, read with JSON's escapes
- *        and each spelling's byte map undone.
- *
- * A refusal names the file and the byte offset where the reading stopped: what the object's syntax expected there, the
- * opening quote of an empty token, or the start of bytes that are not UTF-8 or of a character the byte map does not
- * carry.
- */
-class Encoder_reader
-{
-public:
-    /**
-     * @brief Binds the reader to a file's bytes.
-     * @param text The file's bytes.
-     * @param name The file's path, for the refusals.
-     */
-    Encoder_reader(std::string_view text, std::string_view name) noexcept;
-
-    /**
-     * @brief Reads the whole object, its spellings placed by id.
-     * @return The bytes of every token, by id.
-     * @throws std::invalid_argument If the text is not one object of quoted spellings and decimal ids, a spelling is
-     *         empty, is not UTF-8 or holds a character the byte map does not carry, or the ids are not dense from zero.
-     */
-    [[nodiscard]] std::vector<std::string> read();
-
-private:
-    /**
-     * @brief Consumes a symbol after white space or refuses, naming what the syntax expected.
-     * @param symbol The symbol required.
-     * @param expected What the syntax expected, for the refusal.
-     * @throws std::invalid_argument If the symbol does not stand there.
-     */
-    void expect(char symbol, std::string_view expected);
-
-    /**
-     * @brief Skips the white space at the current position, the space, tab, line feed and carriage return JSON allows.
-     */
-    void skip_space() noexcept;
-
-    /**
-     * @brief Refuses the file at the current position.
-     * @param expected What the syntax expected there.
-     * @throws std::invalid_argument Always.
-     */
-    [[noreturn]] void fail(std::string_view expected) const;
-
-    /**
-     * @brief Consumes a symbol after white space when it stands there.
-     * @param symbol The symbol.
-     * @return True when it stood there and was consumed.
-     */
-    [[nodiscard]] bool accept(char symbol) noexcept;
-
-    /**
-     * @brief Reads the object's members up to its closing brace: quoted spellings and their ids, separated by commas.
-     * @return Every spelling with its id, in the file's order.
-     * @throws std::invalid_argument If a member is not a quoted spelling, a colon and an id, a spelling is empty, is
-     *         not UTF-8 or holds a character the byte map does not carry, or the members are not closed by a brace.
-     */
-    [[nodiscard]] Entries_t members();
-
-    /**
-     * @brief Reads a quoted spelling, each character's byte map undone.
-     * @return The spelling's bytes, at least one.
-     * @throws std::invalid_argument If no quote opens or closes it, an escape is not JSON's, its bytes are not UTF-8,
-     *         a character is one the byte map does not carry, or it is empty.
-     */
-    [[nodiscard]] std::string spelling();
-
-    /**
-     * @brief Reads one character of a spelling, raw as UTF-8 or as a JSON escape.
-     * @return The character's code point.
-     * @throws std::invalid_argument If an escape is not JSON's or the bytes are not UTF-8.
-     */
-    [[nodiscard]] char32_t character();
-
-    /**
-     * @brief Reads a JSON escape after its backslash.
-     * @return The code point the escape stands for.
-     * @throws std::invalid_argument If the escape is not JSON's.
-     */
-    [[nodiscard]] char32_t escaped();
-
-    /**
-     * @brief Reads a `\uXXXX` escape after its backslash, four hexadecimal digits after the `u`.
-     * @return The code point the escape stands for.
-     * @throws std::invalid_argument If the escape is not `u` and four hexadecimal digits.
-     */
-    [[nodiscard]] char32_t hex_escape();
-
-    /**
-     * @brief Reads a decimal id after white space, as Python's json reads a JSON number as a non-negative integer:
-     *        `-?(0|[1-9][0-9]*)` with no fraction and no exponent, its value at most the 32 bits of an id and zero
-     *        when the minus sign stands, so that `-0` is zero; a fraction, an exponent or a digit after a leading
-     *        zero is left unread and refused by the syntax after it.
-     * @return The id.
-     * @throws std::invalid_argument If no such number stands there.
-     */
-    [[nodiscard]] Token_id_t id();
-
-    /**
-     * @brief Returns the spellings placed by id.
-     * @param entries Every spelling with its id.
-     * @return The bytes of every token, by id.
-     * @throws std::invalid_argument If the ids are not dense from zero.
-     */
-    [[nodiscard]] std::vector<std::string> by_id(Entries_t entries) const;
-
-    /**
-     * @brief The file's bytes.
-     */
-    std::string_view text_;
-
-    /**
-     * @brief The file's path, for the refusals.
-     */
-    std::string_view name_;
-
-    /**
-     * @brief The current position, a byte offset into the text.
-     */
-    std::size_t at_{0};
-};
 
 Encoder_reader::Encoder_reader(const std::string_view text, const std::string_view name) noexcept
     : text_{text}, name_{name}
@@ -622,9 +622,11 @@ void require_distinct_spellings(const std::span<const std::string> spellings, co
 
         if (!inserted)
         {
+            const auto& [spelling, listed_id]{*listed};
+
             throw std::invalid_argument{std::format(
                     "read_gpt2: the token at id {} of {} repeats the spelling of the token at id {}", id, name,
-                    listed->second)};
+                    listed_id)};
         }
     }
 }
@@ -676,12 +678,19 @@ void require_distinct_spellings(const std::span<const std::string> spellings, co
 {
     const auto decoded{character_at(line, at)};
 
-    if (!decoded || !std::ranges::contains(separators, decoded->first))
+    if (!decoded)
     {
         return 0;
     }
 
-    return decoded->second;
+    const auto [character, length]{*decoded};
+
+    if (!std::ranges::contains(separators, character))
+    {
+        return 0;
+    }
+
+    return length;
 }
 
 /**
@@ -906,11 +915,13 @@ void require_parts_formed_first(const std::span<const munch::verifier::Merge> me
 
         if (!inserted)
         {
+            const auto& [listed_pair, listed_rank]{*listed};
+
             const auto line{rank + first_merge_line};
 
             throw std::invalid_argument{std::format(
                     "read_gpt2: the merge ({}, {}) at rank {}, line {} of {}, repeats the merge at rank {}",
-                    quoted_part(left), quoted_part(right), rank, line, name, listed->second)};
+                    quoted_part(left), quoted_part(right), rank, line, name, listed_rank)};
         }
 
         auto product{left + right};
@@ -926,7 +937,14 @@ void require_parts_formed_first(const std::span<const munch::verifier::Merge> me
         {
             const auto forming{formed.find(part)};
 
-            if (forming == formed.end() || forming->second < rank)
+            if (forming == formed.end())
+            {
+                continue;
+            }
+
+            const auto& [product, forming_rank]{*forming};
+
+            if (forming_rank < rank)
             {
                 continue;
             }
@@ -936,7 +954,7 @@ void require_parts_formed_first(const std::span<const munch::verifier::Merge> me
             throw std::invalid_argument{std::format(
                     "read_gpt2: the merge ({}, {}) at rank {}, line {} of {}, has the part {}, which the merge at "
                     "rank {} forms",
-                    quoted_part(left), quoted_part(right), rank, line, name, quoted_part(part), forming->second)};
+                    quoted_part(left), quoted_part(right), rank, line, name, quoted_part(part), forming_rank)};
         }
     }
 }

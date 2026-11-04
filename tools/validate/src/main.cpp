@@ -438,6 +438,14 @@ void write_text(
 
 } // namespace
 
+/**
+ * @brief Runs the validator: reads the definition, decides its report and writes it to the standard output whole, the
+ *        refusal in its place when the loader refuses the definition, or a diagnostic to the standard error.
+ * @param argc The argument count.
+ * @param argv The arguments: the options and the definition's file, as the usage text gives them.
+ * @return EXIT_SUCCESS when the definition was read and reported, EXIT_FAILURE when it was refused, and 2 on a
+ *         command-line error or on a file or an input the command cannot read.
+ */
 int main(const int argc, char** argv)
 {
     const std::vector<std::string_view> arguments{argv + 1, argv + argc};

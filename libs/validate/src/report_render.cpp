@@ -174,7 +174,7 @@ template <typename Items, typename One>
 
 /**
  * @brief Returns the windows' rows of one table: the count, by width ascending, and the first few as examples,
- *        printable windows first, since a reader recognises those.
+ *        printable windows first, since a reader recognizes those.
  * @param table The window table.
  * @return The rows.
  */
@@ -218,12 +218,16 @@ template <typename Items, typename One>
 
     for (const auto& [window, origin] : examples | std::views::take(shown_examples))
     {
-        out += row("", std::format("{} at {}", shown(window), origin));
+        const auto example{std::format("{} at {}", shown(window), origin)};
+
+        out += row("", example);
     }
 
     if (windows.size() > shown_examples)
     {
-        out += row("", std::format("... {} more", windows.size() - shown_examples));
+        const auto more{std::format("... {} more", windows.size() - shown_examples)};
+
+        out += row("", more);
     }
 
     return out;
@@ -290,12 +294,16 @@ template <typename Items, typename One>
     {
         const auto supremum{std::get<std::size_t>(gap)};
 
-        return row("boundary gap", std::format("{} code point{}", supremum, plural(supremum)));
+        const auto value{std::format("{} code point{}", supremum, plural(supremum))};
+
+        return row("boundary gap", value);
     }
 
     const auto& [stem, loop, suffix]{std::get<munch::verifier::Lasso>(gap)};
 
-    return row("boundary gap", std::format("unbounded: {} repeats with no boundary", shown(loop.bytes)));
+    const auto value{std::format("unbounded: {} repeats with no boundary", shown(loop.bytes))};
+
+    return row("boundary gap", value);
 }
 
 /**
@@ -498,7 +506,9 @@ std::string json(const Report& report)
         out += std::format(R"({}  "{}": {})", separator, key, value);
     }};
 
-    member("verdict", json_byte_string(verdict(report)));
+    const auto verdict_json{json_byte_string(verdict(report))};
+
+    member("verdict", verdict_json);
 
     member("factorization", json_table(factorization));
 

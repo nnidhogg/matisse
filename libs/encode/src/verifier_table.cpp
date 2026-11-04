@@ -1,5 +1,6 @@
 #include "matisse/encode/verifier_table.hpp"
 
+#include <array>
 #include <cstddef>
 #include <ranges>
 #include <vector>
@@ -12,31 +13,34 @@ Verifier_table::Verifier_table(const munch::verifier::Verifier& verifier, const 
     , accepting_(verifier.state_count())
     , dead_ends_(verifier.state_count())
 {
+    constexpr std::array boundaries{false, true};
+
+    const auto marks{std::views::cartesian_product(std::views::enumerate(alphabet.symbols), boundaries)};
+
     for (munch::verifier::Verifier::State_t state{0}; state < verifier.state_count(); ++state)
     {
         auto moves{false};
 
-        for (const auto [symbol_class, symbol] : std::views::enumerate(alphabet.symbols))
+        for (const auto [class_and_symbol, boundary_after] : marks)
         {
-            for (const auto boundary_after : {false, true})
+            const auto [symbol_class, symbol]{class_and_symbol};
+
+            const munch::verifier::Marked marked{
+                    .byte = static_cast<unsigned char>(symbol),
+                    .boundary_after = boundary_after};
+
+            const auto next{verifier.step(state, marked)};
+
+            if (!next)
             {
-                const munch::verifier::Marked marked{
-                        .byte = static_cast<unsigned char>(symbol),
-                        .boundary_after = boundary_after};
-
-                const auto next{verifier.step(state, marked)};
-
-                if (!next)
-                {
-                    continue;
-                }
-
-                const auto at{(state * class_count_ + static_cast<std::size_t>(symbol_class)) * 2 + boundary_after};
-
-                next_[at] = static_cast<State_t>(*next);
-
-                moves = true;
+                continue;
             }
+
+            const auto at{(state * class_count_ + static_cast<std::size_t>(symbol_class)) * 2 + boundary_after};
+
+            next_[at] = static_cast<State_t>(*next);
+
+            moves = true;
         }
 
         accepting_[state] = verifier.accepts(state);
