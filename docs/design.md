@@ -693,9 +693,11 @@ segmentation, the pre-tokenization and the byte-pair encoding as three stages, a
 boundaries the stable output is the output of every segment but the last and the stable prefix of the last. They show
 zero delay for the composed pipeline NP-hard, give an algorithm of delay O(mt) in near-linear time, and leave open
 whether byte-pair encoding alone has zero delay. The report *The Left Ripple of Byte-Pair Encoding* answers that for the
-byte-pair stage. The stable prefix of a piece is the common prefix of its merge followed by the empty string and by each
-proper suffix of a token, a finite set, and a zero-delay streamer holds at most the right span radius of the dictionary
-past what it has returned, 129 bytes for GPT-2's table.
+byte-pair stage, for every dictionary and with no tree. On the merge lists of Hayase et al. (arXiv:2506.14123), reading
+the whole common prefix of their covering tree gives the same output at the cost of keeping the tree. The stable prefix
+of a piece is the common prefix of its merge followed by the empty string and by each proper suffix of a token, a finite
+set, and a zero-delay streamer holds at most the right span radius of the dictionary past what it has returned, 129
+bytes for GPT-2's table.
 
 matisse adds the combination and three steps it needs. The split verifier M, built for the report on pre-tokenizer
 certification, decides the pre-token boundaries every continuation keeps exactly and with no delay, where an online

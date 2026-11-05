@@ -32,15 +32,16 @@ cache kept across calls, and a ratio is matisse over the competitor named.
 | A batch of enwik9's pages, 24 threads    | 1.53x the crate                          | 1.65x the crate              | 822.1 MiB/s, 1.71x the crate                  | 870.0 MiB/s, 5.80x tiktoken's core   |
 | One text in parallel, enwik9, 24 workers | 557.5 MiB/s, 10.95x the crate's one call | 626.1 MiB/s, 13.18x          | 541.0 MiB/s, 11.58x                           | 585.1 MiB/s, 17.89x tiktoken's core  |
 
-No competitor encodes one text on more than one thread, so the last row stands beside each one's single call. Against
-the Python packages the leads are wider: in the batch under GPT-2 and cl100k matisse runs at 9.94 and 9.80 times
-tiktoken's fastest call from Python and at 24.78 and 22.77 times Hugging Face's crate, and under o200k and Llama 3 at
-9.82 and 9.84 times tiktoken's kept pool and 25.45 and 26.85 times Hugging Face's fastest. The exactness section is what
-the speeds rest on: on every corpus each competitor ran on, matisse's ids equal the vendors' by digest. Two cells trail
-a competitor, both under o200k and both against the bpe crate, Arabic on one core at 0.96 times the crate's rate and the
-prompt with a cache of its own, 33.88 microseconds against the crate's 28.81, while with a kept cache matisse's 26.26 is
-below it. Chinese under Llama 3, which trailed tiktoken's core at 0.87 times in the section on o200k and Llama 3, runs
-at 2.24 times it now that the merge backtracks under Llama 3 as well.
+None of the tools measured here encodes one text on more than one thread, so the last row stands beside each one's
+single call. Tools that do split one text are named under the standing for one long text below and have not been
+measured. Against the Python packages the leads are wider: in the batch under GPT-2 and cl100k matisse runs at 9.94 and
+9.80 times tiktoken's fastest call from Python and at 24.78 and 22.77 times Hugging Face's crate, and under o200k and
+Llama 3 at 9.82 and 9.84 times tiktoken's kept pool and 25.45 and 26.85 times Hugging Face's fastest. The exactness
+section is what the speeds rest on: on every corpus each competitor ran on, matisse's ids equal the vendors' by digest.
+Two cells trail a competitor, both under o200k and both against the bpe crate, Arabic on one core at 0.96 times the
+crate's rate and the prompt with a cache of its own, 33.88 microseconds against the crate's 28.81, while with a kept
+cache matisse's 26.26 is below it. Chinese under Llama 3, which trailed tiktoken's core at 0.87 times in the section on
+o200k and Llama 3, runs at 2.24 times it now that the merge backtracks under Llama 3 as well.
 
 ## **The programs**
 
@@ -1465,13 +1466,15 @@ crate reaches 10.00 and 10.32 times.
 
 ### **The standing, one long text in parallel**
 
-No competitor encodes one text on more than one thread. bpe-openai's `Tokenizer::encode()`, the `encode_ordinary()` and
-`encode()` of tiktoken and tiktoken-rs and Hugging Face's `encode_fast()` encode the whole text on the calling thread,
-and Hugging Face's Rayon pool divides a batch's inputs, never one input. A caller who cuts a text into chunks is sure of
-the serial ids at cuts that are piece boundaries for every possible continuation, which is what matisse's certified
-anchors are, and no competitor gives such cuts. Beside matisse's `encode_parallel()` at 24 workers on enwik9 the
-competitors' figures are therefore their one call on one thread from the single-core stage; Hugging Face was not run on
-enwik9, as above:
+None of the tools measured here encodes one text on more than one thread. bpe-openai's `Tokenizer::encode()`, the
+`encode_ordinary()` and `encode()` of tiktoken and tiktoken-rs and Hugging Face's `encode_fast()` encode the whole text
+on the calling thread, and Hugging Face's Rayon pool divides a batch's inputs, never one input. A caller who cuts a text
+into chunks is sure of the serial ids at cuts that are piece boundaries for every possible continuation, which is what
+matisse's certified anchors are, and none of those tools gives such cuts. Other tools do split one text, and this
+collection has not measured them: Gigatoken, toks, exatok, Delta Tokenizer and Xu's cut each place their cuts by rules
+chosen for the patterns they support, where matisse decides its cuts from the pattern. Beside matisse's
+`encode_parallel()` at 24 workers on enwik9 the competitors' figures are therefore their one call on one thread from the
+single-core stage; Hugging Face was not run on enwik9, as above:
 
 | Encoder                                                    |          gpt2 |        cl100k |
 |------------------------------------------------------------|--------------:|--------------:|
