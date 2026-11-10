@@ -77,6 +77,8 @@ def test_the_special_token_arguments_combine_as_tiktoken_s_do(pair):
         assert ours.encode(text, **arguments) == expected, arguments
         assert ours.encode_to_numpy(text, **arguments).tolist() == expected, arguments
         assert ours.encode_batch([text, text], **arguments) == [expected, expected], arguments
+        arrays = ours.encode_batch_to_numpy([text, text], **arguments)
+        assert [array.tolist() for array in arrays] == [expected, expected], arguments
         assert ours.encode_parallel(text, 3, **arguments) == expected, arguments
         assert ours.encode_parallel_to_numpy(text, 3, **arguments).tolist() == expected, arguments
 

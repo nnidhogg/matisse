@@ -332,15 +332,20 @@ def run_batch(vocab: str, tokenizers: list[str], passes: int, path: str, counts:
     size = sum(len(document.encode("utf-8")) for document in documents)
     for tokenizer in tokenizers:
         ours, theirs = encodings(vocab, tokenizer)
-        for vendor, encoding in (("matisse-py", ours), ("tiktoken", theirs)):
+        calls = [
+            ("matisse-py", "batch", ours.encode_ordinary_batch),
+            ("matisse-py", "batch numpy", functools.partial(ours.encode_batch_to_numpy, disallowed_special=())),
+            ("tiktoken", "batch", theirs.encode_ordinary_batch),
+        ]
+        for vendor, label, call in calls:
             for count in counts:
 
-                def batch(texts: list[str]) -> list[list[int]]:
-                    return encoding.encode_ordinary_batch(texts, num_threads=count)
+                def batch(texts: list[str]) -> list[object]:
+                    return call(texts, num_threads=count)
 
                 ids, seconds = timed(passes, lambda: [fresh(document) for document in documents], batch, flat)
                 ids_line(vendor, tokenizer, name, ids)
-                row(vendor, tokenizer, f"batch x{count}", name, size, seconds, len(ids))
+                row(vendor, tokenizer, f"{label} x{count}", name, size, seconds, len(ids))
 
 
 def run_threads(vocab: str, tokenizers: list[str], passes: int, path: str, counts: list[int]) -> None:

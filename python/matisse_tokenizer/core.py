@@ -114,7 +114,6 @@ class Encoding:
             special_tokens: The special tokens' spellings with their ids.
         """
         self.name = name
-        self._source = source
         self._pat_str = source.pat_str
         self._special_tokens = dict(special_tokens)
         self._registered = False
@@ -124,6 +123,16 @@ class Encoding:
         by_id = sorted(self._special_tokens.items(), key=lambda item: item[1])
         self._definition = _core.read_tiktoken(os.fspath(path), by_id)
 
+        ordinary = self._definition.ordinary_count
+        for spelling, token in by_id:
+            if not spelling or token < ordinary:
+                raise ValueError(
+                    f"the special token {spelling!r} with the id {token} is empty or has an ordinary token's id, which "
+                    f"matisse's encoder refuses"
+                )
+        self.max_token_value = max(ordinary - 1, max(self._special_tokens.values(), default=0))
+        self._special_token_values = set(self._special_tokens.values())
+
         self._report_shipped = digest == source.sha256
         if self._report_shipped:
             text = (resources.files("matisse_tokenizer") / "reports" / f"{source.tokenizer}.report").read_bytes()
@@ -131,15 +140,6 @@ class Encoding:
         else:
             self._report = _core.validate(source.tokenizer, source.width)
 
-        ordinary = self._definition.ordinary_count
-        self.max_token_value = max(ordinary - 1, max(self._special_tokens.values(), default=0))
-        self._special_token_values = set(self._special_tokens.values())
-        for spelling, token in self._special_tokens.items():
-            if not spelling or token < ordinary:
-                raise ValueError(
-                    f"the special token {spelling!r} with the id {token} is empty or has an ordinary token's id, which "
-                    f"matisse's encoder refuses"
-                )
         self._encoder = _core.Encoder(self._definition, self._report, [])
         self._local = threading.local()
 
@@ -271,6 +271,40 @@ class Encoding:
         for each in text:
             self._check(each, allowed, disallowed_special)
         return self._encode_batch(text, allowed, num_threads)
+
+    def encode_batch_to_numpy(
+        self,
+        text: list[str],
+        *,
+        num_threads: int = 8,
+        allowed_special: Literal["all"] | Set[str] = frozenset(),
+        disallowed_special: Literal["all"] | Collection[str] = "all",
+    ) -> list[npt.NDArray[np.uint32]]:
+        """Returns the ids of every text as encode_batch() returns them, each as a NumPy array of unsigned 32-bit
+        integers.
+
+        This call is matisse's and not tiktoken's. No Python integer is made per id, which on a batch costs more than
+        the encoding on many threads. A lone surrogate is refused, as encode_to_numpy() refuses it.
+
+        Args:
+            text: The texts.
+            num_threads: The threads of the pool.
+            allowed_special: As for encode().
+            disallowed_special: As for encode().
+
+        Returns:
+            An array of the ids of each text, in the texts' order.
+
+        Raises:
+            ValueError: If a text holds the spelling of a disallowed special token, or num_threads is not positive.
+            UnicodeEncodeError: If a text holds a lone surrogate.
+        """
+        allowed = self._allowed(allowed_special)
+        for each in text:
+            self._check(each, allowed, disallowed_special)
+        if num_threads <= 0:
+            raise ValueError("max_workers must be greater than 0")
+        return self._encode_batch_stretches(list(text), allowed, num_threads, arrays=True)
 
     def encode_parallel(
         self,
@@ -775,13 +809,16 @@ class Encoding:
         except UnicodeEncodeError:
             return self._encode_batch_stretches([_without_surrogates(each) for each in texts], allowed, num_threads)
 
-    def _encode_batch_stretches(self, texts: list[str], allowed: frozenset[str], num_threads: int) -> list[list[int]]:
+    def _encode_batch_stretches(
+        self, texts: list[str], allowed: frozenset[str], num_threads: int, arrays: bool = False
+    ) -> list[list[int]] | list[npt.NDArray[np.uint32]]:
         """Returns the ids of every text with special tokens allowed, the stretches of every text encoded as one batch.
 
         Args:
             texts: The texts.
             allowed: The spellings allowed.
             num_threads: The threads of the pool.
+            arrays: Whether each text's ids are a NumPy array rather than a list.
 
         Returns:
             The ids of each text.
@@ -789,19 +826,37 @@ class Encoding:
         Raises:
             UnicodeEncodeError: If a text holds a lone surrogate.
         """
+        batch = self._encoder.encode_batch_to_numpy if arrays else self._encoder.encode_batch
         if not allowed:
-            return self._encoder.encode_batch(texts, num_threads)
+            return batch(texts, num_threads)
         splits = [self._split(text, allowed) for text in texts]
         flat = [stretch for stretches, _ in splits for stretch in stretches]
-        encoded = iter(self._encoder.encode_batch(flat, num_threads))
+        encoded = iter(batch(flat, num_threads))
         result = []
         for _, specials in splits:
-            ids = next(encoded)
+            parts = [next(encoded)]
             for special in specials:
-                ids.append(special)
-                ids += next(encoded)
-            result.append(ids)
+                parts.append([special])
+                parts.append(next(encoded))
+            result.append(_joined(parts, arrays))
         return result
+
+
+def _joined(parts: list[object], arrays: bool) -> list[int] | npt.NDArray[np.uint32]:
+    """Returns the ids of a text's stretches and special tokens joined, as a list or as a NumPy array.
+
+    Args:
+        parts: The ids of each stretch and each special token, in order.
+        arrays: Whether the ids are joined into a NumPy array rather than a list.
+
+    Returns:
+        The ids.
+    """
+    if not arrays:
+        return [token for part in parts for token in part]
+    import numpy
+
+    return numpy.concatenate([numpy.asarray(part, dtype=numpy.uint32) for part in parts])
 
 
 def _without_surrogates(text: str) -> str:

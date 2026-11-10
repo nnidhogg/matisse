@@ -292,38 +292,33 @@ void construct_cache(matisse::encode::Piece_cache* cache, const matisse::encode:
 }
 
 /**
- * @brief Returns the ids of a text, with a piece cache the caller keeps when one is given.
+ * @brief Returns the ids of a text, with a piece cache the calling thread keeps across its calls.
  * @param encoder The encoder.
  * @param text The text.
- * @param cache The cache, made for this encoder, or none.
+ * @param cache The cache, made for this encoder.
  * @return The ids.
  * @throws std::invalid_argument If the cache was made for another encoder.
  * @throws nb::python_error If the text holds a lone surrogate.
  */
 [[nodiscard]] Ids_t encode_ids(
-        const matisse::encode::Encoder& encoder, const nb::str& text, matisse::encode::Piece_cache* cache)
+        const matisse::encode::Encoder& encoder, const nb::str& text, matisse::encode::Piece_cache& cache)
 {
     const auto view{utf8_of(text)};
 
-    if (cache == nullptr)
-    {
-        return released([&] { return encoder.encode(view); });
-    }
-
-    return released([&] { return encoder.encode(view, *cache); });
+    return released([&] { return encoder.encode(view, cache); });
 }
 
 /**
- * @brief Returns the ids of a text as a NumPy array, with a piece cache the caller keeps when one is given.
+ * @brief Returns the ids of a text as a NumPy array, with a piece cache the calling thread keeps across its calls.
  * @param encoder The encoder.
  * @param text The text.
- * @param cache The cache, made for this encoder, or none.
+ * @param cache The cache, made for this encoder.
  * @return The ids.
  * @throws std::invalid_argument If the cache was made for another encoder.
  * @throws nb::python_error If the text holds a lone surrogate.
  */
 [[nodiscard]] Id_array_t encode_array(
-        const matisse::encode::Encoder& encoder, const nb::str& text, matisse::encode::Piece_cache* cache)
+        const matisse::encode::Encoder& encoder, const nb::str& text, matisse::encode::Piece_cache& cache)
 {
     return array_of(encode_ids(encoder, text, cache));
 }
@@ -369,7 +364,7 @@ void construct_cache(matisse::encode::Piece_cache* cache, const matisse::encode:
  * @throws nb::python_error If an item is not a string or holds a lone surrogate.
  * @throws std::invalid_argument If a text is refused, the first refusal rethrown once every thread has joined.
  */
-[[nodiscard]] std::vector<Ids_t> encode_batch(
+[[nodiscard]] std::vector<Ids_t> batch_ids(
         const matisse::encode::Encoder& encoder, const nb::list& texts, const std::size_t threads)
 {
     // The strings are held here, so that the bytes read survive a change to the list while the lock is released.
@@ -435,6 +430,46 @@ void construct_cache(matisse::encode::Piece_cache* cache, const matisse::encode:
 }
 
 /**
+ * @brief Returns the ids of every text of a batch as lists, encoded as batch_ids() encodes them.
+ * @param encoder The encoder.
+ * @param texts The texts.
+ * @param threads The threads of the pool, at least one.
+ * @return The ids of each text, in the texts' order.
+ * @throws nb::python_error If an item is not a string or holds a lone surrogate.
+ * @throws std::invalid_argument If a text is refused.
+ */
+[[nodiscard]] std::vector<Ids_t> encode_batch(
+        const matisse::encode::Encoder& encoder, const nb::list& texts, const std::size_t threads)
+{
+    return batch_ids(encoder, texts, threads);
+}
+
+/**
+ * @brief Returns the ids of every text of a batch as NumPy arrays, encoded as batch_ids() encodes them, so that no
+ *        Python integer is made per id.
+ * @param encoder The encoder.
+ * @param texts The texts.
+ * @param threads The threads of the pool, at least one.
+ * @return An array of the ids of each text, in the texts' order.
+ * @throws nb::python_error If an item is not a string or holds a lone surrogate.
+ * @throws std::invalid_argument If a text is refused.
+ */
+[[nodiscard]] nb::list encode_batch_arrays(
+        const matisse::encode::Encoder& encoder, const nb::list& texts, const std::size_t threads)
+{
+    auto encoded{batch_ids(encoder, texts, threads)};
+
+    nb::list arrays{};
+
+    for (auto& ids : encoded)
+    {
+        arrays.append(array_of(std::move(ids)));
+    }
+
+    return arrays;
+}
+
+/**
  * @brief Returns the bytes a run of ids spells, raw.
  * @param encoder The encoder.
  * @param tokens The ids, an iterable of integers.
@@ -480,14 +515,16 @@ NB_MODULE(_core, module)
 
     nb::class_<matisse::encode::Encoder>(module, "Encoder", "matisse's encoder under the factorization inventory.")
             .def("__init__", &construct_encoder, nb::arg("definition"), nb::arg("report"), nb::arg("allowed"))
-            .def("encode", &encode_ids, nb::arg("text"), nb::arg("cache").none(), "The ids of a text.")
-            .def("encode_to_numpy", &encode_array, nb::arg("text"), nb::arg("cache").none(), "The ids as an array.")
+            .def("encode", &encode_ids, nb::arg("text"), nb::arg("cache"), "The ids of a text.")
+            .def("encode_to_numpy", &encode_array, nb::arg("text"), nb::arg("cache"), "The ids as an array.")
             .def("encode_parallel", &encode_parallel_ids, nb::arg("text"), nb::arg("chunks"),
                  "The ids of a text encoded in chunks at certified cuts.")
             .def("encode_parallel_to_numpy", &encode_parallel_array, nb::arg("text"), nb::arg("chunks"),
                  "The ids of a text encoded in chunks at certified cuts, as an array.")
             .def("encode_batch", &encode_batch, nb::arg("texts"), nb::arg("threads"),
                  "The ids of every text, encoded by a pool of threads.")
+            .def("encode_batch_to_numpy", &encode_batch_arrays, nb::arg("texts"), nb::arg("threads"),
+                 "The ids of every text, encoded by a pool of threads, as arrays.")
             .def("decode_bytes", &decode_bytes, nb::arg("tokens"), "The bytes a run of ids spells.");
 
     nb::class_<matisse::encode::Piece_cache>(module, "Piece_cache", "A piece cache one thread keeps across its calls.")

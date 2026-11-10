@@ -35,9 +35,10 @@ mkdir -p "$out"
 
 "$python" -I "$here/bench.py" short "$corpora/prompts.txt" "$out/short.txt" 48
 
-for corpus in gutenberg.txt wiki-zh.txt wiki-ru.txt; do
-    taskset -c 2 "$bench" single "$vocab" $all 5 "$corpora/$corpus" > "$out/cpp-single-$corpus.txt"
-    taskset -c 2 "$python" -I "$here/bench.py" single "$vocab" $all 5 "$corpora/$corpus" > "$out/py-single-$corpus.txt"
+for corpus in gutenberg wiki-zh wiki-ru; do
+    taskset -c 2 "$bench" single "$vocab" $all 5 "$corpora/$corpus.txt" > "$out/cpp-single-$corpus.txt"
+    taskset -c 2 "$python" -I "$here/bench.py" single "$vocab" $all 5 "$corpora/$corpus.txt" \
+        > "$out/py-single-$corpus.txt"
 done
 
 taskset -c 2 "$bench" single "$vocab" $all 3 "$large/enwik8" > "$out/cpp-single-enwik8.txt"

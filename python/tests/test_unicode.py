@@ -150,6 +150,16 @@ def test_matisse_and_tiktoken_agree_at_every_code_point_15_assigns(pair):
     assert ours.encode_ordinary_batch(texts) == theirs.encode_ordinary_batch(texts)
 
 
+def test_a_hieroglyph_of_16_and_a_contraction_after_it_are_read_apart_by_the_two_tables(pairs):
+    if "gpt2" not in pairs:
+        pytest.skip("the vocabulary does not hold gpt2")
+    ours, theirs = pairs["gpt2"]
+    text = "\U0001406b'd"
+    # matisse reads the hieroglyph as the other class, one piece with the apostrophe; tiktoken reads it as a letter.
+    assert ours.decode_tokens_bytes(ours.encode_ordinary(text))[-2:] == [b"'", b"d"]
+    assert theirs.decode_tokens_bytes(theirs.encode_ordinary(text))[-1:] == [b"'d"]
+
+
 def derive_assigned_after_15(directory: pathlib.Path) -> list[tuple[int, int, str, str]]:
     """Derives ASSIGNED_AFTER_15 from the UnicodeData.txt of 16.0.0 and 17.0.0 and the running Python's unicodedata,
     which must be of 15.0.0, as Python 3.12's is.

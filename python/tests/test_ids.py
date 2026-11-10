@@ -162,7 +162,10 @@ def test_seeded_random_texts_encode_as_tiktoken_encodes_them(pair):
     for text in texts:
         expect_same(ours, theirs, text)
     assert ours.encode_ordinary_batch(texts, num_threads=4) == theirs.encode_ordinary_batch(texts, num_threads=4)
-    assert ours.encode_batch(texts, allowed_special="all") == theirs.encode_batch(texts, allowed_special="all")
+    every = theirs.encode_batch(texts, allowed_special="all")
+    assert ours.encode_batch(texts, allowed_special="all") == every
+    arrays = ours.encode_batch_to_numpy(texts, allowed_special="all", num_threads=4)
+    assert [array.tolist() for array in arrays] == every
 
 
 def test_adversarial_texts_encode_as_tiktoken_encodes_them(pair):
