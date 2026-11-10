@@ -6,6 +6,7 @@ project(matisse_validate)
 add_library(${PROJECT_NAME}
         src/report.cpp
         src/report_render.cpp
+        src/report_serial.cpp
         src/supply.cpp
 )
 

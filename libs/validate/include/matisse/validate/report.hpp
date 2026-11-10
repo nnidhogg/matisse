@@ -14,17 +14,19 @@
 /**
  * @file
  * @brief The validator's report, Report, decided by validate(): which class windows of a definition's pattern certify a
- *        cut, at which origin and with which right context; and the report rendered as text, render(), and as JSON,
- *        json(), with text as a JSON string, json_string(), and the ending a noun takes for a count, plural().
+ *        cut, at which origin and with which right context; the report rendered as text, render(), and as JSON,
+ *        json(), with text as a JSON string, json_string(), and the ending a noun takes for a count, plural(); and the
+ *        report written as text, serialize(), and read back, deserialize().
  *
  * validate() decides every class window of width two to a width, five unless told, under both certificates, the policy
  * certificate of munch::verifier::miscovering() on the split verifier, decided for every window in one walk, and the
  * factorization certificate by is_split_window() on the factorization lexer; each window table carries the right
  * context its inventory needs, decided by munch::verifier::right_context() on the split verifier, and the report
  * carries boundary_gap() of the split verifier. A window is a string of class symbols and its origin counts code
- * points, as the pattern's alphabet classes a text. render() and json() follow munch-audit's report renderings. Two
- * units implement it, as munch-audit's report is implemented: report.cpp decides and report_render.cpp writes what was
- * decided. supply.hpp measures a report's anchors on an input.
+ * points, as the pattern's alphabet classes a text. render() and json() follow munch-audit's report renderings. Three
+ * units implement it: report.cpp decides and report_render.cpp writes what was decided, as munch-audit's report is
+ * implemented, and report_serial.cpp writes a report as text and reads it back, so that a process holding a pinned
+ * pattern's report need not decide it. supply.hpp measures a report's anchors on an input.
  */
 namespace matisse::validate
 {
@@ -109,9 +111,10 @@ struct Window_table
  * @brief What validate() decides of a pattern: its window table under each certificate and the boundary gap of its
  *        split verifier, with the pattern they were decided of.
  *
- * validate() is the only construction path and every member is const, so a report holds the pattern its window tables
- * were decided of for as long as it lives, and an encoder or a supply built from it reads that pattern. A report is
- * copied and moved whole, a move copying its members, and is never assigned to.
+ * validate() decides a report and deserialize() reads back one that serialize() wrote, the only two construction paths,
+ * and every member is const, so a report holds for as long as it lives the pattern its window tables were decided of,
+ * on its caller's word when deserialize() read it, and an encoder or a supply built from it reads that pattern. A
+ * report is copied and moved whole, a move copying its members, and is never assigned to.
  */
 struct Report
 {
@@ -137,9 +140,11 @@ struct Report
     const pretok::Pattern pattern{};
 
 private:
-    // validate() is the only construction path: a report exists exclusively with the pattern its tables were decided
-    // of, so the constructor below stays private and the friendship is the whole public door.
+    // validate() decides a report of its pattern, and deserialize() reads one back from text whose caller vouches that
+    // serialize() wrote it of a report of the pattern given; the constructor stays private and the two are the door.
     friend Report validate(const pretok::Pattern& pattern, std::size_t width);
+
+    friend Report deserialize(std::string_view text, const pretok::Pattern& pattern);
 
     /**
      * @brief Constructs a report of a pattern from what was decided of it.
@@ -196,6 +201,36 @@ private:
  * @return The JSON text, no trailing newline.
  */
 [[nodiscard]] std::string json(const Report& report);
+
+/**
+ * @brief Writes a report as the text deserialize() reads back: the pattern's class symbols, the boundary gap, and each
+ *        window table with its width, its right context, its failing truncations and its windows.
+ *
+ * The windows of each width are written as one line holding a character for every window of that width, in the order
+ * the class symbols give: the digit of its certified origin, or `-` for a window not certified. A marked string is its
+ * bytes in hex and its boundaries as `0` and `1`, each `-` when empty. The text is plain ASCII, one fact per line, as
+ * the fixtures are written. It serves the Python package, which writes the reports of the pinned tokenizers when it is
+ * built and reads them back in every process instead of deciding them, and is not part of matisse's stable surface.
+ * @param report The report.
+ * @return The text, a newline after every line.
+ * @throws std::invalid_argument If a table is wider than nine symbols, whose origins one digit does not hold.
+ */
+[[nodiscard]] std::string serialize(const Report& report);
+
+/**
+ * @brief Reads back a report of a pattern from the text serialize() wrote of it, holding a copy of the pattern.
+ *
+ * It checks that the text has serialize()'s form and that its class symbols are the pattern's, and not that its windows
+ * are certified, which only deciding them shows: the report returned is the one the text was written of when
+ * serialize() wrote the text of a report validate() decided of this pattern, and the caller vouches for that. It serves
+ * the Python package and is not part of matisse's stable surface.
+ * @param text The text.
+ * @param pattern The pattern the report was decided of.
+ * @return The report.
+ * @throws std::invalid_argument If the text is not as serialize() writes it or its class symbols are not the pattern's;
+ *         the message names the line.
+ */
+[[nodiscard]] Report deserialize(std::string_view text, const pretok::Pattern& pattern);
 
 /**
  * @brief Returns text as a JSON string, the quote, the backslash and the controls escaped; a byte beyond ASCII stands

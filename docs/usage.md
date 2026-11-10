@@ -109,9 +109,9 @@ o200k's report to width three. Decide a report once per pattern, since it serves
 A report holds the `factorization` and the `policy` window tables, the boundary `gap` of the pattern's verifier, and the
 `pattern` it was decided of. A `Window_table` holds its `inventory`, the `width` decided, the certified `windows`, each
 a `Certified_window` of class symbols and the `origin` at which it places a cut, the `right_context` the inventory's
-cuts need, in code points, and a `failing` truncation at every smaller context. A report is made only by `validate()`,
-its members are `const`, and it is copied and moved whole and never assigned to. `render(report)` writes it as text and
-`json(report)` as one JSON object.
+cuts need, in code points, and a `failing` truncation at every smaller context. A report is made only by `validate()`
+and by `deserialize()`, which reads back the text `serialize()` wrote of one; its members are `const`, and it is copied
+and moved whole and never assigned to. `render(report)` writes it as text and `json(report)` as one JSON object.
 
 `validate::supply(report, inventory, input)` measures how many anchors one inventory finds on an input: a `Supply`
 holding the input's `bytes`, the `anchors` with their count, the count per kibibyte and the `gaps` between them (median,

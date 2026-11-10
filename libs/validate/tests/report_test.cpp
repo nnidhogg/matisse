@@ -689,3 +689,69 @@ TEST(Report_test, A_json_string_escapes_the_quote_the_backslash_and_the_controls
     // A byte that begins no well-formed sequence is escaped as the code point of its value.
     EXPECT_EQ(json_string("a\xFF"), R"("a\u00ff")");
 }
+
+TEST(Report_test, A_serialized_report_reads_back_as_the_report_it_was_written_of)
+{
+    for (const auto& pattern : {gated, anchored, single, whole})
+    {
+        for (std::size_t width{1}; width <= 5; ++width)
+        {
+            const auto report{validate(pattern, width)};
+
+            const auto written{serialize(report)};
+
+            const auto read{deserialize(written, pattern)};
+
+            EXPECT_EQ(json(read), json(report)) << written;
+            EXPECT_EQ(serialize(read), written);
+            EXPECT_EQ(read.pattern.alphabet.symbols, pattern.alphabet.symbols);
+        }
+    }
+}
+
+TEST(Report_test, The_serialized_text_holds_every_window_of_a_width_as_one_character_in_the_symbols_order)
+{
+    // Under the gated pattern the windows ab, ba and bb are certified at their second symbol and aa is not, and both
+    // tables need one code point of right context, aab failing with none.
+    EXPECT_EQ(
+            serialize(validate(gated, 2)),
+            "matisse report 1\n"
+            "alphabet 6162\n"
+            "gap unbounded 61 0 61 0 - -\n"
+            "table factorization 2 1\n"
+            "failing 616162 110 1 2 0\n"
+            "windows 2 -111\n"
+            "table policy 2 1\n"
+            "failing 616162 110 1 2 0\n"
+            "windows 2 -111\n");
+}
+
+TEST(Report_test, Deserialize_refuses_a_text_not_as_serialize_writes_it_or_of_another_pattern_s_symbols)
+{
+    const auto written{serialize(validate(gated, 3))};
+
+    const auto refused{[](const std::string& changed, const Pattern& pattern) {
+        EXPECT_THROW(std::ignore = deserialize(changed, pattern), std::invalid_argument) << changed;
+    }};
+
+    const auto replaced{[&written](const std::string_view from, const std::string_view to) {
+        auto changed{written};
+
+        changed.replace(changed.find(from), from.size(), to);
+
+        return changed;
+    }};
+
+    refused(replaced("matisse report 1", "matisse report 2"), gated);
+    refused(replaced("windows 2 -111", "windows 2 -11"), gated);
+    refused(replaced("windows 2 -111", "windows 2 -112"), gated);
+    refused(replaced("table policy", "table factorization"), gated);
+    refused(written.substr(0, written.size() - 1), gated);
+    refused(written + "windows 2 -111\n", gated);
+
+    const Pattern other_symbols{
+            .alphabet = {.symbols = "ac", .sets = a_set, .other = 'c'},
+            .alternatives = {{.language = text("a"), .gate = "ac"}, {.language = text("c"), .gate = "ac"}}};
+
+    refused(written, other_symbols);
+}

@@ -294,9 +294,10 @@ a text holding a code point whose class moved between versions.
   a worker throws is kept, and the first one is rethrown on the calling thread once every worker has joined.
 - The encoder takes the definition by value and keeps its own copies of what it reads from the report and the pattern it
   holds, the window table and its right context, the class table and the segmentation's automaton, so the report does
-  not have to outlive it. Only `validate()` makes a report, holding the pattern its window tables were decided of, and
-  an encoder reads the pattern from the report it is given. A pattern holds its alphabet, its languages and its gates by
-  value, so a report stays usable after every string and table its pattern was built from is gone.
+  not have to outlive it. Only `validate()` and `deserialize()` make a report, which holds the pattern its window tables
+  were decided of, on its caller's word when `deserialize()` read it, and an encoder reads the pattern from the report
+  it is given. A pattern holds its alphabet, its languages and its gates by value, so a report stays usable after every
+  string and table its pattern was built from is gone.
 - The text is read during the call only, and the ids are returned by value.
 - A `Stream_encoder` reads one text at a time and serves one thread at a time. The encoder it is made from must outlive
   it and must not be moved while the stream reads it, and it serves any number of streams on as many threads, each

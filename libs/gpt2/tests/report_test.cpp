@@ -587,3 +587,14 @@ TEST(Report_test, Gpt2_s_report_holds_the_windows_and_right_context_fixtures_and
     // A letter run of any length is one piece.
     EXPECT_TRUE(std::holds_alternative<munch::verifier::Lasso>(gap));
 }
+
+TEST(Report_test, Gpt2_s_report_reads_back_from_its_serialized_text_as_the_report_it_was_written_of)
+{
+    const auto pattern{matisse::gpt2::pattern()};
+
+    const auto report{validate(pattern, fixture_width)};
+
+    const auto read{deserialize(serialize(report), pattern)};
+
+    EXPECT_EQ(json(read), json(report));
+}
