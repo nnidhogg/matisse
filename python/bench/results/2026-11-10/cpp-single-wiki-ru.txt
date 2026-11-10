@@ -1,0 +1,23 @@
+matisse_bench
+  commit      f1a7825
+  collected   2026-11-10 23:34:45 UTC
+  compiler    13.3.0
+  system      Linux 6.18.58.1-microsoft-standard-WSL2 x86_64
+  processors  24 visible, 1 allowed
+  invocation  matisse_bench single llm-vocabs gpt2,cl100k,o200k,llama3 5 wiki-ru.txt
+ids gpt2 wiki-ru.txt 2470902 1cff652bf33ba07b6e4899c9d997cc50495d115dda68bf252355a82397080b94
+gpt2    encode          wiki-ru.txt                  4.0 MiB,    2470902 tokens, 5 passes: best    89.0, median    88.6, worst    83.8 MiB/s; best  54.40, median  54.16 M tokens/s
+gpt2    encode no cache wiki-ru.txt                  4.0 MiB,    2470902 tokens, 5 passes: best    75.2, median    73.4, worst    71.4 MiB/s; best  45.93, median  44.86 M tokens/s
+gpt2    segment         wiki-ru.txt                  4.0 MiB,     416575 pieces, 5 passes: best   244.8, median   243.0, worst   232.4 MiB/s; best  25.22, median  25.04 M pieces/s
+ids cl100k wiki-ru.txt 1162181 9bebf2079fdff13a446ee5d02d723ebe16930e48af5a4c0b4e3e5f72ddd10be1
+cl100k  encode          wiki-ru.txt                  4.0 MiB,    1162181 tokens, 5 passes: best    62.8, median    62.5, worst    59.5 MiB/s; best  18.06, median  17.97 M tokens/s
+cl100k  encode no cache wiki-ru.txt                  4.0 MiB,    1162181 tokens, 5 passes: best    51.9, median    50.6, worst    48.8 MiB/s; best  14.92, median  14.56 M tokens/s
+cl100k  segment         wiki-ru.txt                  4.0 MiB,     420013 pieces, 5 passes: best   245.6, median   241.2, worst   232.8 MiB/s; best  25.52, median  25.06 M pieces/s
+ids o200k wiki-ru.txt 709178 9b243bc017b9b6f62449eee4bde696ecb6d32ec2db90114b6ca4a0cd4d684713
+o200k   encode          wiki-ru.txt                  4.0 MiB,     709178 tokens, 5 passes: best    50.8, median    50.7, worst    50.1 MiB/s; best   8.91, median   8.89 M tokens/s
+o200k   encode no cache wiki-ru.txt                  4.0 MiB,     709178 tokens, 5 passes: best    45.5, median    44.8, worst    43.9 MiB/s; best   7.97, median   7.87 M tokens/s
+o200k   segment         wiki-ru.txt                  4.0 MiB,     419812 pieces, 5 passes: best   243.8, median   241.4, worst   221.6 MiB/s; best  25.32, median  25.07 M pieces/s
+ids llama3 wiki-ru.txt 791648 87e884e6ac480da3f0cc024007f14ae2e69ec94fb847030c4d415f61bd779ee4
+llama3  encode          wiki-ru.txt                  4.0 MiB,     791648 tokens, 5 passes: best    52.0, median    51.8, worst    49.7 MiB/s; best  10.18, median  10.14 M tokens/s
+llama3  encode no cache wiki-ru.txt                  4.0 MiB,     791648 tokens, 5 passes: best    44.0, median    43.8, worst    43.1 MiB/s; best   8.61, median   8.58 M tokens/s
+llama3  segment         wiki-ru.txt                  4.0 MiB,     420013 pieces, 5 passes: best   245.7, median   242.2, worst   233.6 MiB/s; best  25.52, median  25.16 M pieces/s

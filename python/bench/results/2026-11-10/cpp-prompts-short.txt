@@ -1,0 +1,27 @@
+matisse_bench
+  commit      f1a7825
+  collected   2026-11-10 23:44:21 UTC
+  compiler    13.3.0
+  system      Linux 6.18.58.1-microsoft-standard-WSL2 x86_64
+  processors  24 visible, 1 allowed
+  invocation  matisse_bench prompts llm-vocabs gpt2,cl100k,o200k,llama3 5 short.txt
+ids gpt2 short.txt 497728 9a9f2f1bf62a9a98585d4a0f150d31bf40dabb6897d145876e69454208a16ef7
+gpt2    prompts         short.txt                    0.9 MiB,     497728 tokens, 5 passes: best    29.2, median    29.1, worst    27.3 MiB/s; best  16.02, median  15.95 M tokens/s
+gpt2    latency         short.txt                20000 calls of 48 bytes on average: per call mean 1.56, p50 1.42, p90 2.12, p99 2.60 us
+gpt2    prompts kept    short.txt                    0.9 MiB,     497728 tokens, 5 passes: best    49.7, median    48.2, worst    48.0 MiB/s; best  27.25, median  26.41 M tokens/s
+gpt2    latency kept    short.txt                20000 calls of 48 bytes on average: per call mean 0.94, p50 0.84, p90 1.43, p99 1.95 us
+ids cl100k short.txt 335374 775da66306b6e76ef048bbf2221813152dfe87213e79d9db2f22eae24f5b7d1b
+cl100k  prompts         short.txt                    0.9 MiB,     335374 tokens, 5 passes: best    28.2, median    27.8, worst    27.4 MiB/s; best  10.42, median  10.26 M tokens/s
+cl100k  latency         short.txt                20000 calls of 48 bytes on average: per call mean 1.63, p50 1.50, p90 2.26, p99 2.90 us
+cl100k  prompts kept    short.txt                    0.9 MiB,     335374 tokens, 5 passes: best    44.0, median    43.8, worst    43.2 MiB/s; best  16.24, median  16.18 M tokens/s
+cl100k  latency kept    short.txt                20000 calls of 48 bytes on average: per call mean 1.04, p50 0.90, p90 1.64, p99 2.47 us
+ids o200k short.txt 221969 0c4b79f1dd864df83a374f438d5202e18bd2cdb7adf60a44f7d00fa07bee75c5
+o200k   prompts         short.txt                    0.9 MiB,     221969 tokens, 5 passes: best    26.0, median    25.7, worst    23.8 MiB/s; best   6.36, median   6.27 M tokens/s
+o200k   latency         short.txt                20000 calls of 48 bytes on average: per call mean 1.77, p50 1.68, p90 2.64, p99 3.52 us
+o200k   prompts kept    short.txt                    0.9 MiB,     221969 tokens, 5 passes: best    40.2, median    39.0, worst    35.2 MiB/s; best   9.81, median   9.53 M tokens/s
+o200k   latency kept    short.txt                20000 calls of 48 bytes on average: per call mean 1.17, p50 0.91, p90 2.11, p99 3.21 us
+ids llama3 short.txt 245906 a60be721afcc6606190f853c685a238d3cf17c9dcc966734ce5e487c2ac368a7
+llama3  prompts         short.txt                    0.9 MiB,     245906 tokens, 5 passes: best    27.8, median    27.4, worst    24.7 MiB/s; best   7.52, median   7.43 M tokens/s
+llama3  latency         short.txt                20000 calls of 48 bytes on average: per call mean 1.66, p50 1.60, p90 2.57, p99 3.45 us
+llama3  prompts kept    short.txt                    0.9 MiB,     245906 tokens, 5 passes: best    44.0, median    41.8, worst    41.7 MiB/s; best  11.91, median  11.31 M tokens/s
+llama3  latency kept    short.txt                20000 calls of 48 bytes on average: per call mean 1.09, p50 0.82, p90 1.87, p99 2.74 us

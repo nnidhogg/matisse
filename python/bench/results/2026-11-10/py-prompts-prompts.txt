@@ -1,0 +1,56 @@
+matisse-py bench
+  matisse-tokenizer  0.1.0
+  tiktoken           0.14.0
+  numpy              2.5.4
+  python             3.12.3
+  system             Linux 6.18.58.1-microsoft-standard-WSL2 x86_64
+  processors         24 visible, 1 allowed
+  invocation         bench.py prompts llm-vocabs gpt2,cl100k,o200k,llama3 5 prompts.txt
+ids matisse-py gpt2 prompts.txt 10832297 2e52723085d05b2a2e01e4e6356619f1d8d18870e9f80eb13f786f9548580bf1
+matisse-py gpt2    prompts            prompts.txt                 20.0 MiB,   10832297 tokens, 5 passes: best    33.4, median    33.0, worst    31.4 MiB/s; best  18.11, median  17.87 M tokens/s
+matisse-py gpt2    prompts latency    prompts.txt              20000 calls: per call median pass mean 30.31 us
+ids matisse-py gpt2 prompts.txt 10832297 2e52723085d05b2a2e01e4e6356619f1d8d18870e9f80eb13f786f9548580bf1
+matisse-py gpt2    prompts numpy      prompts.txt                 20.0 MiB,   10832297 tokens, 5 passes: best    46.6, median    45.9, worst    45.4 MiB/s; best  25.22, median  24.88 M tokens/s
+matisse-py gpt2    prompts numpy latency prompts.txt              20000 calls: per call median pass mean 21.77 us
+ids tiktoken gpt2 prompts.txt 10832297 2e52723085d05b2a2e01e4e6356619f1d8d18870e9f80eb13f786f9548580bf1
+tiktoken   gpt2    prompts            prompts.txt                 20.0 MiB,   10832297 tokens, 5 passes: best    17.0, median    16.9, worst    16.8 MiB/s; best   9.19, median   9.18 M tokens/s
+tiktoken   gpt2    prompts latency    prompts.txt              20000 calls: per call median pass mean 59.02 us
+ids tiktoken gpt2 prompts.txt 10832297 2e52723085d05b2a2e01e4e6356619f1d8d18870e9f80eb13f786f9548580bf1
+tiktoken   gpt2    prompts numpy      prompts.txt                 20.0 MiB,   10832297 tokens, 5 passes: best    20.4, median    20.1, worst    20.1 MiB/s; best  11.03, median  10.90 M tokens/s
+tiktoken   gpt2    prompts numpy latency prompts.txt              20000 calls: per call median pass mean 49.70 us
+ids matisse-py cl100k prompts.txt 7202788 88674a5751d4bea4470490c4561cf9ade97e13839097ca542196bcefb7400bca
+matisse-py cl100k  prompts            prompts.txt                 20.0 MiB,    7202788 tokens, 5 passes: best    33.7, median    32.8, worst    30.2 MiB/s; best  12.14, median  11.80 M tokens/s
+matisse-py cl100k  prompts latency    prompts.txt              20000 calls: per call median pass mean 30.52 us
+ids matisse-py cl100k prompts.txt 7202788 88674a5751d4bea4470490c4561cf9ade97e13839097ca542196bcefb7400bca
+matisse-py cl100k  prompts numpy      prompts.txt                 20.0 MiB,    7202788 tokens, 5 passes: best    42.5, median    41.8, worst    39.2 MiB/s; best  15.30, median  15.07 M tokens/s
+matisse-py cl100k  prompts numpy latency prompts.txt              20000 calls: per call median pass mean 23.90 us
+ids tiktoken cl100k prompts.txt 7202788 88674a5751d4bea4470490c4561cf9ade97e13839097ca542196bcefb7400bca
+tiktoken   cl100k  prompts            prompts.txt                 20.0 MiB,    7202788 tokens, 5 passes: best    16.5, median    16.3, worst    16.2 MiB/s; best   5.93, median   5.86 M tokens/s
+tiktoken   cl100k  prompts latency    prompts.txt              20000 calls: per call median pass mean 61.51 us
+ids tiktoken cl100k prompts.txt 7202788 88674a5751d4bea4470490c4561cf9ade97e13839097ca542196bcefb7400bca
+tiktoken   cl100k  prompts numpy      prompts.txt                 20.0 MiB,    7202788 tokens, 5 passes: best    17.6, median    17.5, worst    17.4 MiB/s; best   6.33, median   6.29 M tokens/s
+tiktoken   cl100k  prompts numpy latency prompts.txt              20000 calls: per call median pass mean 57.28 us
+ids matisse-py o200k prompts.txt 4566270 cba41e7a3fa25f4d46a664cd4c607d5921129872b108177725fdac0ce8e368c7
+matisse-py o200k   prompts            prompts.txt                 20.0 MiB,    4566270 tokens, 5 passes: best    32.4, median    31.8, worst    29.5 MiB/s; best   7.40, median   7.27 M tokens/s
+matisse-py o200k   prompts latency    prompts.txt              20000 calls: per call median pass mean 31.40 us
+ids matisse-py o200k prompts.txt 4566270 cba41e7a3fa25f4d46a664cd4c607d5921129872b108177725fdac0ce8e368c7
+matisse-py o200k   prompts numpy      prompts.txt                 20.0 MiB,    4566270 tokens, 5 passes: best    37.9, median    36.6, worst    35.1 MiB/s; best   8.65, median   8.36 M tokens/s
+matisse-py o200k   prompts numpy latency prompts.txt              20000 calls: per call median pass mean 27.31 us
+ids tiktoken o200k prompts.txt 4566270 cba41e7a3fa25f4d46a664cd4c607d5921129872b108177725fdac0ce8e368c7
+tiktoken   o200k   prompts            prompts.txt                 20.0 MiB,    4566270 tokens, 5 passes: best    21.6, median    21.3, worst    20.0 MiB/s; best   4.94, median   4.86 M tokens/s
+tiktoken   o200k   prompts latency    prompts.txt              20000 calls: per call median pass mean 47.01 us
+ids tiktoken o200k prompts.txt 4566270 cba41e7a3fa25f4d46a664cd4c607d5921129872b108177725fdac0ce8e368c7
+tiktoken   o200k   prompts numpy      prompts.txt                 20.0 MiB,    4566270 tokens, 5 passes: best    23.4, median    22.8, worst    21.6 MiB/s; best   5.34, median   5.20 M tokens/s
+tiktoken   o200k   prompts numpy latency prompts.txt              20000 calls: per call median pass mean 43.94 us
+ids matisse-py llama3 prompts.txt 5142480 2fc5ecf962ed0d2cc229aa7948c14a58427e270505fe018561ffc43f7872352c
+matisse-py llama3  prompts            prompts.txt                 20.0 MiB,    5142480 tokens, 5 passes: best    34.0, median    33.8, worst    32.9 MiB/s; best   8.73, median   8.68 M tokens/s
+matisse-py llama3  prompts latency    prompts.txt              20000 calls: per call median pass mean 29.62 us
+ids matisse-py llama3 prompts.txt 5142480 2fc5ecf962ed0d2cc229aa7948c14a58427e270505fe018561ffc43f7872352c
+matisse-py llama3  prompts numpy      prompts.txt                 20.0 MiB,    5142480 tokens, 5 passes: best    37.8, median    37.0, worst    35.8 MiB/s; best   9.72, median   9.50 M tokens/s
+matisse-py llama3  prompts numpy latency prompts.txt              20000 calls: per call median pass mean 27.07 us
+ids tiktoken llama3 prompts.txt 5142480 2fc5ecf962ed0d2cc229aa7948c14a58427e270505fe018561ffc43f7872352c
+tiktoken   llama3  prompts            prompts.txt                 20.0 MiB,    5142480 tokens, 5 passes: best    20.7, median    20.5, worst    20.0 MiB/s; best   5.32, median   5.27 M tokens/s
+tiktoken   llama3  prompts latency    prompts.txt              20000 calls: per call median pass mean 48.81 us
+ids tiktoken llama3 prompts.txt 5142480 2fc5ecf962ed0d2cc229aa7948c14a58427e270505fe018561ffc43f7872352c
+tiktoken   llama3  prompts numpy      prompts.txt                 20.0 MiB,    5142480 tokens, 5 passes: best    21.8, median    21.5, worst    21.3 MiB/s; best   5.61, median   5.52 M tokens/s
+tiktoken   llama3  prompts numpy latency prompts.txt              20000 calls: per call median pass mean 46.57 us

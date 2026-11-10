@@ -1000,5 +1000,7 @@ takes that relation directly.
 **Further tokenizers.** After GPT-2, cl100k, o200k and Llama 3, the recommendation is WordPiece through munch's
 `trie_chain()` with bert-vocab.txt, which brings BERT's normalizer and so the first normalizer.
 
-**Python bindings.** Neither munch nor hopper has any, and the PyPI name matisse is taken, so a binding could be called
-matisse-tok. The recommendation is to write one later, once the validator has been used and the C++ surface has settled.
+**Python bindings.** The PyPI name matisse is taken, and the package is matisse-tokenizer, imported as
+`matisse_tokenizer`, which [python.md](python.md) describes: tiktoken's interface over the encoder, built from the
+libraries by scikit-build-core and nanobind, with the reports of the pinned tokenizers shipped. The streaming encoder,
+the policy inventory and other widths are not reached from Python yet, and neither munch nor hopper has bindings.

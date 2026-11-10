@@ -221,22 +221,19 @@ def batch(rows: dict) -> str:
     """
     body = []
     name = "prompts.txt"
-    for tokenizer in TOKENIZERS:
-        cells = []
-        for count in (1, 24):
-            cells += [
+    for count in (1, 24):
+        for tokenizer in TOKENIZERS:
+            body.append([
+                tokenizer, f"{count}",
                 rate(rows, ("matisse", tokenizer, f"batch x{count}", name)),
                 rate(rows, ("matisse-py", tokenizer, f"batch x{count}", name)),
                 rate(rows, ("matisse-py", tokenizer, f"batch numpy x{count}", name)),
                 rate(rows, ("tiktoken", tokenizer, f"batch x{count}", name)),
                 rate(rows, ("matisse-py", tokenizer, f"threads x{count}", name)),
                 rate(rows, ("tiktoken", tokenizer, f"threads x{count}", name)),
-            ]
-        body.append([tokenizer, *cells])
-    header = ["Tokenizer"]
-    for count in (1, 24):
-        header += [f"C++ x{count}", f"Python list x{count}", f"Python array x{count}", f"tiktoken x{count}",
-                   f"Python pool x{count}", f"tiktoken pool x{count}"]
+            ])
+    header = ["Tokenizer", "Threads", "C++ batch", "Python list", "Python array", "tiktoken", "Python pool",
+              "tiktoken pool"]
     return table(header, body, set(range(1, len(header))))
 
 

@@ -454,7 +454,8 @@ def provenance() -> None:
     print(f"  python             {sys.version.split()[0]}")
     print(f"  system             {' '.join(os.uname()[i] for i in (0, 2, 4))}")
     print(f"  processors         {os.cpu_count()} visible, {len(os.sched_getaffinity(0))} allowed")
-    print(f"  invocation         bench.py {' '.join(sys.argv[1:])}", flush=True)
+    shown = [os.path.basename(argument) if os.sep in argument else argument for argument in sys.argv[1:]]
+    print(f"  invocation         bench.py {' '.join(shown)}", flush=True)
 
 
 def main() -> None:

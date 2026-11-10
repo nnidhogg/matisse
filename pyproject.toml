@@ -25,7 +25,8 @@ classifiers = [
 dependencies = []
 
 [project.optional-dependencies]
-# encode_to_numpy() and encode_parallel_to_numpy() return NumPy arrays; nothing else needs NumPy.
+# encode_to_numpy(), encode_batch_to_numpy() and encode_parallel_to_numpy() return NumPy arrays; nothing else needs
+# NumPy.
 numpy = ["numpy>=2"]
 
 [project.urls]

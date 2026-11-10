@@ -1,0 +1,56 @@
+matisse-py bench
+  matisse-tokenizer  0.1.0
+  tiktoken           0.14.0
+  numpy              2.5.4
+  python             3.12.3
+  system             Linux 6.18.58.1-microsoft-standard-WSL2 x86_64
+  processors         24 visible, 24 allowed
+  invocation         bench.py batch llm-vocabs gpt2,cl100k,o200k,llama3 3 prompts.txt 1 24
+ids matisse-py gpt2 prompts.txt 10832297 2e52723085d05b2a2e01e4e6356619f1d8d18870e9f80eb13f786f9548580bf1
+matisse-py gpt2    batch x1           prompts.txt                 20.0 MiB,   10832297 tokens, 3 passes: best    34.7, median    34.4, worst    34.0 MiB/s; best  18.81, median  18.65 M tokens/s
+ids matisse-py gpt2 prompts.txt 10832297 2e52723085d05b2a2e01e4e6356619f1d8d18870e9f80eb13f786f9548580bf1
+matisse-py gpt2    batch x24          prompts.txt                 20.0 MiB,   10832297 tokens, 3 passes: best   103.9, median   103.7, worst   103.7 MiB/s; best  56.27, median  56.14 M tokens/s
+ids matisse-py gpt2 prompts.txt 10832297 2e52723085d05b2a2e01e4e6356619f1d8d18870e9f80eb13f786f9548580bf1
+matisse-py gpt2    batch numpy x1     prompts.txt                 20.0 MiB,   10832297 tokens, 3 passes: best    49.4, median    49.0, worst    48.4 MiB/s; best  26.73, median  26.55 M tokens/s
+ids matisse-py gpt2 prompts.txt 10832297 2e52723085d05b2a2e01e4e6356619f1d8d18870e9f80eb13f786f9548580bf1
+matisse-py gpt2    batch numpy x24    prompts.txt                 20.0 MiB,   10832297 tokens, 3 passes: best   371.9, median   367.1, worst   351.3 MiB/s; best 201.40, median 198.83 M tokens/s
+ids tiktoken gpt2 prompts.txt 10832297 2e52723085d05b2a2e01e4e6356619f1d8d18870e9f80eb13f786f9548580bf1
+tiktoken   gpt2    batch x1           prompts.txt                 20.0 MiB,   10832297 tokens, 3 passes: best    12.4, median    12.3, worst    12.1 MiB/s; best   6.69, median   6.66 M tokens/s
+ids tiktoken gpt2 prompts.txt 10832297 2e52723085d05b2a2e01e4e6356619f1d8d18870e9f80eb13f786f9548580bf1
+tiktoken   gpt2    batch x24          prompts.txt                 20.0 MiB,   10832297 tokens, 3 passes: best    31.7, median    31.5, worst    30.8 MiB/s; best  17.14, median  17.05 M tokens/s
+ids matisse-py cl100k prompts.txt 7202788 88674a5751d4bea4470490c4561cf9ade97e13839097ca542196bcefb7400bca
+matisse-py cl100k  batch x1           prompts.txt                 20.0 MiB,    7202788 tokens, 3 passes: best    36.7, median    36.2, worst    36.1 MiB/s; best  13.22, median  13.04 M tokens/s
+ids matisse-py cl100k prompts.txt 7202788 88674a5751d4bea4470490c4561cf9ade97e13839097ca542196bcefb7400bca
+matisse-py cl100k  batch x24          prompts.txt                 20.0 MiB,    7202788 tokens, 3 passes: best   124.5, median   123.5, worst   123.4 MiB/s; best  44.85, median  44.47 M tokens/s
+ids matisse-py cl100k prompts.txt 7202788 88674a5751d4bea4470490c4561cf9ade97e13839097ca542196bcefb7400bca
+matisse-py cl100k  batch numpy x1     prompts.txt                 20.0 MiB,    7202788 tokens, 3 passes: best    45.6, median    45.6, worst    45.0 MiB/s; best  16.43, median  16.41 M tokens/s
+ids matisse-py cl100k prompts.txt 7202788 88674a5751d4bea4470490c4561cf9ade97e13839097ca542196bcefb7400bca
+matisse-py cl100k  batch numpy x24    prompts.txt                 20.0 MiB,    7202788 tokens, 3 passes: best   358.1, median   358.0, worst   342.9 MiB/s; best 128.95, median 128.93 M tokens/s
+ids tiktoken cl100k prompts.txt 7202788 88674a5751d4bea4470490c4561cf9ade97e13839097ca542196bcefb7400bca
+tiktoken   cl100k  batch x1           prompts.txt                 20.0 MiB,    7202788 tokens, 3 passes: best    11.1, median    11.1, worst    10.3 MiB/s; best   4.01, median   4.00 M tokens/s
+ids tiktoken cl100k prompts.txt 7202788 88674a5751d4bea4470490c4561cf9ade97e13839097ca542196bcefb7400bca
+tiktoken   cl100k  batch x24          prompts.txt                 20.0 MiB,    7202788 tokens, 3 passes: best    31.3, median    31.2, worst    29.3 MiB/s; best  11.27, median  11.22 M tokens/s
+ids matisse-py o200k prompts.txt 4566270 cba41e7a3fa25f4d46a664cd4c607d5921129872b108177725fdac0ce8e368c7
+matisse-py o200k   batch x1           prompts.txt                 20.0 MiB,    4566270 tokens, 3 passes: best    33.2, median    32.9, worst    32.2 MiB/s; best   7.58, median   7.52 M tokens/s
+ids matisse-py o200k prompts.txt 4566270 cba41e7a3fa25f4d46a664cd4c607d5921129872b108177725fdac0ce8e368c7
+matisse-py o200k   batch x24          prompts.txt                 20.0 MiB,    4566270 tokens, 3 passes: best   153.5, median   152.9, worst   149.5 MiB/s; best  35.04, median  34.91 M tokens/s
+ids matisse-py o200k prompts.txt 4566270 cba41e7a3fa25f4d46a664cd4c607d5921129872b108177725fdac0ce8e368c7
+matisse-py o200k   batch numpy x1     prompts.txt                 20.0 MiB,    4566270 tokens, 3 passes: best    37.1, median    36.5, worst    35.9 MiB/s; best   8.47, median   8.34 M tokens/s
+ids matisse-py o200k prompts.txt 4566270 cba41e7a3fa25f4d46a664cd4c607d5921129872b108177725fdac0ce8e368c7
+matisse-py o200k   batch numpy x24    prompts.txt                 20.0 MiB,    4566270 tokens, 3 passes: best   323.4, median   321.5, worst   321.2 MiB/s; best  73.83, median  73.39 M tokens/s
+ids tiktoken o200k prompts.txt 4566270 cba41e7a3fa25f4d46a664cd4c607d5921129872b108177725fdac0ce8e368c7
+tiktoken   o200k   batch x1           prompts.txt                 20.0 MiB,    4566270 tokens, 3 passes: best    13.4, median    13.2, worst    12.9 MiB/s; best   3.05, median   3.02 M tokens/s
+ids tiktoken o200k prompts.txt 4566270 cba41e7a3fa25f4d46a664cd4c607d5921129872b108177725fdac0ce8e368c7
+tiktoken   o200k   batch x24          prompts.txt                 20.0 MiB,    4566270 tokens, 3 passes: best    34.4, median    34.3, worst    32.7 MiB/s; best   7.85, median   7.84 M tokens/s
+ids matisse-py llama3 prompts.txt 5142480 2fc5ecf962ed0d2cc229aa7948c14a58427e270505fe018561ffc43f7872352c
+matisse-py llama3  batch x1           prompts.txt                 20.0 MiB,    5142480 tokens, 3 passes: best    36.7, median    36.5, worst    36.1 MiB/s; best   9.42, median   9.37 M tokens/s
+ids matisse-py llama3 prompts.txt 5142480 2fc5ecf962ed0d2cc229aa7948c14a58427e270505fe018561ffc43f7872352c
+matisse-py llama3  batch x24          prompts.txt                 20.0 MiB,    5142480 tokens, 3 passes: best   150.8, median   147.9, worst   140.5 MiB/s; best  38.77, median  38.02 M tokens/s
+ids matisse-py llama3 prompts.txt 5142480 2fc5ecf962ed0d2cc229aa7948c14a58427e270505fe018561ffc43f7872352c
+matisse-py llama3  batch numpy x1     prompts.txt                 20.0 MiB,    5142480 tokens, 3 passes: best    42.2, median    42.0, worst    41.5 MiB/s; best  10.84, median  10.79 M tokens/s
+ids matisse-py llama3 prompts.txt 5142480 2fc5ecf962ed0d2cc229aa7948c14a58427e270505fe018561ffc43f7872352c
+matisse-py llama3  batch numpy x24    prompts.txt                 20.0 MiB,    5142480 tokens, 3 passes: best   348.9, median   344.4, worst   339.9 MiB/s; best  89.71, median  88.55 M tokens/s
+ids tiktoken llama3 prompts.txt 5142480 2fc5ecf962ed0d2cc229aa7948c14a58427e270505fe018561ffc43f7872352c
+tiktoken   llama3  batch x1           prompts.txt                 20.0 MiB,    5142480 tokens, 3 passes: best    13.1, median    12.5, worst    12.5 MiB/s; best   3.36, median   3.22 M tokens/s
+ids tiktoken llama3 prompts.txt 5142480 2fc5ecf962ed0d2cc229aa7948c14a58427e270505fe018561ffc43f7872352c
+tiktoken   llama3  batch x24          prompts.txt                 20.0 MiB,    5142480 tokens, 3 passes: best    33.2, median    33.1, worst    31.9 MiB/s; best   8.55, median   8.52 M tokens/s

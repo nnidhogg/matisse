@@ -1,0 +1,19 @@
+matisse-py bench
+  matisse-tokenizer  0.1.0
+  tiktoken           0.14.0
+  numpy              2.5.4
+  python             3.12.3
+  system             Linux 6.18.58.1-microsoft-standard-WSL2 x86_64
+  processors         24 visible, 24 allowed
+  invocation         bench.py load llm-vocabs gpt2,cl100k,o200k,llama3 7
+matisse-py gpt2    load shipped       7 processes: median 0.190 s, best 0.188 s, worst 0.193 s
+matisse-py gpt2    load decided       7 processes: median 0.989 s, best 0.985 s, worst 0.994 s
+tiktoken   gpt2    load               7 processes: median 0.102 s, best 0.101 s, worst 0.107 s
+matisse-py cl100k  load shipped       7 processes: median 0.384 s, best 0.378 s, worst 0.386 s
+matisse-py cl100k  load decided       7 processes: median 2.158 s, best 2.128 s, worst 2.313 s
+tiktoken   cl100k  load               7 processes: median 0.075 s, best 0.073 s, worst 0.077 s
+matisse-py o200k   load shipped       7 processes: median 0.545 s, best 0.539 s, worst 0.558 s
+matisse-py o200k   load decided       7 processes: median 1.853 s, best 1.844 s, worst 1.857 s
+tiktoken   o200k   load               7 processes: median 0.140 s, best 0.139 s, worst 0.153 s
+matisse-py llama3  load shipped       7 processes: median 0.524 s, best 0.511 s, worst 0.534 s
+matisse-py llama3  load decided       7 processes: median 2.236 s, best 2.225 s, worst 2.304 s

@@ -1,0 +1,23 @@
+matisse_bench
+  commit      f1a7825
+  collected   2026-11-10 23:34:08 UTC
+  compiler    13.3.0
+  system      Linux 6.18.58.1-microsoft-standard-WSL2 x86_64
+  processors  24 visible, 1 allowed
+  invocation  matisse_bench single llm-vocabs gpt2,cl100k,o200k,llama3 5 wiki-zh.txt
+ids gpt2 wiki-zh.txt 2984479 9e1315d4c8f265369c3891e10d08a5358c663db4368c6a8050f6e75759384017
+gpt2    encode          wiki-zh.txt                  4.0 MiB,    2984479 tokens, 5 passes: best    82.5, median    82.0, worst    76.1 MiB/s; best  61.37, median  60.97 M tokens/s
+gpt2    encode no cache wiki-zh.txt                  4.0 MiB,    2984479 tokens, 5 passes: best    78.1, median    77.8, worst    75.1 MiB/s; best  58.07, median  57.86 M tokens/s
+gpt2    segment         wiki-zh.txt                  4.0 MiB,     332495 pieces, 5 passes: best   400.1, median   397.9, worst   380.5 MiB/s; best  33.16, median  32.98 M pieces/s
+ids cl100k wiki-zh.txt 1939825 7a0ec4e167b68b621e6562e2191bdcc43b4d73a31dd8b20d7e1b5aac67b986fc
+cl100k  encode          wiki-zh.txt                  4.0 MiB,    1939825 tokens, 5 passes: best    65.8, median    65.3, worst    64.1 MiB/s; best  31.81, median  31.58 M tokens/s
+cl100k  encode no cache wiki-zh.txt                  4.0 MiB,    1939825 tokens, 5 passes: best    69.7, median    69.1, worst    68.3 MiB/s; best  33.69, median  33.40 M tokens/s
+cl100k  segment         wiki-zh.txt                  4.0 MiB,     228305 pieces, 5 passes: best   410.7, median   408.3, worst   376.1 MiB/s; best  23.37, median  23.23 M pieces/s
+ids o200k wiki-zh.txt 1299269 f3b08b0ba50957619314917ebc98cc3b26c9e82f4a09fab530aba5976d56d56e
+o200k   encode          wiki-zh.txt                  4.0 MiB,    1299269 tokens, 5 passes: best    56.0, median    55.3, worst    54.4 MiB/s; best  18.13, median  17.92 M tokens/s
+o200k   encode no cache wiki-zh.txt                  4.0 MiB,    1299269 tokens, 5 passes: best    59.7, median    58.4, worst    53.6 MiB/s; best  19.35, median  18.90 M tokens/s
+o200k   segment         wiki-zh.txt                  4.0 MiB,     228368 pieces, 5 passes: best   424.7, median   413.1, worst   411.0 MiB/s; best  24.18, median  23.52 M pieces/s
+ids llama3 wiki-zh.txt 1298383 9b3f7244ef292fb222cac56c62a7b68a86abbc95f2e8d7d7ce1d7a2fed7cf605
+llama3  encode          wiki-zh.txt                  4.0 MiB,    1298383 tokens, 5 passes: best    61.0, median    60.6, worst    59.2 MiB/s; best  19.74, median  19.61 M tokens/s
+llama3  encode no cache wiki-zh.txt                  4.0 MiB,    1298383 tokens, 5 passes: best    65.1, median    64.0, worst    60.8 MiB/s; best  21.06, median  20.73 M tokens/s
+llama3  segment         wiki-zh.txt                  4.0 MiB,     228305 pieces, 5 passes: best   423.0, median   420.9, worst   412.7 MiB/s; best  24.07, median  23.95 M pieces/s
