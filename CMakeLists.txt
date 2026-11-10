@@ -51,6 +51,14 @@ if (MATISSE_BUILD_FUZZER)
     add_link_options(-fsanitize=address,undefined)
 endif ()
 
+# The Python package, matisse-tokenizer, builds its extension module from the libraries below and writes the reports of
+# the pinned tokenizers it ships; the libraries are linked into a shared module, so every one of them, munch's included,
+# is compiled as position-independent code. pyproject.toml turns it on for scikit-build-core.
+option(MATISSE_BUILD_PYTHON "Build the matisse-tokenizer Python extension module" OFF)
+if (MATISSE_BUILD_PYTHON)
+    set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+endif ()
+
 # The pinned vocabulary files, GPT-2's, cl100k_base's, o200k_base's and Llama 3's, are not in the tree; the loaders'
 # tests read them from this directory, each held to its digest, and skip when it is not given.
 set(MATISSE_VOCAB_DIR "" CACHE PATH "A directory holding the pinned vocabulary files the tests read")
@@ -87,6 +95,10 @@ endif ()
 add_subdirectory(external)
 add_subdirectory(libs)
 add_subdirectory(tools)
+
+if (MATISSE_BUILD_PYTHON)
+    add_subdirectory(python)
+endif ()
 
 # The umbrella carries matisse's own libraries, the stages, every tokenizer and the lookup over them; munch arrives
 # transitively through matisse_load.

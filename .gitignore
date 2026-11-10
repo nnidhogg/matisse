@@ -8,3 +8,7 @@
 
 # Ignore generated files from application
 /debug
+
+# Generated files from the Python package
+/dist
+__pycache__/

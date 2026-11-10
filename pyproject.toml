@@ -1,0 +1,82 @@
+# The Python package, matisse-tokenizer, imported as matisse_tokenizer. It sits at the root because its extension
+# module builds from the root CMake project's libraries and the munch submodule, which an sdist must carry whole; the
+# package's own sources, the module's C++ and the tests are under python/. docs/python.md describes it.
+
+[build-system]
+requires = ["scikit-build-core==1.1.2", "nanobind==3.1.0"]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "matisse-tokenizer"
+version = "0.1.0"
+description = "Exact BPE encoding for GPT-2, cl100k_base, o200k_base and Llama 3, behind tiktoken's interface"
+readme = "docs/python.md"
+requires-python = ">=3.12"
+license = "MIT"
+license-files = ["LICENSE", "THIRD_PARTY_NOTICES.md"]
+authors = [{ name = "Nicklas Nidhögg" }]
+classifiers = [
+    "Programming Language :: C++",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS",
+]
+dependencies = []
+
+[project.optional-dependencies]
+# encode_to_numpy() and encode_parallel_to_numpy() return NumPy arrays; nothing else needs NumPy.
+numpy = ["numpy>=2"]
+
+[project.urls]
+Homepage = "https://github.com/nnidhogg/matisse"
+Documentation = "https://github.com/nnidhogg/matisse/blob/master/docs/python.md"
+
+[dependency-groups]
+test = ["pytest==9.2.0", "tiktoken==0.14.0", "numpy==2.5.4"]
+bench = ["tiktoken==0.14.0", "numpy==2.5.4"]
+
+[tool.scikit-build]
+minimum-version = "build-system.requires"
+build-dir = "build/python/{wheel_tag}"
+cmake.build-type = "Release"
+wheel.packages = ["python/matisse_tokenizer"]
+# One wheel per platform under the stable ABI of Python 3.12, which every later CPython loads.
+wheel.py-api = "cp312"
+sdist.exclude = ["build", ".github", "tools/fuzz/seeds"]
+
+[tool.scikit-build.cmake.define]
+MATISSE_BUILD_PYTHON = "ON"
+MATISSE_BUILD_TESTS = "OFF"
+MATISSE_WERROR = "OFF"
+
+[tool.cibuildwheel]
+build = "cp312-*"
+skip = "*-musllinux_*"
+build-frontend = "build"
+# The newest manylinux images; matisse needs GCC 13 or later, as its README says.
+manylinux-x86_64-image = "manylinux_2_34"
+manylinux-aarch64-image = "manylinux_2_34"
+test-groups = ["test"]
+test-sources = ["python/tests", "libs/load/tests/data"]
+# The tests fetch the three public rank files from tiktoken's URLs; Llama 3's is gated by its vendor and skipped.
+test-environment = { MATISSE_TEST_DOWNLOAD = "1" }
+test-command = "python -m pytest python/tests"
+
+[tool.cibuildwheel.linux]
+archs = ["native"]
+
+[tool.cibuildwheel.macos]
+archs = ["native"]
+# Apple's Clang and libc++ lag the C++23 matisse is written in, std::jthread among it, so the macOS wheels build with
+# Homebrew's LLVM and its libc++, which delocate copies into the wheel. This configuration has not been run.
+before-all = "brew install llvm"
+
+[tool.cibuildwheel.macos.environment]
+MACOSX_DEPLOYMENT_TARGET = "15.0"
+CC = "$(brew --prefix llvm)/bin/clang"
+CXX = "$(brew --prefix llvm)/bin/clang++"
+LDFLAGS = "-L$(brew --prefix llvm)/lib/c++ -L$(brew --prefix llvm)/lib/unwind -lunwind"
+
+[tool.pytest.ini_options]
+testpaths = ["python/tests"]
