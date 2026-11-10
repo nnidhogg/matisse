@@ -311,6 +311,14 @@ assigned to, and the encoder and `supply()` read the pattern from the report. Th
 deciding it, so a pattern is validated once however many encoders are built, a fuzz harness's and the thread-sanitizer
 job's among them.
 
+`deserialize()` is the constructor's other friend. It reads back the text `serialize()` writes of a report, plain ASCII
+with one fact per line as the fixtures are written, every window of a width written as one character in the order the
+class symbols give, the digit of its certified origin or `-`. The Python package decides the reports of its four pinned
+tokenizers when it is built and ships their texts, so that a process reading a pinned vocabulary reads its report back
+instead of deciding it, as [python.md](python.md) describes. `deserialize()` checks the text's form and its class
+symbols against the pattern's and not its windows, which only deciding them would check, so the report it returns is as
+certified as the text it read. Both functions stay outside the stable surface.
+
 `validate::supply()` measures one inventory's anchors on an input: the interior positions where an occurrence of a
 certified window places its origin, counted at the byte offsets of their code points. It classes the input with the
 alphabet of the pattern the report holds and segments it with that pattern's segmenter for its pre-token boundaries.

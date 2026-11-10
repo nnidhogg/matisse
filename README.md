@@ -225,9 +225,10 @@ The classes the encoders are built from, `Merger`, `Backtracker`, `Join_table`, 
 only because every header of a library lives under include, as munch keeps none under src; they serve the pipeline and
 may change in minor releases. So may the five accessors through which an `Encoder` serves the streaming encoder,
 `merger()`, `class_table()`, `verifier()`, `spellings_sorted()` and `unformed_sorted()`, the `serves()`, `find()` and
-`store()` through which a `Piece_cache` serves the encoders, and validate's `json_string()` and `plural()`, which serve
-the renderings. The corpus probe and the bench under `tools/probes` and the prose in `docs/` carry no compatibility
-promise, and performance numbers are measurements, not contracts.
+`store()` through which a `Piece_cache` serves the encoders, validate's `json_string()` and `plural()`, which serve the
+renderings, and its `serialize()` and `deserialize()`, which serve the Python package. The corpus probe and the bench
+under `tools/probes` and the prose in `docs/` carry no compatibility promise, and performance numbers are measurements,
+not contracts.
 
 **Targets and headers.** The surface includes how a consumer reaches it: the CMake targets `matisse::load`,
 `matisse::pretok`, `matisse::validate`, `matisse::encode`, `matisse::gpt2`, `matisse::cl100k`, `matisse::o200k`,
