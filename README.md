@@ -269,8 +269,8 @@ one is defined.
 
 **Errors.** A function refuses content it cannot take with `std::invalid_argument`, the message naming what it refuses,
 among them ill-formed UTF-8 at its byte offset, a definition the merge cannot take, a special token the definition does
-not hold, whose spelling is empty or whose id is an ordinary token's, two special tokens that share a spelling or an id,
-a special token whose spelling is not UTF-8, a pattern that is not total and a piece cache made for another encoder.
+not hold, whose spelling is empty or whose id is an ordinary token's, two special tokens that share a spelling, a
+special token whose spelling is not UTF-8, a pattern that is not total and a piece cache made for another encoder.
 `decode()` refuses an id that names no token with `std::out_of_range`, naming the id and its index, as munch's
 `Mode_lexer` refuses an index that names no mode. A file that cannot be read is refused with `std::runtime_error`, and a
 piece of 2^32 bytes or longer with `std::length_error` naming its length, a stream counting only the bytes of a piece

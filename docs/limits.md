@@ -69,9 +69,13 @@ allowed. There is no form that refuses a text for holding a special token.
 The encoder's constructor refuses an allowed spelling that is not one of the definition's special tokens, one that is
 empty, since an empty spelling would occur at every byte, and one whose id is an ordinary token's, which `decode()`
 would read as that token. It also refuses, allowed or not, two special tokens that share a spelling, which `encode()`
-would cut out as the first of them, two that share an id, which `decode()` would read as the first of them, and one
-whose spelling is not UTF-8, which no vendor's special token is and which a stream would hold back from inside a code
-point's sequence.
+would cut out as the first of them, and one whose spelling is not UTF-8, which no vendor's special token is and which a
+stream would hold back from inside a code point's sequence.
+
+Two special tokens may share an id, as o200k_harmony's `<|endofprompt|>` and `<|reserved_200018|>` share 200018 in
+tiktoken's table. `encode()` finds a special token by its spelling, so each spelling allowed is cut out and emits the
+id, and `decode()` spells the id as the first special token of the definition that has it, the spelling tiktoken's
+decoder gives for o200k_harmony's, so the other spelling decodes as that one.
 
 ## **Merges: Two Rules, Each a Vendor's**
 

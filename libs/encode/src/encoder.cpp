@@ -296,15 +296,6 @@ std::vector<load::Special_token> Encoder::allowed_of(
                     repeated->id, special.id)};
         }
 
-        const auto shared{std::ranges::find(earlier, special.id, &load::Special_token::id)};
-
-        if (shared != earlier.end())
-        {
-            throw std::invalid_argument{std::format(
-                    R"(Encoder: the special token "{}" has the id {} of the special token "{}")", special.spelling,
-                    special.id, shared->spelling)};
-        }
-
         if (!is_utf8(special.spelling))
         {
             throw std::invalid_argument{

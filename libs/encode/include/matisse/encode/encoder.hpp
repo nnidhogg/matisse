@@ -56,11 +56,13 @@ public:
      * @param report The report validate() decided of the pattern.
      * @param inventory The inventory whose window table and right context the encoder keeps.
      * @param allowed The spellings of the special tokens cut out of a text; every other special token is ordinary text.
-     * @throws std::invalid_argument If two of the definition's special tokens share a spelling or an id or one is
-     *         spelled by bytes that are not UTF-8, allowed or not, an allowed spelling is not one of the definition's
-     *         special tokens, is empty or is a special token whose id is an ordinary token's, or the definition cannot
-     *         be merged, as Merger refuses it; the message names the spellings, the special token's ids, the byte or
-     *         the merge.
+     *        Two special tokens may share an id, as o200k_harmony's `<|endofprompt|>` and `<|reserved_200018|>` do in
+     *        tiktoken's table: each spelling allowed encodes to the id, and decode() spells it as the first listed.
+     * @throws std::invalid_argument If two of the definition's special tokens share a spelling or one is spelled by
+     *         bytes that are not UTF-8, allowed or not, an allowed spelling is not one of the definition's special
+     *         tokens, is empty or is a special token whose id is an ordinary token's, or the definition cannot be
+     *         merged, as Merger refuses it; the message names the spellings, the special token's ids, the byte or the
+     *         merge.
      */
     Encoder(load::Definition definition, const validate::Report& report, validate::Inventory inventory,
             std::span<const std::string> allowed);
@@ -164,7 +166,9 @@ public:
      *
      * The bytes are raw, not checked to be UTF-8: a token can begin or end inside a code point's sequence, so a run of
      * ids other than those of a whole text, a prefix of them among others, can spell bytes that are not well-formed
-     * UTF-8, while decode() of the ids encode() returns is the text.
+     * UTF-8. A special token's id is spelled as the first special token of the definition with that id, so decode() of
+     * the ids encode() returns is the text, except that where two special tokens share an id the second's spelling
+     * decodes as the first's.
      * @param ids The ids.
      * @return The bytes.
      * @throws std::out_of_range If an id is neither an ordinary nor a special token of the definition; the message
@@ -250,13 +254,12 @@ private:
      * @param allowed The spellings allowed.
      * @return The allowed special tokens.
      * @throws std::invalid_argument If two of the special tokens share a spelling, allowed or not, which encode() would
-     *         cut out as the first of them, the message naming the spelling and both ids, if two share an id, allowed
-     * or not, which decode() would read as the first of them, the message naming both spellings and the id, if one is
-     * spelled by bytes that are not UTF-8, allowed or not, which no vendor's special token is and which a stream would
-     * hold back from inside a code point's sequence, the message naming the spelling, or if an allowed spelling is not
-     * one of the special tokens, the message naming it, is empty, the message naming the special token's id, or is a
-     * special token whose id is an ordinary token's, which decode() would read as that token, the message naming the
-     * spelling and the id.
+     *         cut out as the first of them, the message naming the spelling and both ids, if one is spelled by bytes
+     * that are not UTF-8, allowed or not, which no vendor's special token is and which a stream would hold back from
+     * inside a code point's sequence, the message naming the spelling, or if an allowed spelling is not one of the
+     * special tokens, the message naming it, is empty, the message naming the special token's id, or is a special token
+     * whose id is an ordinary token's, which decode() would read as that token, the message naming the spelling and the
+     * id.
      */
     [[nodiscard]] static std::vector<load::Special_token> allowed_of(
             const load::Definition& definition, std::span<const std::string> allowed);

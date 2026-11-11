@@ -722,35 +722,54 @@ TEST(Encoder_test, An_allowed_special_token_whose_id_is_an_ordinary_token_s_is_r
     EXPECT_NO_THROW(std::ignore = encoder_of(definition, {"<|end|>"}));
 }
 
-TEST(Encoder_test, A_special_token_whose_id_is_another_special_token_s_is_refused_allowed_or_not_naming_both)
+TEST(Encoder_test, Two_special_tokens_that_share_an_id_each_encode_to_it_and_decode_gives_the_first_listed)
 {
+    // o200k_harmony's <|endofprompt|> and <|reserved_200018|> share the id 200018 in tiktoken's table, which decodes
+    // it as the first.
     auto definition{test_definition()};
 
     const auto end{definition.specials.front().id};
 
     definition.specials.push_back({.spelling = "<x>", .id = end});
 
-    const std::vector<std::vector<std::string>> allowed_sets{{}, {"<x>"}, {"<|end|>", "<x>"}};
+    const auto encoder{encoder_of(definition, {"<|end|>", "<x>"})};
 
-    for (const auto& allowed : allowed_sets)
+    for (const std::string_view text : {"<x>", "a<x>b<|end|>c", "<|end|><x><x>", "<x<|end|>x>"})
     {
-        try
-        {
-            std::ignore = encoder_of(definition, allowed);
+        const auto expected{encoder.encode(text)};
 
-            ADD_FAILURE() << "Encoder took two special tokens with one id";
-        }
-        catch (const std::invalid_argument& refusal)
+        for (const std::size_t chunks : {1UZ, 2UZ, 3UZ, 4UZ})
         {
-            const std::string_view message{refusal.what()};
-
-            EXPECT_TRUE(message.contains(
-                    std::format(R"(the special token "<x>" has the id {} of the special token "<|end|>")", end)))
-                    << message;
+            EXPECT_EQ(encoder.encode_parallel(text, chunks), expected) << text << " in " << chunks;
         }
+
+        Stream_encoder stream{encoder};
+
+        std::vector<Token_id_t> streamed{};
+
+        for (const auto byte : text)
+        {
+            const auto ids{stream.push(std::string_view{&byte, 1})};
+
+            streamed.insert(streamed.end(), ids.begin(), ids.end());
+        }
+
+        const auto rest{stream.finish()};
+
+        streamed.insert(streamed.end(), rest.begin(), rest.end());
+
+        EXPECT_EQ(streamed, expected) << text;
     }
 
-    EXPECT_NO_THROW(std::ignore = encoder_of(test_definition(), {"<|end|>"}));
+    EXPECT_EQ(encoder.encode("<x>"), (std::vector<Token_id_t>{end}));
+    EXPECT_EQ(encoder.encode("<|end|>"), (std::vector<Token_id_t>{end}));
+    EXPECT_EQ(encoder.decode(encoder.encode("a<x>b")), "a<|end|>b");
+
+    // Allowing only the second spelling cuts it alone, and the first is ordinary text.
+    const auto second{encoder_of(definition, {"<x>"})};
+
+    EXPECT_EQ(second.encode("<x>"), (std::vector<Token_id_t>{end}));
+    EXPECT_EQ(second.encode("<|end|>"), uncached_ids(definition, "<|end|>"));
 }
 
 TEST(Encoder_test, A_special_token_listed_twice_with_two_ids_is_refused_allowed_or_not_naming_both_ids)
