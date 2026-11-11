@@ -34,11 +34,11 @@ The version is 1.0.0, the first release, and matisse depends on munch 3.0.0, the
 loads GPT-2's encoder.json and vocab.bpe, tiktoken rank files and Hugging Face tokenizer.json files, and it encodes text
 under GPT-2, cl100k_base, o200k_base and Llama 3 sequentially, in parallel at certified cuts and as a stream, with the
 vendors' special tokens cut out where they are allowed, and decodes ids back to bytes; validate decides each pattern's
-certified windows, and `matisse-validate` reports them for a rank file or a tokenizer.json. The ids are held to the
-vendors' on pinned vocabularies, fixtures and corpora, with the classes of code points pinned to Unicode 16.0.0,
-tiktoken's version, while the certification of merge tables without a pre-tokenizer is planned and not yet written. How
-the libraries fit together and the decisions behind them are in [docs/design.md](docs/design.md), how each is called is
-in [docs/usage.md](docs/usage.md), and what every call guarantees is in [docs/limits.md](docs/limits.md).
+certified windows and those of a byte-level merge table without a pre-tokenizer, and `matisse-validate` reports them for
+a rank file or a tokenizer.json. The ids are held to the vendors' on pinned vocabularies, fixtures and corpora, with the
+classes of code points pinned to Unicode 16.0.0, tiktoken's version. How the libraries fit together and the decisions
+behind them are in [docs/design.md](docs/design.md), how each is called is in [docs/usage.md](docs/usage.md), and what
+every call guarantees is in [docs/limits.md](docs/limits.md).
 
 ## **Libraries**
 
@@ -50,7 +50,8 @@ Four stage libraries hold nothing of a specific tokenizer and take its descripti
   gates and the class alphabet: the classes of a text, the runtime segmenter, and the construction of the pattern's
   verifier for munch.
 - **validate** decides which class windows certify a cut, at which origin and with which right context, and measures how
-  many anchors they supply on an input.
+  many anchors they supply on an input; for a byte-level merge table without a pre-tokenizer, it decides which windows
+  of the table the caller names certify a cut.
 - **encode** is the runtime, a sequential, a parallel and a streaming encoder, the parallel one's ids identical at every
   chunk count, and the piece cache a caller keeps across its calls.
 
@@ -169,8 +170,8 @@ performance beside matisse's C++ encoder and tiktoken.
   each of them with their reasons, how exactness is guaranteed and tested against the real tokenizers, what matisse
   needs from munch, and the questions still open.
 - [docs/usage.md](docs/usage.md): consuming matisse from CMake; loading a definition; choosing a tokenizer by its
-  library or by name; validating a pattern; encoding sequentially, with a kept cache and in parallel; streaming;
-  describing a pattern; the `matisse-validate` command line.
+  library or by name; validating a pattern and a merge table without one; encoding sequentially, with a kept cache and
+  in parallel; streaming; describing a pattern; the `matisse-validate` command line.
 - [docs/limits.md](docs/limits.md): the library's scope, what every call guarantees, and the escape hatches.
 - [docs/python.md](docs/python.md): the Python package, matisse-tokenizer: installing and building it, its tiktoken
   interface, where it refuses or differs from tiktoken, the vocabulary cache, the reports it ships, threads, its
@@ -231,15 +232,15 @@ the contracts their headers and [docs/limits.md](docs/limits.md) state. It holds
 `tokenizer_json_spelling()`; pretok's `Code_point_set`, `Alphabet`, `Alternative`, `Pattern`, `Class_t`, `Class_table`
 with its constructor, `symbols()` and `classes()`, `classes_of()`, `Segmenter` with its constructor and `boundaries()`,
 `split_verifier()` and `factorization_lexer()`; validate's `Inventory`, `default_width`, `Certified_window`,
-`Window_table`, `Report`, `validate()`, `render()`, `json()`, `Gaps`, `Anchors`, `Supply`, `supply()`, `supply_json()`
-and `supply_section()`; encode's `Encoder` with its constructor, both `encode()`, `chunk_boundaries()`,
-`encode_parallel()`, `decode()`, `definition()` and `allowed()`, `Piece_cache` with its constructor, the bounds
-`piece_cache_capacity` and `longest_cached_piece`, and `Stream_encoder` with its constructor, `push()` and `finish()`;
-each tokenizer library's `pattern()`, `spelling()` and `specials()`; lookup's `Tokenizer`, `tokenizers()` and
-`tokenizer()`; and the `matisse-validate` command line with its JSON document, as munch puts `munch-audit` on its
-surface. The class tables are pinned to Unicode 16.0.0, as [docs/limits.md](docs/limits.md) describes, and moving the
-pin changes the ids of some texts, those holding a code point whose class differs between the two versions, so the pin
-moves only in a major release.
+`Window_table`, `Report`, `validate()`, `render()`, `json()`, `Gaps`, `Anchors`, `Supply`, `supply()`, `supply_json()`,
+`supply_section()`, `Merge_window`, `validate_merges()`, `render_merges()` and `merges_json()`; encode's `Encoder` with
+its constructor, both `encode()`, `chunk_boundaries()`, `encode_parallel()`, `decode()`, `definition()` and `allowed()`,
+`Piece_cache` with its constructor, the bounds `piece_cache_capacity` and `longest_cached_piece`, and `Stream_encoder`
+with its constructor, `push()` and `finish()`; each tokenizer library's `pattern()`, `spelling()` and `specials()`;
+lookup's `Tokenizer`, `tokenizers()` and `tokenizer()`; and the `matisse-validate` command line with its JSON document,
+as munch puts `munch-audit` on its surface. The class tables are pinned to Unicode 16.0.0, as
+[docs/limits.md](docs/limits.md) describes, and moving the pin changes the ids of some texts, those holding a code point
+whose class differs between the two versions, so the pin moves only in a major release.
 
 The classes the encoders are built from, `Merger`, `Backtracker`, `Join_table`, `Spelling_table`, `Token_trie`,
 `Window_index`, `Verifier_table` and `Live_runs`, and pretok's `automata` kit, which builds the verifier, are installed
@@ -256,7 +257,7 @@ not contracts.
 `matisse::llama3` and `matisse::lookup`, with the umbrella `matisse::matisse` that links them all, the same names under
 `add_subdirectory` and in an installed package, and the include paths of the headers that declare the surface,
 `matisse/load/definition.hpp`, `matisse/pretok/pattern.hpp`, `classes.hpp`, `segmenter.hpp` and `verifier.hpp`,
-`matisse/validate/report.hpp` and `supply.hpp`, `matisse/encode/encoder.hpp`, `piece_cache.hpp` and
+`matisse/validate/report.hpp`, `supply.hpp` and `merges.hpp`, `matisse/encode/encoder.hpp`, `piece_cache.hpp` and
 `stream_encoder.hpp`, each tokenizer's `matisse/<name>/tokenizer.hpp` and `matisse/lookup/tokenizers.hpp`. A target is
 renamed or a header moved only in a major release, as munch's 3.0.0 moved its verifier to a library and an include path
 of its own.

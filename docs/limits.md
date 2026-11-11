@@ -45,7 +45,9 @@ The model excludes the following, some of it permanently and some only in this v
   under `libs/`, named in the lookup's list, with no change to the stage libraries, once its pattern has a description
   that meets the conditions below; until then it has no encoder.
 - **Definitions without a pre-tokenizer.** The `Encoder` takes a report, which holds a pattern, so a definition without
-  one has no encoder.
+  one has no encoder. Its cuts are the windows of its merge table that `validate_merges()` certifies on the candidates a
+  caller gives, for a byte-level table merged by the pair rule, as the section on merge tables below describes, and a
+  caller that encodes the table encodes it with an encoder of its own.
 
 The reason lies in how a tokenizer reaches matisse, as two things read apart. A `load::Definition` holds the merge rule,
 the whole-piece lookup, the bytes of every ordinary token, the merge table and the special tokens, and a
@@ -185,6 +187,32 @@ thread count. The system's limit is the practical one: a chunking at every cut o
 factorization inventory, 559,642 chunks, fails with `std::system_error` on the machine of
 [benchmarks.md](benchmarks.md), which is why the corpus probe asks for at most 32,768.
 
+## **Merge Tables Without a Pre-Tokenizer: Certified, or Refuted**
+
+`validate_merges(definition, candidates)` decides each candidate window of a byte-level merge table read with no
+pre-tokenizer, as `read_tokenizer_json()` reads a tokenizer.json whose pre-tokenizer is a ByteLevel without its regex
+under the empty spelling, and its verdict is exact under canonical byte-pair encoding, the merge of least rank at its
+leftmost occurrence until none applies, which is the pair rule:
+
+- A window is decided at the one origin it can be certified at, where its own encoding begins the token covering its
+  last byte. Certified, the token covering its last byte begins there at every occurrence in every byte string, and the
+  cut there is a boundary of every text's encoding, with the bytes on either side of it encoded alone as the whole text
+  encodes them, so a worker reads no byte past its cut. Refuted, it certifies no cut at any origin, and the refutation
+  is the encoder's segmentation of a string of at most 2L + |window| - 2 bytes, L the longest token, holding the window
+  at an occurrence where that token begins elsewhere, the first the search finds and not necessarily the shortest.
+- The verdicts are of the merge alone, on a text with no special token cut out, and only of the windows given. The
+  candidates are the caller's, since every window of three bytes is too many to decide at full scale, and
+  `matisse-validate` draws every byte an input holds and its most frequent pairs and triples, 1,000 of each unless
+  `--candidates` gives another count.
+- It refuses with `std::invalid_argument` a definition under the rank rule, which carries no merge table, one with the
+  whole-piece lookup, which with no pre-tokenizer would take a whole text that is a token as that one token, and an
+  empty candidate, naming its index. It refuses as munch's `token_automaton()` refuses, with munch's message naming the
+  merge and its rank, a table in which a merge names a part that neither a byte nor an earlier merge carries or
+  recreates a token a byte or an earlier merge already carries, which `read_tokenizer_json()` takes as Hugging Face's
+  BPE model reads it.
+- A character-level table, SentencePiece's BPE and Llama 2's among them, is out of scope, as the open questions of
+  [design.md](design.md) describe.
+
 ## **Streaming: Every Id Final When Returned**
 
 A `Stream_encoder` reads a text in pushes and returns each id once no continuation of the text can change it, and
@@ -292,6 +320,8 @@ to classes does, and with it the ids of a text holding a code point whose class 
   merge table, so character-level SentencePiece waits on a decision about munch's alphabet.
 - `validate()` refuses a width of zero, a pattern that is not total, as `split_verifier()` refuses it, a certified
   window whose right context is unbounded, and a factorization window the split verifier does not certify.
+- `validate_merges()` refuses a definition under the rank rule or with the whole-piece lookup, an empty candidate, and a
+  table munch's `token_automaton()` refuses.
 - `encode()` takes the whole text and returns every id in one vector, so a text it reads is bounded by memory, and
   `encode_parallel()` holds every chunk's ids before it joins them into one vector. A text that arrives in parts is read
   by a `Stream_encoder`, which holds what the section on streaming bounds.
@@ -337,6 +367,12 @@ seconds for GPT-2 and 0.45 for cl100k, and to width five in 1.1 and 2.4, where a
 take 3.8 and 9.3 seconds, and 92 and 213. The `Encoder` takes the report rather than deciding it, so a pattern is
 validated once however many encoders are built.
 
+`validate_merges()` builds munch's token automaton of the table once per call and decides the candidates on it, so
+decide a table's candidates in one call. On GPT-2's table of 50,000 merges the automaton has 50,001 states, is built in
+0.03 seconds and holds about 8 MB, and a decision takes on average about 0.1 ms on a byte, 0.2 ms on a pair and 0.5 ms
+on a triple. `matisse-validate` decides the 2,177 candidates it draws from twitter.json in 0.7 seconds and all 19,434
+windows of one to three bytes twitter.json holds in 7.4 seconds.
+
 Building an encoder builds the merge's tables once: the id of every spelling in a `Spelling_table`, the rank and product
 of every pair the merge may join in a `Join_table`, 233,378 pairs on cl100k's file in 524,288 slots, and the joins of
 all 65,536 pairs of bytes. It also reads the split of every token from the merge of its own spelling, with whether that
@@ -374,8 +410,9 @@ instead of weakening them:
   description shows first, and `validate()` decides its windows.
 - **A rank file under a known pattern.** `matisse-validate FILE --tiktoken PATTERN` reports a rank file read under gpt2,
   cl100k, o200k or llama3, its windows and right context, and with `--input` the anchor supply on a text.
-- **No pre-tokenizer.** The lazy certification of byte-level merge tables without a pre-tokenizer is planned and not
-  written, as the open questions of [design.md](design.md) describe.
+- **No pre-tokenizer.** `matisse-validate FILE --input TEXT` reads a tokenizer.json whose pre-tokenizer is a ByteLevel
+  without its regex and reports which windows of its merge table drawn from TEXT certify a cut, and `validate_merges()`
+  decides the windows a caller names.
 
 If a tokenizer needs a normalizer, a post-processor, a pattern matisse has no description of, a character-level merge
 table or a reader matisse does not have yet, that is the signal matisse is the wrong tool for it today, and the honest

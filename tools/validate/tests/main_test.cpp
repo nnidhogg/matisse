@@ -1,9 +1,13 @@
+#include <array>
 #include <cstdlib>
 #include <filesystem>
 #include <format>
 #include <fstream>
 #include <gtest/gtest.h>
 #include <iterator>
+#include <ranges>
+#include <set>
+#include <span>
 #include <string>
 #include <string_view>
 #include <sys/wait.h>
@@ -185,14 +189,34 @@ constexpr std::string_view llama3_json_spelling{
         R"(\\s*[\\r\\n]+|\\s+(?!\\S)|\\s+)"};
 
 /**
- * @brief Writes a tokenizer.json of the 256 single bytes, each spelled under GPT-2's byte map at its own id, and
- *        `<|endoftext|>` as a special token, the definition bytes.tiktoken is under gpt2.
+ * @brief A merge of a tokenizer.json the tests write, its two parts of printable ASCII, which GPT-2's byte map spells
+ *        as themselves.
+ */
+struct Written_merge
+{
+    /**
+     * @brief The left part.
+     */
+    std::string_view left{};
+
+    /**
+     * @brief The right part.
+     */
+    std::string_view right{};
+};
+
+/**
+ * @brief Writes a tokenizer.json of the 256 single bytes, each spelled under GPT-2's byte map at its own id, then each
+ *        merge's product at the ids after them, once however many merges make it, and `<|endoftext|>` as a special
+ *        token after those: with no merge, the definition bytes.tiktoken is under gpt2.
  * @param path The file's path.
  * @param pre_tokenizer The pre-tokenizer, as JSON text.
  * @param normalizer The normalizer, as JSON text.
+ * @param merges The merges, in rank order.
  */
 void write_bytes_tokenizer_json(
-        const std::filesystem::path& path, const std::string_view pre_tokenizer, const std::string_view normalizer)
+        const std::filesystem::path& path, const std::string_view pre_tokenizer, const std::string_view normalizer,
+        const std::span<const Written_merge> merges = {})
 {
     constexpr unsigned byte_count{256};
 
@@ -209,12 +233,46 @@ void write_bytes_tokenizer_json(
         vocab += std::format(R"({}"\u{:04X}": {})", byte == 0 ? "" : ", ", character, byte);
     }
 
+    std::string pairs{};
+
+    std::set<std::string> products{};
+
+    for (const auto [rank, merge] : std::views::enumerate(merges))
+    {
+        const auto& [left, right]{merge};
+
+        pairs += std::format(R"({}"{} {}")", rank == 0 ? "" : ", ", left, right);
+
+        // A product two merges make is one token of the vocabulary.
+        const auto product{std::format("{}{}", left, right)};
+
+        const auto [position, inserted]{products.insert(product)};
+
+        if (inserted)
+        {
+            vocab += std::format(R"(, "{}": {})", product, byte_count + products.size() - 1);
+        }
+    }
+
+    const auto special{byte_count + products.size()};
+
     std::ofstream{path, std::ios::binary} << std::format(
             R"({{"normalizer": {}, "pre_tokenizer": {}, "post_processor": null,
-                 "added_tokens": [{{"id": 256, "content": "<|endoftext|>", "special": true}}],
-                 "model": {{"type": "BPE", "vocab": {{{}}}, "merges": []}}}})",
-            normalizer, pre_tokenizer, vocab);
+                 "added_tokens": [{{"id": {}, "content": "<|endoftext|>", "special": true}}],
+                 "model": {{"type": "BPE", "vocab": {{{}}}, "merges": [{}]}}}})",
+            normalizer, pre_tokenizer, special, vocab, pairs);
 }
+
+/**
+ * @brief The pre-tokenizer of a merge table published without one, a ByteLevel without its regex, which splits nothing.
+ */
+constexpr std::string_view merge_table_pre_tokenizer{
+        R"({"type": "ByteLevel", "add_prefix_space": false, "use_regex": false})"};
+
+/**
+ * @brief A merge table whose second merge extends the first one's product, (a, b) then (ab, a).
+ */
+constexpr std::array<Written_merge, 2> extending_merges{{{.left = "a", .right = "b"}, {.left = "ab", .right = "a"}}};
 
 /**
  * @brief Returns a command's text output after its first line, the heading that names the file.
@@ -457,6 +515,129 @@ TEST(Command_line_test, A_refused_tokenizer_json_exits_one_with_the_refusal_and_
     EXPECT_TRUE(
             json_out.contains(R"(runs the pattern \"\\p{L}+\", and no tokenizer matisse describes has that pattern)"))
             << json_out;
+
+    std::filesystem::remove_all(dir);
+}
+
+TEST(Command_line_test, A_tokenizer_json_whose_pre_tokenizer_splits_nothing_has_its_merge_table_s_windows_decided)
+{
+    const auto dir{scratch()};
+
+    const auto file{(dir / "merges.tokenizer.json").string()};
+    const auto input{(dir / "input.txt").string()};
+
+    write_bytes_tokenizer_json(file, merge_table_pre_tokenizer, "null", extending_merges);
+
+    // Every byte the input holds, its pairs and its triples, the most frequent first: a and b, then the newline and the
+    // space, each once; ab, ba, then the pairs seen once in byte order; aba, then the triples seen once.
+    std::ofstream{input} << "abab aba\n";
+
+    const auto [status, out, err]{run({file, "--input", input})};
+
+    EXPECT_EQ(status, 0) << err;
+    EXPECT_EQ(err, "");
+    EXPECT_EQ(
+            out, std::format(
+                         "== {}\n-- merge table without a pre-tokenizer: 258 tokens, 1 special token\n"
+                         "-- candidates from {}: 4 bytes, 5 pairs and 6 triples\n"
+                         "verdict                     candidate windows certify a cut: 11 of 15\n"
+                         "certified windows           11: 2 at width 1, 4 at width 2, 5 at width 3\n"
+                         "                            \" \" at 0\n"
+                         "                            \"ab\" at 0\n"
+                         "                            \" a\" at 1\n"
+                         "                            \"b \" at 1\n"
+                         "                            \" ab\" at 1\n"
+                         "                            \"ab \" at 2\n"
+                         "                            ... 5 more\n"
+                         "refuted windows             4: 2 at width 1, 1 at width 2, 1 at width 3\n"
+                         "                            \"a\" at 0 fails at 2 of \"aba\", one token\n"
+                         "                            \"b\" at 0 fails at 1 of \"ab\", one token\n"
+                         "                            \"ba\" at 1 fails at 1 of \"aba\", one token\n"
+                         "                            \"aba\" at 0 fails at 0 of \"abab\", boundaries 2\n",
+                         file, input));
+
+    const auto [json_status, json_out, json_err]{run({file, "--input", input, "--candidates", "1", "--json"})};
+
+    EXPECT_EQ(json_status, 0) << json_err;
+    EXPECT_EQ(
+            json_out, std::format(
+                              R"({{
+  "path": "{}",
+  "tokenizer": null,
+  "refused": null,
+  "tokens": 258,
+  "special_tokens": 1,
+  "report": null,
+  "candidates": {{"input": "{}", "bytes": 4, "pairs": 1, "triples": 1}},
+  "merges": {{
+    "verdict": "candidate windows certify a cut: 3 of 6",
+    "windows": [{{"window": "a", "origin": 0, "refutation": {{"segmentation": {{"text": "aba", "boundaries": []}}, "occurrence": 2}}}}, {{"window": "b", "origin": 0, "refutation": {{"segmentation": {{"text": "ab", "boundaries": []}}, "occurrence": 1}}}}, {{"window": "\u000a", "origin": 0, "refutation": null}}, {{"window": " ", "origin": 0, "refutation": null}}, {{"window": "ab", "origin": 0, "refutation": null}}, {{"window": "aba", "origin": 0, "refutation": {{"segmentation": {{"text": "abab", "boundaries": [2]}}, "occurrence": 0}}}}]
+  }}
+}}
+)",
+                              file, input));
+
+    std::filesystem::remove_all(dir);
+}
+
+TEST(Command_line_test, A_merge_table_without_an_input_or_with_a_malformed_candidate_count_is_a_command_line_error)
+{
+    const auto dir{scratch()};
+
+    const auto file{(dir / "merges.tokenizer.json").string()};
+
+    write_bytes_tokenizer_json(file, merge_table_pre_tokenizer, "null", extending_merges);
+
+    expect_command_error(
+            run({file}),
+            std::format(
+                    "the merge table of {} has no pre-tokenizer, and its candidate windows are drawn from --input, "
+                    "which is not given",
+                    file));
+
+    for (const std::string count : {"0", "-1", "1x", ""})
+    {
+        expect_command_error(
+                run({file, "--input", file, "--candidates", count}),
+                std::format("--candidates takes a count of at least 1, not '{}'", count));
+    }
+
+    std::filesystem::remove_all(dir);
+}
+
+TEST(Command_line_test, A_merge_table_that_recreates_a_token_exits_one_with_the_token_automaton_s_refusal)
+{
+    const auto dir{scratch()};
+
+    const auto file{(dir / "recreating.tokenizer.json").string()};
+    const auto input{(dir / "input.txt").string()};
+
+    // ccca is one token under the encoder, and ccc then a under the merges applied in rank order, each to the end.
+    const std::vector<Written_merge> merges{
+            {.left = "c", .right = "c"},
+            {.left = "c", .right = "cc"},
+            {.left = "ccc", .right = "a"},
+            {.left = "cc", .right = "c"}};
+
+    write_bytes_tokenizer_json(file, merge_table_pre_tokenizer, "null", merges);
+
+    std::ofstream{input} << "ccca";
+
+    const auto [status, out, err]{run({file, "--input", input})};
+
+    const auto refusal{
+            R"(token_automaton: the merge ("cc", "c") at rank 3 recreates the token "ccc", which the alphabet or an )"
+            "earlier merge already carries"};
+
+    EXPECT_EQ(status, 1);
+    EXPECT_EQ(err, "");
+    EXPECT_EQ(out, std::format("== {}\nrefused: {}\n", file, refusal));
+
+    const auto [json_status, json_out, json_err]{run({file, "--input", input, "--json"})};
+
+    EXPECT_EQ(json_status, 1);
+    EXPECT_TRUE(json_out.contains(R"("tokenizer": null,)")) << json_out;
+    EXPECT_TRUE(json_out.contains(R"(\"cc\", \"c\") at rank 3 recreates the token \"ccc\")")) << json_out;
 
     std::filesystem::remove_all(dir);
 }

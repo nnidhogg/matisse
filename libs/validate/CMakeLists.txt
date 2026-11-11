@@ -4,6 +4,7 @@ project(matisse_validate)
 
 
 add_library(${PROJECT_NAME}
+        src/merges.cpp
         src/report.cpp
         src/report_render.cpp
         src/report_serial.cpp
@@ -31,6 +32,7 @@ target_link_libraries(${PROJECT_NAME}
 
 if (MATISSE_BUILD_TESTS)
     add_executable(${PROJECT_NAME}_tests
+            tests/merges_test.cpp
             tests/report_test.cpp
             tests/supply_test.cpp
     )

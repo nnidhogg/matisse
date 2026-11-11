@@ -15,11 +15,13 @@
 #include <string>
 #include <string_view>
 #include <system_error>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
 #include "matisse/load/definition.hpp"
 #include "matisse/lookup/tokenizers.hpp"
+#include "matisse/validate/merges.hpp"
 #include "matisse/validate/report.hpp"
 #include "matisse/validate/supply.hpp"
 
@@ -34,6 +36,20 @@ constexpr std::size_t narrowest_width{2};
  * @brief The widest window `--windows` takes.
  */
 constexpr std::size_t widest_width{5};
+
+/**
+ * @brief How many of an input's most frequent pairs and of its most frequent triples are drawn as candidates for a
+ *        merge table without a pre-tokenizer unless `--candidates` gives another count.
+ *
+ * Under GPT-2's table it draws 2,177 candidates from twitter.json, which the command decides in 0.7 s, where all 19,434
+ * of the input's windows of one to three bytes take 7.4 s.
+ */
+constexpr std::size_t default_candidates{1000};
+
+/**
+ * @brief The values a byte takes, every candidate of width one.
+ */
+constexpr std::size_t byte_values{256};
 
 /**
  * @brief The indent the report's own lines take where they sit in the JSON document.
@@ -57,14 +73,19 @@ constexpr std::string_view usage_text{R"(usage: matisse-validate [options] FILE
 
 Reads a tokenizer definition, a Hugging Face tokenizer.json or a tiktoken rank file, and reports which windows of its
 pre-tokenizer's classes certify a cut, at which origin and with which right context, under the factorization and the
-policy certificate.
+policy certificate. A tokenizer.json whose pre-tokenizer is a ByteLevel without its regex splits nothing, and the
+windows of its merge table are decided instead, on candidates drawn from --input.
 
   --tiktoken PATTERN    read FILE as a tiktoken rank file whose pre-tokenizer is PATTERN, gpt2, cl100k, o200k or
                         llama3, since the file names none; without it FILE is a tokenizer.json, read under the
                         tokenizer whose pattern its pre-tokenizer runs
-  --windows N           the widest window decided, 2 to 5, 5 unless given
+  --windows N           the widest window decided, 2 to 5, 5 unless given; not read for a merge table
   --input FILE          measure each inventory's certified-anchor supply on this file: the anchors, per kibibyte, the
-                        gaps between them, the share of the pre-token boundaries they reach and the longest piece
+                        gaps between them, the share of the pre-token boundaries they reach and the longest piece; for
+                        a merge table without a pre-tokenizer, draw the candidate windows from it, every byte it holds
+                        and its most frequent pairs and triples
+  --candidates N        for a merge table, how many of the input's most frequent pairs and of its most frequent
+                        triples are drawn, 1000 unless given
   --json                one JSON document instead of text
 
 Exit status is 0 when the definition was read and reported, 1 when it was refused, and 2 on a command-line error or on
@@ -93,9 +114,15 @@ struct Options
     std::size_t width{matisse::validate::default_width};
 
     /**
-     * @brief The path of the input the certified-anchor supply is measured on, none when empty.
+     * @brief The path of the input the certified-anchor supply is measured on, or the candidate windows of a merge
+     *        table without a pre-tokenizer are drawn from, none when empty.
      */
     std::string input{};
+
+    /**
+     * @brief How many of the input's most frequent pairs and of its most frequent triples are drawn as candidates.
+     */
+    std::size_t candidates{default_candidates};
 
     /**
      * @brief Whether the output is JSON rather than text.
@@ -109,9 +136,9 @@ struct Options
 struct Read
 {
     /**
-     * @brief The tokenizer.
+     * @brief The tokenizer, std::nullopt for a tokenizer.json whose pre-tokenizer splits nothing.
      */
-    matisse::lookup::Tokenizer tokenizer{};
+    std::optional<matisse::lookup::Tokenizer> tokenizer{};
 
     /**
      * @brief The definition.
@@ -133,6 +160,33 @@ struct Measured
      * @brief The policy inventory's supply.
      */
     matisse::validate::Supply policy{};
+};
+
+/**
+ * @brief The candidate windows drawn from an input for a merge table without a pre-tokenizer.
+ */
+struct Drawn
+{
+    /**
+     * @brief The windows: every byte the input holds, then its most frequent pairs, then its most frequent triples,
+     *        each width the most frequent first.
+     */
+    std::vector<std::string> windows{};
+
+    /**
+     * @brief How many bytes are drawn.
+     */
+    std::size_t bytes{};
+
+    /**
+     * @brief How many pairs are drawn.
+     */
+    std::size_t pairs{};
+
+    /**
+     * @brief How many triples are drawn.
+     */
+    std::size_t triples{};
 };
 
 /**
@@ -186,6 +240,28 @@ struct Measured
 }
 
 /**
+ * @brief Returns the count `--candidates` gives.
+ * @param text The option's value, a decimal.
+ * @return The count.
+ * @throws std::invalid_argument If the text is no decimal of at least one.
+ */
+[[nodiscard]] std::size_t parse_candidates(const std::string_view text)
+{
+    std::size_t count{};
+
+    const auto text_end{text.data() + text.size()};
+
+    const auto [end, error]{std::from_chars(text.data(), text_end, count)};
+
+    if (error != std::errc{} || end != text_end || count == 0)
+    {
+        throw std::invalid_argument{std::format("--candidates takes a count of at least 1, not '{}'", text)};
+    }
+
+    return count;
+}
+
+/**
  * @brief Reads the command line.
  * @param arguments The arguments after the program's name.
  * @return The options.
@@ -223,6 +299,12 @@ struct Measured
         else if (argument == "--input")
         {
             options.input = value();
+        }
+        else if (argument == "--candidates")
+        {
+            const auto text{value()};
+
+            options.candidates = parse_candidates(text);
         }
         else if (argument == "--json")
         {
@@ -270,7 +352,8 @@ struct Measured
 
 /**
  * @brief Reads the definition: a rank file under the tokenizer `--tiktoken` names, or a tokenizer.json under the
- *        tokenizer whose pattern its pre-tokenizer runs, found by the pattern's published spelling.
+ *        tokenizer whose pattern its pre-tokenizer runs, found by the pattern's published spelling, or under none when
+ *        its pre-tokenizer splits nothing.
  * @param options The command line.
  * @return The definition and its tokenizer.
  * @throws std::invalid_argument If the loader refuses the file, or no tokenizer matisse describes has the pattern a
@@ -290,6 +373,13 @@ struct Measured
     }
 
     const auto spelling{matisse::load::tokenizer_json_spelling(options.file)};
+
+    if (spelling.empty())
+    {
+        auto definition{matisse::load::read_tokenizer_json(options.file, spelling)};
+
+        return {.tokenizer = std::nullopt, .definition = std::move(definition)};
+    }
 
     auto described{matisse::lookup::tokenizers()};
 
@@ -361,6 +451,23 @@ void write_refused(std::ostream& out, const Options& options, const std::string_
 }
 
 /**
+ * @brief Returns a JSON object of several lines indented to where it sits as a member of the document, every line but
+ *        the first taking the indent.
+ * @param object The object.
+ * @return The object, indented.
+ */
+[[nodiscard]] std::string indented(std::string object)
+{
+    // Each search resumes past the indent just inserted.
+    for (auto at{object.find('\n')}; at != std::string::npos; at = object.find('\n', at + 1 + report_indent.size()))
+    {
+        object.insert(at + 1, report_indent);
+    }
+
+    return object;
+}
+
+/**
  * @brief Writes a report as the JSON document: the file's path, the tokenizer it was read as, its token counts, the
  *        report, and the supply when an input was measured.
  * @param out The stream.
@@ -380,16 +487,10 @@ void write_json(
     out << std::format(
             "{{\n  \"path\": {},\n  \"tokenizer\": {},\n  \"refused\": null,\n  \"tokens\": {},\n"
             "  \"special_tokens\": {},\n",
-            json_string(options.file), json_string(tokenizer.name), definition.spellings.size(),
+            json_string(options.file), json_string(tokenizer->name), definition.spellings.size(),
             definition.specials.size());
 
-    auto document{matisse::validate::json(report)};
-
-    // The report's own lines, indented to where they sit in the document, each search resuming past the indent.
-    for (auto at{document.find('\n')}; at != std::string::npos; at = document.find('\n', at + 1 + report_indent.size()))
-    {
-        document.insert(at + 1, report_indent);
-    }
+    const auto document{indented(matisse::validate::json(report))};
 
     out << R"(  "report": )" << document;
 
@@ -425,7 +526,7 @@ void write_text(
     const auto specials{definition.specials.size()};
 
     out << std::format(
-            "== {}\n-- tokenizer {}: {} token{}, {} special token{}\n", options.file, tokenizer.name, tokens,
+            "== {}\n-- tokenizer {}: {} token{}, {} special token{}\n", options.file, tokenizer->name, tokens,
             plural(tokens), specials, plural(specials));
 
     out << matisse::validate::render(report);
@@ -439,11 +540,188 @@ void write_text(
 }
 
 /**
+ * @brief Returns an input's windows of one width that occur most often, the most frequent first and a tie in the order
+ *        of the bytes, so that every run draws the same.
+ * @param input The input.
+ * @param width The windows' width.
+ * @param count How many are drawn at most.
+ * @return The windows.
+ */
+[[nodiscard]] std::vector<std::string> most_frequent(
+        const std::string_view input, const std::size_t width, const std::size_t count)
+{
+    std::unordered_map<std::string_view, std::size_t> occurrences{};
+
+    for (std::size_t at{0}; at + width <= input.size(); ++at)
+    {
+        ++occurrences[input.substr(at, width)];
+    }
+
+    std::vector<std::pair<std::string_view, std::size_t>> ranked{occurrences.begin(), occurrences.end()};
+
+    const auto more_frequent{[]<typename Entry>(const Entry& left, const Entry& right) {
+        const auto& [left_window, left_count]{left};
+
+        const auto& [right_window, right_count]{right};
+
+        return left_count != right_count ? left_count > right_count : left_window < right_window;
+    }};
+
+    std::ranges::sort(ranked, more_frequent);
+
+    std::vector<std::string> windows{};
+
+    for (const auto& [window, occurrence_count] : ranked | std::views::take(count))
+    {
+        windows.emplace_back(window);
+    }
+
+    return windows;
+}
+
+/**
+ * @brief Draws the candidate windows of a merge table without a pre-tokenizer from an input: every byte it holds and
+ *        its most frequent pairs and triples.
+ * @param input The input.
+ * @param count How many pairs and how many triples are drawn at most.
+ * @return The windows and how many of each width.
+ */
+[[nodiscard]] Drawn drawn_candidates(const std::string_view input, const std::size_t count)
+{
+    const auto bytes{most_frequent(input, 1, byte_values)};
+
+    const auto pairs{most_frequent(input, 2, count)};
+
+    const auto triples{most_frequent(input, 3, count)};
+
+    std::vector<std::string> windows{bytes};
+
+    windows.insert(windows.end(), pairs.begin(), pairs.end());
+
+    windows.insert(windows.end(), triples.begin(), triples.end());
+
+    return {.windows = std::move(windows), .bytes = bytes.size(), .pairs = pairs.size(), .triples = triples.size()};
+}
+
+/**
+ * @brief Writes the windows decided of a merge table as the JSON document: the file's path, a null tokenizer, its token
+ *        counts, a null report, the candidates drawn and the windows decided.
+ * @param out The stream.
+ * @param options The command line.
+ * @param definition The definition read.
+ * @param drawn The candidates drawn.
+ * @param windows The windows decided.
+ */
+void write_merges_json(
+        std::ostream& out, const Options& options, const matisse::load::Definition& definition, const Drawn& drawn,
+        const std::span<const matisse::validate::Merge_window> windows)
+{
+    using matisse::validate::json_string;
+
+    const auto& [candidates, bytes, pairs, triples]{drawn};
+
+    out << std::format(
+            "{{\n  \"path\": {},\n  \"tokenizer\": null,\n  \"refused\": null,\n  \"tokens\": {},\n"
+            "  \"special_tokens\": {},\n  \"report\": null,\n",
+            json_string(options.file), definition.spellings.size(), definition.specials.size());
+
+    out << std::format(
+            "  \"candidates\": {{\"input\": {}, \"bytes\": {}, \"pairs\": {}, \"triples\": {}}},\n",
+            json_string(options.input), bytes, pairs, triples);
+
+    const auto document{indented(matisse::validate::merges_json(windows))};
+
+    out << R"(  "merges": )" << document << "\n}\n";
+}
+
+/**
+ * @brief Writes the windows decided of a merge table as text: the file's heading, the table's token counts, the
+ *        candidates drawn, and the windows decided.
+ * @param out The stream.
+ * @param options The command line.
+ * @param definition The definition read.
+ * @param drawn The candidates drawn.
+ * @param windows The windows decided.
+ */
+void write_merges_text(
+        std::ostream& out, const Options& options, const matisse::load::Definition& definition, const Drawn& drawn,
+        const std::span<const matisse::validate::Merge_window> windows)
+{
+    using matisse::validate::plural;
+
+    const auto& [candidates, bytes, pairs, triples]{drawn};
+
+    const auto tokens{definition.spellings.size()};
+
+    const auto specials{definition.specials.size()};
+
+    out << std::format(
+            "== {}\n-- merge table without a pre-tokenizer: {} token{}, {} special token{}\n", options.file, tokens,
+            plural(tokens), specials, plural(specials));
+
+    out << std::format(
+            "-- candidates from {}: {} byte{}, {} pair{} and {} triple{}\n", options.input, bytes, plural(bytes), pairs,
+            plural(pairs), triples, plural(triples));
+
+    out << matisse::validate::render_merges(windows);
+}
+
+/**
+ * @brief Decides the windows of a merge table without a pre-tokenizer on the candidates drawn from the input, and
+ *        writes them, or the refusal of the table in their place.
+ * @param options The command line.
+ * @param definition The definition read.
+ * @param input The input's text, none when none was given.
+ * @param out The stream.
+ * @return Whether the table was decided, false when it was refused.
+ * @throws std::invalid_argument If no input was given, which the candidates are drawn from.
+ */
+[[nodiscard]] bool run_merges(
+        const Options& options, const matisse::load::Definition& definition, const std::optional<std::string>& input,
+        std::ostream& out)
+{
+    if (!input)
+    {
+        throw std::invalid_argument{std::format(
+                "the merge table of {} has no pre-tokenizer, and its candidate windows are drawn from --input, "
+                "which is not given",
+                options.file)};
+    }
+
+    const auto drawn{drawn_candidates(*input, options.candidates)};
+
+    std::vector<matisse::validate::Merge_window> windows{};
+
+    try
+    {
+        windows = matisse::validate::validate_merges(definition, drawn.windows);
+    }
+    catch (const std::invalid_argument& error)
+    {
+        write_refused(out, options, error.what());
+
+        return false;
+    }
+
+    if (options.json)
+    {
+        write_merges_json(out, options, definition, drawn, windows);
+    }
+    else
+    {
+        write_merges_text(out, options, definition, drawn, windows);
+    }
+
+    return true;
+}
+
+/**
  * @brief Reads the definition, decides its pattern's report, measures the supply on the input when one was given, and
- *        writes what was found.
+ *        writes what was found; a merge table without a pre-tokenizer has its windows decided instead.
  * @param options The command line.
  * @param out The stream.
  * @return Whether the definition was read, false when it was refused.
+ * @throws std::invalid_argument If a merge table without a pre-tokenizer is read and no input was given.
  * @throws std::runtime_error If the file or the input cannot be read.
  */
 [[nodiscard]] bool run(const Options& options, std::ostream& out)
@@ -469,7 +747,12 @@ void write_text(
         return false;
     }
 
-    const auto report{matisse::validate::validate(read->tokenizer.pattern, options.width)};
+    if (!read->tokenizer)
+    {
+        return run_merges(options, read->definition, input, out);
+    }
+
+    const auto report{matisse::validate::validate(read->tokenizer->pattern, options.width)};
 
     std::optional<Measured> supplies{};
 

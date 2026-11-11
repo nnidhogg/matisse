@@ -138,6 +138,39 @@ ninetieth and ninety-ninth percentile and longest, absent when fewer than two an
 of the serial pre-token boundaries that are anchors, and the `longest_piece`. `supply_section()` and `supply_json()`
 render the supply of both inventories on one input as the report's section and as JSON.
 
+## **Validating a merge table without a pre-tokenizer**
+
+```cpp
+#include <iostream>
+#include <string>
+#include <vector>
+
+#include <matisse/load/definition.hpp>
+#include <matisse/validate/merges.hpp>
+
+// A tokenizer.json whose pre-tokenizer is a ByteLevel without its regex is read under the empty spelling.
+const auto definition{matisse::load::read_tokenizer_json("tokenizer.json", "")};
+
+const std::vector<std::string> candidates{" ", "e,", ": ", "the"};
+
+const auto windows{matisse::validate::validate_merges(definition, candidates)};
+
+std::cout << matisse::validate::render_merges(windows);
+```
+
+A merge table with no pre-tokenizer merges a whole text as one piece, so it has no pattern, no report and no encoder,
+and its cuts are the windows its merge table certifies. `validate::validate_merges(definition, candidates)` builds
+munch's token automaton of the table once and decides each candidate window by `miscovering()` on it, under the pair
+rule, and returns each as a `validate::Merge_window` in the order given: its `window`, the `origin` it was decided at,
+where the window's own encoding begins the token covering its last byte, the only origin that can be certified, and its
+`refutation`, `std::nullopt` when the window is certified and otherwise a `munch::verifier::Miscovering`, the encoder's
+segmentation of a string with an occurrence of the window whose covering token begins elsewhere. On GPT-2's table the
+automaton is built in 0.03 seconds and a decision takes about half a millisecond on average on a window of three bytes,
+so decide a table's candidates in one call. It refuses with `std::invalid_argument` a definition under the rank rule or
+with the whole-piece lookup, an empty candidate, and a table munch's `token_automaton()` refuses, with munch's message.
+`render_merges(windows)` writes the windows decided as text, the certified and then the refuted ones, and
+`merges_json(windows)` as one JSON object.
+
 ## **Encoding**
 
 ```cpp
@@ -231,10 +264,11 @@ pretok also gives the pieces the stages are built from, for a caller that wants 
 
 ## **The command line**
 
-`matisse-validate` reports a tokenizer.json or a rank file read under a known pattern:
+`matisse-validate` reports a tokenizer.json or a rank file read under a known pattern, or the windows of a merge table
+without a pre-tokenizer:
 
 ```
-matisse-validate [--tiktoken PATTERN] [--windows N] [--input FILE] [--json] FILE
+matisse-validate [--tiktoken PATTERN] [--windows N] [--input FILE] [--candidates N] [--json] FILE
 ```
 
 `--tiktoken` names the pattern of the rank file, gpt2, cl100k, o200k or llama3, since the file names none, and the
@@ -248,3 +282,12 @@ the tokenizer it was read as, with its token counts. `--json` writes one documen
 tokenizer, the refusal or null, the token counts, the report and the supply. The exit status is 0 when the definition
 was read and reported, 1 when the loader refused it, the refusal written in place of the report, and 2 on a command-line
 error, with the usage, or on a file or an input the command cannot read, an input that is not UTF-8 among them.
+
+A tokenizer.json whose pre-tokenizer is a ByteLevel without its regex has no pattern, and the command decides the
+windows of its merge table by `validate_merges()` instead, on candidates drawn from `--input`, which is then required:
+every byte the input holds and its most frequent pairs and triples, `--candidates` of each, 1,000 unless given, the most
+frequent first and a tie in the order of the bytes. The text is headed by the file, the table's token counts and the
+candidates drawn, and `--json` writes the path, a null tokenizer, the refusal or null, the token counts, a null report,
+the candidates drawn and the windows decided. A table `validate_merges()` refuses, one with the whole-piece lookup or
+one munch's `token_automaton()` refuses, is a refusal, exit status 1, and a merge table named without `--input` a
+command-line error. `--windows` is not read for a merge table, and `--candidates` is read for nothing else.

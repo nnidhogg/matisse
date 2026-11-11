@@ -406,9 +406,9 @@ recognized under `gpt2::spelling()`. A Sequence of a Split on the published spel
 regex runs that pattern, the Split isolated and not inverted, as Llama 3's file writes it, or removed and inverted, as
 Xenova's conversions write it, which keeps the regex's matches and drops what lies between them, nothing under a total
 pattern, so that both keep the same pieces. The empty spelling reads a ByteLevel without its regex alone, which maps the
-bytes and splits nothing, for the merge tables without a pre-tokenizer of the open questions below. A null pre-tokenizer
-is none of them, since Hugging Face's BPE then merges a text's characters and not its bytes: under GPT-2's vocabulary,
-whose space is the character `Ġ`, it drops every space.
+bytes and splits nothing, for a merge table without a pre-tokenizer, which the next section certifies. A null
+pre-tokenizer is none of them, since Hugging Face's BPE then merges a text's characters and not its bytes: under GPT-2's
+vocabulary, whose space is the character `Ġ`, it drops every space.
 
 A spelling is the vendor's regex, and the description describes it under the vendor's engine, so a spelling is read only
 where Hugging Face's engine reads it as published. Oniguruma, the engine of Hugging Face's tokenizers, reads the
@@ -452,6 +452,60 @@ tokens; Xenova/gpt-4's holds cl100k_base.tiktoken's tokens under `llama3::spelli
 `cl100k::spelling()`, naming the pattern it carries. The encoder tests of gpt2, o200k and llama3 hold the ids of the
 definitions read, Xenova/gpt-4's among them under Llama 3's pattern, to the vendor fixture's Hugging Face ids on the
 three corpora of the test strategy, and `matisse_tokenizer_json_fuzzer` feeds the reader arbitrary bytes.
+
+## **A merge table without a pre-tokenizer**
+
+A merge table published with no pre-tokenizer, as a tokenizer.json whose pre-tokenizer is a ByteLevel without its regex,
+which `read_tokenizer_json()` reads under the empty spelling, merges a whole text as one piece. It has no pattern and so
+no report, and the `Encoder`, which segments by the report's pattern, has none for it: its cuts are the windows its
+merge table certifies itself. `validate::validate_merges(definition, candidates)` decides them by munch's lazy
+certification. It builds munch's `token_automaton()` of the table once, decides each candidate by `miscovering()` on it,
+and returns each candidate as a `Merge_window` of its bytes, the origin it was decided at and its refutation or none.
+The decision rests on the canonical adjacency theorem of the report The Left Ripple of Byte-Pair Encoding: a list of
+tokens is the encoder's segmentation of its spelling exactly when every token and every adjacent pair is, so a
+miscovering, when there is one, is spelled by the tokens over one occurrence of the window, at most 2L + |window| - 2
+bytes, L the longest token, and the search over those is exact. A refutation is the encoder's segmentation of such a
+string, the first the search finds. A certified window's cut is a boundary of every text's encoding, and by the same
+theorem the bytes on either side of a boundary are encoded alone as the whole text encodes them, so a caller that cuts
+there reads no byte past the cut.
+
+The encoder decided is canonical byte-pair encoding, the merge of least rank applied at its leftmost occurrence until
+none applies, which is the pair rule. A definition under the rank rule carries no merge table and is refused, and so is
+one with the whole-piece lookup, which with no pre-tokenizer would take a whole text that is a token as that one token,
+outside the encoder decided. munch's `token_automaton()` refuses a table in which a merge names a part that neither a
+byte nor an earlier merge carries, or recreates a token that a byte or an earlier merge already carries, as (c, c), (c,
+cc), (ccc, a), (cc, c) recreates ccc, and that refusal passes through with munch's message naming the merge and its
+rank. `read_tokenizer_json()` takes such tables, since Hugging Face's BPE model reads them, but the automaton is built
+merge by merge over the parts made before, and it certifies nothing of them.
+
+A candidate is a window, not a window with an origin. Every byte string is encoded, the window among them, so at its
+occurrence in itself the token covering its last byte begins where the window's own encoding begins it, and that is the
+only origin that can be certified. `validate_merges()` encodes each candidate alone by the table and decides it at that
+origin, as munch's `chunk_plan()` decides a window of a byte table, so a refuted window certifies no cut at any origin
+and a caller has no origin to choose. The candidates are the caller's, since every window of a width is too many to
+decide at full scale. On GPT-2's table of 50,000 merges the automaton has 50,001 states, one past the base state for
+every merge since every product is read, is built in 0.03 seconds and holds about 8 MB, so its memory is no concern at
+that size; a decision takes on average about 0.1 ms on a byte, 0.2 ms on a pair and 0.5 ms on a triple, so that the
+16,777,216 windows of three bytes would take over two hours.
+
+`matisse-validate` draws the candidates from `--input`: every byte the input holds and its most frequent pairs and
+triples, `--candidates` of each, 1,000 unless given, the most frequent first and a tie in the order of the bytes. On
+twitter.json under GPT-2's table that is 177 bytes, 1,000 pairs and 1,000 triples, of which 4, 488 and 527 certify a
+cut, decided in 0.7 seconds; of every pair and triple twitter.json holds, 4,874 and 14,383, which with its bytes are
+19,434 windows decided in 7.4 seconds, 13,597 certify. The four bytes that certify alone are the UTF-8 lead bytes 0xCB,
+0xDB, 0xE4 and 0xEA, each beginning every token that holds it, and every other byte of the input lies in some token that
+begins before it, as the e of he does. Among the pairs and triples that certify are `"e,"` and `": "` at 1 and two
+spaces at 1, which no token the encoder emits holds, the table having been learned on text GPT-2's pattern had cut.
+`render_merges()` and `merges_json()` write the windows decided, as text the certified and then the refuted ones counted
+by width with examples, and as JSON each in the order decided with its refutation or null.
+
+validate's tests hold every window of one to three bytes over a, b and c, under six written tables and 300 seeded ones,
+to a scan of every string over the three of up to 2L + 1 bytes, past which no refutation is needed, and on the written
+tables and 40 of the seeded ones to `miscovering()` on munch's merge tower of the same table, and they replay every
+refutation as the encoder's segmentation of its text with its window covered elsewhere at the occurrence. gpt2's tests
+decide twitter.json's candidates on GPT-2's pinned table and hold the cut of every certified window at every occurrence
+in twitter.json encoded whole by `Merger`, and every refutation to `Merger`'s segmentation of its text. The command
+line's tests hold its text and JSON on a written table and its refusals.
 
 ## **One merge, three routes, the same ids**
 
@@ -647,9 +701,10 @@ seeded texts, and on four threads each keeping a cache of its own, to `encode()`
 
 The constructor of `encode::Encoder` takes the report `validate()` decided of the pattern, as `supply()` takes it, and
 keeps the inventory's window table and right context. It segments by the pattern the report holds, so a definition
-without a pre-tokenizer has no encoder. It refuses an `allowed` spelling that is not one of the definition's special
-tokens. The names follow munch's `core::Lexer`, whose `tokenize_all()`, `chunk_boundaries()` and
-`tokenize_all_parallel()` are `encode()`, `chunk_boundaries()` and `encode_parallel()` here.
+without a pre-tokenizer has no encoder, and its cuts are the windows `validate_merges()` certifies of its merge table.
+It refuses an `allowed` spelling that is not one of the definition's special tokens. The names follow munch's
+`core::Lexer`, whose `tokenize_all()`, `chunk_boundaries()` and `tokenize_all_parallel()` are `encode()`,
+`chunk_boundaries()` and `encode_parallel()` here.
 
 `encode()` is the sequential encoding. The text is split at every occurrence of an allowed special token, the earliest
 first and the longest of those that begin at one byte, which emits its id. Each stretch between them is segmented by the
@@ -1022,6 +1077,8 @@ matisse builds against munch 3.0.0 and uses:
   windows GPT-2's right contexts are asked of, under the factorization and the policy certificate, and at 4 of the 112
   and 24 of the 678 of cl100k's, every other one refuting neither side.
 - `munch::verifier::Merge` as the entry of a definition's merge table.
+- `token_automaton()` and `miscovering(const Token_automaton&, window, origin)` for the certification of a merge table
+  without a pre-tokenizer, and, in the tests, `merge_tower()` and `miscovering()` on it.
 
 matisse does not need munch's Unicode tables, which are of version 17.0.0 and have no L or N, a UTF-8 decoder, of which
 pretok has a small one of its own, or a runtime, which is matisse's by the division.
@@ -1043,25 +1100,15 @@ munch does not yet offer four things matisse could use. Each is general, so it w
 
 ## **Open questions**
 
-**Merge tables without a pre-tokenizer.** The `Encoder` segments by a pattern, so a definition without a pre-tokenizer
-has no encoder. Certifying the windows of such a byte-level merge table is planned and not written, as
-`validate_merges()`, the lazy certification: it would build munch's `token_automaton()` once and decide each candidate
-window by `miscovering()` on it, returning each candidate with its refutation or none. munch's `token_automaton()`
-refuses a table that recreates a token, and that refusal would pass through as the loader's. The candidates would be
-given by the caller, and the command line would draw them from an input, every byte and the most frequent byte pairs and
-triples, since all byte windows of width three are too many to decide at full scale. Such a table published as a
-tokenizer.json, its pre-tokenizer a ByteLevel without its regex, is read by `read_tokenizer_json()` under the empty
-spelling.
-
 **Character-level merge tables.** SentencePiece BPE tokenizers without a pre-tokenizer, Llama 2 among them, merge
 Unicode characters, and munch's `token_automaton()` refuses a part that is not a byte or an earlier product. They also
-carry a normalizer and byte fallback. The lazy route would cover byte-level merge tables, and character-level ones wait
-for a decision about munch's alphabet. A SentencePiece loader would give munch the self-split table: for every piece,
-the pair its own characters merge last under SentencePiece's loop, ranked by score, highest first. SentencePiece forms
-every piece by that split, so with distinct product scores the score-ranked self-split table reproduces its encoder,
-which is Yi's case. Equal scores are harder. Mistral's tied group of whitespace runs admits a split-and-rank compilation
-proved equivalent on every run, while the two equal-scored pieces ab and ba admit no rank order at all, so a loader
-would search each tie group for an output-equivalent table and refuse a model whose group admits none, naming the group.
+carry a normalizer and byte fallback. The lazy route covers byte-level merge tables, and character-level ones wait for a
+decision about munch's alphabet. A SentencePiece loader would give munch the self-split table: for every piece, the pair
+its own characters merge last under SentencePiece's loop, ranked by score, highest first. SentencePiece forms every
+piece by that split, so with distinct product scores the score-ranked self-split table reproduces its encoder, which is
+Yi's case. Equal scores are harder. Mistral's tied group of whitespace runs admits a split-and-rank compilation proved
+equivalent on every run, while the two equal-scored pieces ab and ba admit no rank order at all, so a loader would
+search each tie group for an output-equivalent table and refuse a model whose group admits none, naming the group.
 Whether a candidate table is equivalent is decidable by a finite test over canonical tokens and adjacent pairs, so what
 remains open is the cost of synthesis. Certification needs no table at all, since munch's lazy certification needs only
 the canonical tokens and the adjacency relation, which SentencePiece's own encoder supplies as a pair oracle, once munch
