@@ -253,3 +253,92 @@ def test_encode_with_unstable_is_refused(pair):
     ours, _ = pair
     with pytest.raises(NotImplementedError):
         ours.encode_with_unstable("hello fanta")
+
+
+def test_a_batch_takes_any_iterable_of_texts_as_tiktoken_s_does(pair):
+    ours, theirs = pair
+    texts = ["hello world", "foo <|endoftext|>", ""]
+    expected = theirs.encode_batch(texts, disallowed_special=())
+    for made in (lambda: iter(texts), lambda: tuple(texts), lambda: (text for text in texts)):
+        assert ours.encode_batch(made(), disallowed_special=()) == expected
+        assert ours.encode_ordinary_batch(made()) == theirs.encode_ordinary_batch(made())
+        arrays = ours.encode_batch_to_numpy(made(), disallowed_special=())
+        assert [array.tolist() for array in arrays] == expected
+
+
+def test_a_text_that_is_not_a_string_is_refused_with_tiktoken_s_type_error(pair):
+    ours, theirs = pair
+    for texts in (["a", 5], [b"a"], [None]):
+        assert raised(lambda: ours.encode_ordinary_batch(texts)) == raised(lambda: theirs.encode_ordinary_batch(texts))
+        mine = raised(lambda: ours.encode_batch(texts, disallowed_special=()))
+        assert mine == raised(lambda: theirs.encode_batch(texts, disallowed_special=()))
+    for text in (b"abc", None, 5):
+        assert raised(lambda: ours.encode_ordinary(text)) == raised(lambda: theirs.encode_ordinary(text))
+        # encode() searches the text for disallowed special tokens first, tiktoken's with the regex package.
+        assert raised(lambda: ours.encode(text))[0] is raised(lambda: theirs.encode(text))[0] is TypeError
+
+
+def test_allowed_special_is_a_set_or_all_and_anything_else_is_refused_as_tiktoken_refuses_it(pair):
+    ours, theirs = pair
+    spelling = sorted(theirs.special_tokens_set)[0]
+    text = f"hi{spelling}"
+    for allowed in (spelling, [spelling], (spelling,), {spelling: 1}):
+        for disallowed in ("all", (), {"zzz"}):
+            arguments = {"allowed_special": allowed, "disallowed_special": disallowed}
+            assert outcome(lambda: ours.encode(text, **arguments)) == outcome(lambda: theirs.encode(text, **arguments))
+            mine = outcome(lambda: ours.encode_to_numpy(text, **arguments))
+            assert mine == outcome(lambda: theirs.encode_to_numpy(text, **arguments))
+            mine = outcome(lambda: ours.encode_batch([text], **arguments))
+            assert mine == outcome(lambda: theirs.encode_batch([text], **arguments))
+            assert outcome(lambda: ours.encode_batch([], **arguments)) == outcome(
+                lambda: theirs.encode_batch([], **arguments)
+            )
+    for allowed in (frozenset({spelling}), {spelling}, set()):
+        assert outcome(lambda: ours.encode(text, allowed_special=allowed)) == outcome(
+            lambda: theirs.encode(text, allowed_special=allowed)
+        )
+
+
+def test_num_threads_takes_what_tiktoken_s_pool_takes(pair):
+    ours, theirs = pair
+    texts = ["a b", "c d e", "f"]
+    for count in (None, 2.0, 2.5, True, 1, 64):
+        assert ours.encode_ordinary_batch(texts, num_threads=count) == theirs.encode_ordinary_batch(
+            texts, num_threads=count
+        )
+        assert ours.encode_batch(texts, num_threads=count) == theirs.encode_batch(texts, num_threads=count)
+    for count in ("2", 0, -1, 0.0):
+        mine = raised(lambda: ours.encode_ordinary_batch(texts, num_threads=count))
+        assert mine == raised(lambda: theirs.encode_ordinary_batch(texts, num_threads=count))
+        mine = raised(lambda: ours.encode_batch(texts, num_threads=count))
+        assert mine == raised(lambda: theirs.encode_batch(texts, num_threads=count))
+
+
+def test_special_tokens_of_which_one_begins_another_or_two_share_an_id_are_refused(pairs):
+    if "cl100k_base" not in pairs:
+        pytest.skip("the vocabulary does not hold cl100k_base")
+    _, theirs = pairs["cl100k_base"]
+    ranks = theirs._mergeable_ranks
+    begins = {"<|a|>": len(ranks), "<|a|>b": len(ranks) + 1, "x<|a": len(ranks) + 2}
+    with pytest.raises(ValueError, match="begins"):
+        matisse_tokenizer.Encoding("overlap", pat_str=theirs._pat_str, mergeable_ranks=ranks, special_tokens=begins)
+    shared = {"<|a|>": len(ranks), "<|b|>": len(ranks)}
+    with pytest.raises(ValueError, match="has the id"):
+        matisse_tokenizer.Encoding("shared", pat_str=theirs._pat_str, mergeable_ranks=ranks, special_tokens=shared)
+    # Overlapping without one beginning the other is taken, and its ids are tiktoken's.
+    overlapping = {"<|a|>": len(ranks), "x<|a": len(ranks) + 1}
+    mine = matisse_tokenizer.Encoding("ok", pat_str=theirs._pat_str, mergeable_ranks=ranks, special_tokens=overlapping)
+    reference = tiktoken.Encoding("ok", pat_str=theirs._pat_str, mergeable_ranks=ranks, special_tokens=overlapping)
+    for text in ("x<|a|>", "qx<|a|>b", "<|a|>x<|a"):
+        for allowed in ("all", {"<|a|>"}, {"x<|a"}):
+            arguments = {"allowed_special": allowed, "disallowed_special": ()}
+            assert mine.encode(text, **arguments) == reference.encode(text, **arguments)
+
+
+def test_the_package_s_version_is_its_metadata_s_and_the_user_agent_s():
+    from importlib.metadata import version
+
+    from matisse_tokenizer import load
+
+    assert matisse_tokenizer.__version__ == version("matisse-tokenizer")
+    assert load.USER_AGENT == f"matisse-tokenizer/{matisse_tokenizer.__version__}"

@@ -66,11 +66,23 @@ using Id_array_t = nb::ndarray<nb::numpy, const matisse::load::Token_id_t, nb::n
  * @brief Returns the UTF-8 of a Python string, which CPython keeps with the string for as long as it lives.
  * @param text The string.
  * @return The bytes, valid while the string lives.
+ * @throws nb::builtin_exception A TypeError if the object is not a string, with the message tiktoken's core gives.
  * @throws nb::python_error The UnicodeEncodeError CPython raises for a string holding a lone surrogate, which no UTF-8
  *         spells.
  */
-[[nodiscard]] std::string_view utf8_of(const nb::str& text)
+[[nodiscard]] std::string_view utf8_of(const nb::handle text)
 {
+    if (!nb::isinstance<nb::str>(text))
+    {
+        const auto described{
+                text.is_none() ? std::string{"'None'"} :
+                                 std::format("'{}' object", nb::type_name(text.type()).c_str())};
+
+        const auto message{std::format("{} is not an instance of 'str'", described)};
+
+        throw nb::builtin_exception{nb::exception_type::type_error, message.c_str()};
+    }
+
     Py_ssize_t size{};
 
     const auto* const bytes{PyUnicode_AsUTF8AndSize(text.ptr(), &size)};
@@ -298,10 +310,11 @@ void construct_cache(matisse::encode::Piece_cache* cache, const matisse::encode:
  * @param cache The cache, made for this encoder.
  * @return The ids.
  * @throws std::invalid_argument If the cache was made for another encoder.
+ * @throws nb::builtin_exception A TypeError if the text is not a string.
  * @throws nb::python_error If the text holds a lone surrogate.
  */
 [[nodiscard]] Ids_t encode_ids(
-        const matisse::encode::Encoder& encoder, const nb::str& text, matisse::encode::Piece_cache& cache)
+        const matisse::encode::Encoder& encoder, const nb::handle text, matisse::encode::Piece_cache& cache)
 {
     const auto view{utf8_of(text)};
 
@@ -315,10 +328,11 @@ void construct_cache(matisse::encode::Piece_cache* cache, const matisse::encode:
  * @param cache The cache, made for this encoder.
  * @return The ids.
  * @throws std::invalid_argument If the cache was made for another encoder.
+ * @throws nb::builtin_exception A TypeError if the text is not a string.
  * @throws nb::python_error If the text holds a lone surrogate.
  */
 [[nodiscard]] Id_array_t encode_array(
-        const matisse::encode::Encoder& encoder, const nb::str& text, matisse::encode::Piece_cache& cache)
+        const matisse::encode::Encoder& encoder, const nb::handle text, matisse::encode::Piece_cache& cache)
 {
     return array_of(encode_ids(encoder, text, cache));
 }
@@ -329,10 +343,11 @@ void construct_cache(matisse::encode::Piece_cache* cache, const matisse::encode:
  * @param text The text.
  * @param chunks The number of chunks aimed for, one thread each.
  * @return The ids.
+ * @throws nb::builtin_exception A TypeError if the text is not a string.
  * @throws nb::python_error If the text holds a lone surrogate.
  */
 [[nodiscard]] Ids_t encode_parallel_ids(
-        const matisse::encode::Encoder& encoder, const nb::str& text, const std::size_t chunks)
+        const matisse::encode::Encoder& encoder, const nb::handle text, const std::size_t chunks)
 {
     const auto view{utf8_of(text)};
 
@@ -345,10 +360,11 @@ void construct_cache(matisse::encode::Piece_cache* cache, const matisse::encode:
  * @param text The text.
  * @param chunks The number of chunks aimed for, one thread each.
  * @return The ids.
+ * @throws nb::builtin_exception A TypeError if the text is not a string.
  * @throws nb::python_error If the text holds a lone surrogate.
  */
 [[nodiscard]] Id_array_t encode_parallel_array(
-        const matisse::encode::Encoder& encoder, const nb::str& text, const std::size_t chunks)
+        const matisse::encode::Encoder& encoder, const nb::handle text, const std::size_t chunks)
 {
     return array_of(encode_parallel_ids(encoder, text, chunks));
 }
@@ -361,22 +377,23 @@ void construct_cache(matisse::encode::Piece_cache* cache, const matisse::encode:
  * @param texts The texts.
  * @param threads The threads of the pool, at least one.
  * @return The ids of each text, in the texts' order.
- * @throws nb::python_error If an item is not a string or holds a lone surrogate.
+ * @throws nb::builtin_exception A TypeError if an item is not a string, with the message tiktoken's core gives.
+ * @throws nb::python_error If an item holds a lone surrogate.
  * @throws std::invalid_argument If a text is refused, the first refusal rethrown once every thread has joined.
  */
-[[nodiscard]] std::vector<Ids_t> batch_ids(
+[[nodiscard]] std::vector<Ids_t> encode_batch(
         const matisse::encode::Encoder& encoder, const nb::list& texts, const std::size_t threads)
 {
     // The strings are held here, so that the bytes read survive a change to the list while the lock is released.
-    std::vector<nb::str> held{};
+    std::vector<nb::object> held{};
 
     std::vector<std::string_view> views{};
 
     for (const auto item : texts)
     {
-        const auto& text{held.emplace_back(nb::cast<nb::str>(item))};
+        views.push_back(utf8_of(item));
 
-        views.push_back(utf8_of(text));
+        held.push_back(nb::borrow(item));
     }
 
     return released([&] {
@@ -430,34 +447,20 @@ void construct_cache(matisse::encode::Piece_cache* cache, const matisse::encode:
 }
 
 /**
- * @brief Returns the ids of every text of a batch as lists, encoded as batch_ids() encodes them.
- * @param encoder The encoder.
- * @param texts The texts.
- * @param threads The threads of the pool, at least one.
- * @return The ids of each text, in the texts' order.
- * @throws nb::python_error If an item is not a string or holds a lone surrogate.
- * @throws std::invalid_argument If a text is refused.
- */
-[[nodiscard]] std::vector<Ids_t> encode_batch(
-        const matisse::encode::Encoder& encoder, const nb::list& texts, const std::size_t threads)
-{
-    return batch_ids(encoder, texts, threads);
-}
-
-/**
- * @brief Returns the ids of every text of a batch as NumPy arrays, encoded as batch_ids() encodes them, so that no
+ * @brief Returns the ids of every text of a batch as NumPy arrays, encoded as encode_batch() encodes them, so that no
  *        Python integer is made per id.
  * @param encoder The encoder.
  * @param texts The texts.
  * @param threads The threads of the pool, at least one.
  * @return An array of the ids of each text, in the texts' order.
- * @throws nb::python_error If an item is not a string or holds a lone surrogate.
+ * @throws nb::builtin_exception A TypeError if an item is not a string, with the message tiktoken's core gives.
+ * @throws nb::python_error If an item holds a lone surrogate.
  * @throws std::invalid_argument If a text is refused.
  */
 [[nodiscard]] nb::list encode_batch_arrays(
         const matisse::encode::Encoder& encoder, const nb::list& texts, const std::size_t threads)
 {
-    auto encoded{batch_ids(encoder, texts, threads)};
+    auto encoded{encode_batch(encoder, texts, threads)};
 
     nb::list arrays{};
 
@@ -474,7 +477,7 @@ void construct_cache(matisse::encode::Piece_cache* cache, const matisse::encode:
  * @param encoder The encoder.
  * @param tokens The ids, an iterable of integers.
  * @return The bytes.
- * @throws nb::key_error If an id is neither an ordinary nor a special token, as tiktoken raises KeyError.
+ * @throws nb::builtin_exception A KeyError if an id names no token, ordinary or special, as tiktoken raises it.
  * @throws std::overflow_error If an id is negative or does not fit 32 bits.
  */
 [[nodiscard]] nb::bytes decode_bytes(const matisse::encode::Encoder& encoder, const nb::handle tokens)
@@ -489,7 +492,7 @@ void construct_cache(matisse::encode::Piece_cache* cache, const matisse::encode:
     }
     catch (const std::out_of_range& error)
     {
-        throw nb::key_error(error.what());
+        throw nb::builtin_exception{nb::exception_type::key_error, error.what()};
     }
 }
 
@@ -515,11 +518,11 @@ NB_MODULE(_core, module)
 
     nb::class_<matisse::encode::Encoder>(module, "Encoder", "matisse's encoder under the factorization inventory.")
             .def("__init__", &construct_encoder, nb::arg("definition"), nb::arg("report"), nb::arg("allowed"))
-            .def("encode", &encode_ids, nb::arg("text"), nb::arg("cache"), "The ids of a text.")
-            .def("encode_to_numpy", &encode_array, nb::arg("text"), nb::arg("cache"), "The ids as an array.")
-            .def("encode_parallel", &encode_parallel_ids, nb::arg("text"), nb::arg("chunks"),
+            .def("encode", &encode_ids, nb::arg("text").none(), nb::arg("cache"), "The ids of a text.")
+            .def("encode_to_numpy", &encode_array, nb::arg("text").none(), nb::arg("cache"), "The ids as an array.")
+            .def("encode_parallel", &encode_parallel_ids, nb::arg("text").none(), nb::arg("chunks"),
                  "The ids of a text encoded in chunks at certified cuts.")
-            .def("encode_parallel_to_numpy", &encode_parallel_array, nb::arg("text"), nb::arg("chunks"),
+            .def("encode_parallel_to_numpy", &encode_parallel_array, nb::arg("text").none(), nb::arg("chunks"),
                  "The ids of a text encoded in chunks at certified cuts, as an array.")
             .def("encode_batch", &encode_batch, nb::arg("texts"), nb::arg("threads"),
                  "The ids of every text, encoded by a pool of threads.")
