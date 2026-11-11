@@ -282,7 +282,8 @@ the munch release it names.
 
 MIT, see [LICENSE](LICENSE). The generated Unicode class tables derive from the Unicode Character Database and are used
 under the Unicode License v3; the complete notice is in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md), installed
-alongside the package.
+alongside the package. The Python package's extension module links nanobind and the tsl::robin_map it carries
+statically, under the BSD 3-Clause and MIT licenses, whose notices are in the same file, which every wheel carries.
 
 The vendors' vocabulary files are not part of matisse. GPT-2's encoder.json and vocab.bpe are OpenAI's under the
 modified MIT license of the gpt-2 repository, tiktoken's rank files are OpenAI's under the MIT license of the tiktoken

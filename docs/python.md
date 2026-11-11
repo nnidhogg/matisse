@@ -83,13 +83,27 @@ that matisse's loader reads, so any special tokens can stand beside them.
 Every call above returns tiktoken's ids, its exceptions' types and, for a disallowed special token, its message. These
 are the places where matisse-tokenizer does something else:
 
-- **Other encodings.** `get_encoding()` refuses with `ValueError` every name but gpt2, cl100k_base and o200k_base, such
-  as r50k_base, p50k_base and o200k_harmony, since matisse has no pattern description for them, and llama3, whose rank
-  file Meta distributes under its own license and which `load_encoding()` reads from a path instead.
-- **Other patterns.** The constructor refuses with `ValueError` a pattern that is not one of the four as spelled, since
-  matisse encodes only under a pattern it has a verified description of. It refuses ranks that are not dense from zero
-  or that spell one token twice, as matisse's loader does, and a special token whose spelling is empty or whose id is an
-  ordinary token's, which matisse's encoder refuses.
+- **Other encodings.** `get_encoding()` refuses with `ValueError` every name but gpt2, cl100k_base and o200k_base, and
+  llama3, whose rank file Meta distributes under its own license and which `load_encoding()` reads from a path instead.
+  Among tiktoken's other encodings, r50k_base is the rank file, pattern and special token gpt2 already reads, under
+  another name the package does not register. p50k_base and p50k_edit read p50k_base.tiktoken under the same pattern,
+  and the constructor refuses its ranks, as matisse's loader refuses them: they skip 50256, the id of `<|endoftext|>`,
+  and so are not dense from zero. o200k_harmony the constructor refuses, since two of its special tokens,
+  `<|endofprompt|>` and `<|reserved_200018|>`, share the id 200018.
+- **Other patterns and special tokens.** The constructor refuses with `ValueError` a pattern that is not one of the four
+  as spelled, since matisse encodes only under a pattern it has a verified description of. It refuses ranks that are not
+  dense from zero or that spell one token twice, as matisse's loader does. It refuses a special token whose spelling is
+  empty or whose id is an ordinary token's, two special tokens that share an id, as matisse's encoder refuses them, and
+  a special token whose spelling begins another's, such as `<|a|>` and `<|a|>b`. tiktoken chooses between two such
+  spellings at one place by the order of its table and steps past a disallowed one by a byte, so its ids there follow no
+  rule matisse could hold to.
+- **Argument types.** `allowed_special` is `"all"`, a `set` or a `frozenset`, and anything else, a string or a list
+  among them, is refused with `TypeError` as tiktoken refuses it; `num_threads` takes what tiktoken's thread pool takes,
+  `None` and a fraction among them. A text that is not a string is refused with `TypeError`.
+- **The load module.** `matisse_tokenizer.load` gives tiktoken's `load_tiktoken_bpe()`, `read_file_cached()` and
+  `read_file()` with tiktoken's behavior, so that Meta's tokenizer.py reads Llama 3's ranks with it, but reads only
+  local files and http and https URLs, refusing with `ValueError` the other schemes tiktoken reads through blobfile.
+  tiktoken's `data_gym_to_mergeable_bpe_ranks()` and `dump_tiktoken_bpe()` do not exist.
 - **Model names.** `encoding_for_model()` and `encoding_name_for_model()` refuse with `NotImplementedError`, since the
   package keeps no table of model names, which change with every model a vendor releases.
 - **`encode_with_unstable()`** refuses with `NotImplementedError`. matisse lists no completions of a text's last piece;
@@ -319,5 +333,5 @@ each under its version, and the tests that read them skip without them.
 - **test_reports.py** holds each shipped report to the report `validate()` decides at the registry's width, and its
   refusal under a pattern of other class symbols.
 
-With every input given, the suite is 129 tests, all passing, in about a minute and a half on the machine above; with no
-vocabulary, 13 pass and 116 skip.
+With every input given, the suite is 149 tests, all passing, in about a minute and a half on the machine above; with no
+vocabulary, 14 pass and 135 skip.
