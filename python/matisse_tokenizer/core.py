@@ -15,6 +15,7 @@ from __future__ import annotations
 import base64
 import functools
 import math
+import operator
 import os
 import re
 import tempfile
@@ -64,6 +65,11 @@ class Encoding:
             ValueError: If the pattern is not one matisse describes, if one special token's spelling begins another's,
                 or if matisse's loader or encoder refuses the ranks or the special tokens, two of which sharing an id
                 among them.
+            TypeError: If a special token's spelling is not a string or its id not an integer, as tiktoken's
+                conversion refuses it.
+            OverflowError: If a special token's id is negative or does not fit 32 bits, as tiktoken's conversion
+                refuses it.
+            UnicodeEncodeError: If a special token's spelling holds a lone surrogate.
         """
         from matisse_tokenizer.registry import SOURCES
 
@@ -73,6 +79,9 @@ class Encoding:
                 "matisse encodes only under the patterns of gpt2, cl100k_base, o200k_base and llama3, spelled as "
                 "tiktoken and Meta publish them; this pattern has no description in matisse"
             )
+
+        for spelling, token in special_tokens.items():
+            _special_token_checked(spelling, token)
 
         if explicit_n_vocab:
             assert len(mergeable_ranks) + len(special_tokens) == explicit_n_vocab
@@ -207,7 +216,7 @@ class Encoding:
             ValueError: If the text holds the spelling of a disallowed special token.
         """
         self._check(text, self._disallowed(allowed_special, disallowed_special))
-        allowed = self._allowed(allowed_special)
+        allowed = self._allowed_for(allowed_special, text, repaired=True)
         return self._encode(text, allowed)
 
     def encode_to_numpy(
@@ -236,7 +245,7 @@ class Encoding:
             UnicodeEncodeError: If the text holds a lone surrogate.
         """
         self._check(text, self._disallowed(allowed_special, disallowed_special))
-        allowed = self._allowed(allowed_special)
+        allowed = self._allowed_for(allowed_special, text, repaired=False)
         return self._encode_array(text, allowed)
 
     def encode_ordinary_batch(self, text: list[str], *, num_threads: int = 8) -> list[list[int]]:
@@ -252,8 +261,9 @@ class Encoding:
         Raises:
             ValueError: If num_threads is not positive.
         """
-        threads = _threads(num_threads)
-        return self._encode_batch(list(text), frozenset(), threads)
+        pool = _pool(num_threads)
+        texts = list(text)
+        return self._encode_batch(texts, frozenset(), _threads(pool, len(texts)))
 
     def encode_batch(
         self,
@@ -281,7 +291,9 @@ class Encoding:
             TypeError: If allowed_special is neither "all" nor a set, as tiktoken refuses it.
             ValueError: If a text holds the spelling of a disallowed special token, or num_threads is not positive.
         """
-        texts, allowed, threads = self._batch_arguments(text, num_threads, allowed_special, disallowed_special)
+        texts, allowed, threads = self._batch_arguments(
+            text, num_threads, allowed_special, disallowed_special, repaired=True
+        )
         return self._encode_batch(texts, allowed, threads)
 
     def encode_batch_to_numpy(
@@ -312,7 +324,9 @@ class Encoding:
             ValueError: If a text holds the spelling of a disallowed special token, or num_threads is not positive.
             UnicodeEncodeError: If a text holds a lone surrogate.
         """
-        texts, allowed, threads = self._batch_arguments(text, num_threads, allowed_special, disallowed_special)
+        texts, allowed, threads = self._batch_arguments(
+            text, num_threads, allowed_special, disallowed_special, repaired=False
+        )
         return self._encode_batch_stretches(texts, allowed, threads, arrays=True)
 
     def encode_parallel(
@@ -342,7 +356,7 @@ class Encoding:
             ValueError: If the text holds the spelling of a disallowed special token, or chunks is negative.
         """
         self._check(text, self._disallowed(allowed_special, disallowed_special))
-        allowed = self._allowed(allowed_special)
+        allowed = self._allowed_for(allowed_special, text, repaired=True)
         if chunks < 0:
             raise ValueError(f"chunks must not be negative, not {chunks}")
         try:
@@ -377,7 +391,7 @@ class Encoding:
             UnicodeEncodeError: If the text holds a lone surrogate.
         """
         self._check(text, self._disallowed(allowed_special, disallowed_special))
-        allowed = self._allowed(allowed_special)
+        allowed = self._allowed_for(allowed_special, text, repaired=False)
         if chunks < 0:
             raise ValueError(f"chunks must not be negative, not {chunks}")
         import numpy
@@ -387,7 +401,7 @@ class Encoding:
         for special, stretch in zip(specials, stretches[1:]):
             parts.append(numpy.array([special], dtype=numpy.uint32))
             parts.append(self._encoder.encode_parallel_to_numpy(stretch, self._share(chunks, stretch, text)))
-        return parts[0] if len(parts) == 1 else numpy.concatenate(parts)
+        return parts[0] if len(parts) == 1 else _read_only(numpy.concatenate(parts))
 
     def encode_with_unstable(self, text: str, **kwargs: object) -> NoReturn:
         """Refuses: matisse has no list of the completions a text's last piece can take.
@@ -416,6 +430,8 @@ class Encoding:
         """
         if isinstance(text_or_bytes, str):
             text_or_bytes = text_or_bytes.encode("utf-8")
+        if not isinstance(text_or_bytes, bytes):
+            raise TypeError(f"{_described(text_or_bytes)} is not an instance of 'bytes'")
         token = self._mergeable_ranks.get(text_or_bytes)
         if token is not None:
             return token
@@ -670,7 +686,35 @@ class Encoding:
             return frozenset(self._special_tokens)
         if not isinstance(allowed_special, (set, frozenset)):
             raise TypeError(f"{_described(allowed_special)} is not an instance of 'set'")
+        for spelling in allowed_special:
+            if not isinstance(spelling, str):
+                raise TypeError(f"{_described(spelling)} is not an instance of 'str'")
         return frozenset(allowed_special).intersection(self._special_tokens)
+
+    def _allowed_for(self, allowed_special: Literal["all"] | Set[str], text: object, repaired: bool) -> frozenset[str]:
+        """Returns the special tokens a call on a text allows, refusing the text first where tiktoken's core reads the
+        text before the special tokens: a text that is not a string, and one holding a lone surrogate where the call
+        does not repair it.
+
+        Args:
+            allowed_special: The special tokens allowed, "all" or a set.
+            text: The text.
+            repaired: Whether the call replaces a lone surrogate before it encodes, as encode() does.
+
+        Returns:
+            The spellings.
+
+        Raises:
+            TypeError: If the text is not a string, or allowed_special is neither "all" nor a set of strings.
+            UnicodeEncodeError: If the call does not repair the text, which holds a lone surrogate, and allowed_special
+                is refused.
+        """
+        try:
+            return self._allowed(allowed_special)
+        except TypeError:
+            if not repaired or not isinstance(text, str):
+                _core.check_text(text)
+            raise
 
     def _check(self, text: str, disallowed: Collection[str]) -> None:
         """Refuses a text holding the spelling of a disallowed special token, the first in the text, as tiktoken does.
@@ -694,6 +738,7 @@ class Encoding:
         num_threads: float | None,
         allowed_special: Literal["all"] | Set[str],
         disallowed_special: Literal["all"] | Collection[str],
+        repaired: bool,
     ) -> tuple[list[str], frozenset[str], int]:
         """Reads a batch call's arguments in the order tiktoken's encode_batch() reads them: the disallowed special
         tokens, then the threads, then each text in turn, checked for a disallowed special token and, at the first, the
@@ -704,6 +749,7 @@ class Encoding:
             num_threads: The threads of the pool.
             allowed_special: The special tokens allowed, or "all".
             disallowed_special: The special tokens disallowed, or "all".
+            repaired: Whether a text's lone surrogates are replaced before it is encoded, as for encode_batch().
 
         Returns:
             The texts, the special tokens allowed and the threads.
@@ -713,14 +759,14 @@ class Encoding:
             ValueError: If a text holds the spelling of a disallowed special token, or num_threads is not positive.
         """
         disallowed = frozenset(self._disallowed(allowed_special, disallowed_special))
-        threads = _threads(num_threads)
+        pool = _pool(num_threads)
         texts = list(text)
         allowed = frozenset()
         for index, each in enumerate(texts):
             self._check(each, disallowed)
             if index == 0:
-                allowed = self._allowed(allowed_special)
-        return texts, allowed, threads
+                allowed = self._allowed_for(allowed_special, each, repaired)
+        return texts, allowed, _threads(pool, len(texts))
 
     def _cache(self) -> _core.Piece_cache:
         """Returns the calling thread's piece cache, made on its first call.
@@ -818,7 +864,7 @@ class Encoding:
         for special, stretch in zip(specials, stretches[1:]):
             parts.append(numpy.array([special], dtype=numpy.uint32))
             parts.append(self._encoder.encode_to_numpy(stretch, cache))
-        return numpy.concatenate(parts)
+        return _read_only(numpy.concatenate(parts))
 
     def _encode_parallel(self, text: str, allowed: frozenset[str], chunks: int) -> list[int]:
         """Returns the ids of a text with special tokens allowed, each stretch encoded in its share of the chunks.
@@ -920,18 +966,18 @@ def _joined(parts: list[object], arrays: bool) -> list[int] | npt.NDArray[np.uin
         return [token for part in parts for token in part]
     import numpy
 
-    return numpy.concatenate([numpy.asarray(part, dtype=numpy.uint32) for part in parts])
+    return _read_only(numpy.concatenate([numpy.asarray(part, dtype=numpy.uint32) for part in parts]))
 
 
-def _threads(num_threads: float | None) -> int:
-    """Returns the threads a pool of num_threads starts at most, as tiktoken's ThreadPoolExecutor reads the number:
-    Python's default for None, and a fraction rounded up.
+def _pool(num_threads: float | None) -> float:
+    """Returns the threads a pool of num_threads may start, as tiktoken's ThreadPoolExecutor reads the number: Python's
+    default for None, and any positive number otherwise, infinity among them.
 
     Args:
         num_threads: The threads asked for.
 
     Returns:
-        The threads.
+        The most threads the pool may start.
 
     Raises:
         ValueError: If the number is not positive, with the executor's message.
@@ -942,7 +988,60 @@ def _threads(num_threads: float | None) -> int:
         return min(32, (counted or 1) + 4)
     if num_threads <= 0:
         raise ValueError("max_workers must be greater than 0")
-    return math.ceil(num_threads)
+    return num_threads
+
+
+def _threads(pool: float, tasks: int) -> int:
+    """Returns the threads a pool starts for its tasks, at most one a task as the executor starts them, a fraction of a
+    thread rounded up.
+
+    Args:
+        pool: The most threads the pool may start, as _pool() returns it.
+        tasks: The tasks.
+
+    Returns:
+        The threads, at least one.
+    """
+    if pool >= tasks:
+        return max(1, tasks)
+    return math.ceil(pool)
+
+
+def _special_token_checked(spelling: object, token: object) -> None:
+    """Refuses a special token the constructor cannot take, as tiktoken's conversion of its special tokens refuses it:
+    a spelling that is not a string or holds a lone surrogate, and an id that is not an integer or does not fit an
+    unsigned 32-bit integer.
+
+    Args:
+        spelling: The spelling.
+        token: The id.
+
+    Raises:
+        TypeError: If the spelling is not a string or the id not an integer.
+        UnicodeEncodeError: If the spelling holds a lone surrogate.
+        OverflowError: If the id is negative or does not fit 32 bits, with tiktoken's messages.
+    """
+    if not isinstance(spelling, str):
+        raise TypeError(f"{_described(spelling)} is not an instance of 'str'")
+    spelling.encode("utf-8")
+    value = operator.index(token)
+    if not -(2**63) <= value < 2**63:
+        raise OverflowError("Python int too large to convert to C long")
+    if not 0 <= value < 2**32:
+        raise OverflowError("out of range integral type conversion attempted")
+
+
+def _read_only(array: npt.NDArray[np.uint32]) -> npt.NDArray[np.uint32]:
+    """Returns an array made read-only, as every array tiktoken returns is.
+
+    Args:
+        array: The array.
+
+    Returns:
+        The array.
+    """
+    array.flags.writeable = False
+    return array
 
 
 def _described(value: object) -> str:

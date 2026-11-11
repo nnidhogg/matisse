@@ -97,9 +97,15 @@ are the places where matisse-tokenizer does something else:
   a special token whose spelling begins another's, such as `<|a|>` and `<|a|>b`. tiktoken chooses between two such
   spellings at one place by the order of its table and steps past a disallowed one by a byte, so its ids there follow no
   rule matisse could hold to.
-- **Argument types.** `allowed_special` is `"all"`, a `set` or a `frozenset`, and anything else, a string or a list
-  among them, is refused with `TypeError` as tiktoken refuses it; `num_threads` takes what tiktoken's thread pool takes,
-  `None` and a fraction among them. A text that is not a string is refused with `TypeError`.
+- **Argument types.** The arguments are read as tiktoken 0.14.0 reads them, in its order, with its exceptions.
+  `allowed_special` is `"all"` or a `set` or `frozenset` of strings, and anything else, a string or a list among them,
+  is refused with `TypeError`. A text that is not a string is refused with `TypeError`, before `allowed_special` is
+  read, and so is a lone surrogate in a call that does not replace it. The ids given to the decoding calls are a
+  sequence, and a set, a dict, an iterator or a string is refused with `TypeError`. `encode_single_token()` takes a
+  string or `bytes` alone. The constructor refuses a special token's id that is negative or does not fit 32 bits with
+  `OverflowError` and a spelling holding a lone surrogate with `UnicodeEncodeError`. `num_threads` takes what tiktoken's
+  thread pool takes, `None`, a fraction and infinity among them, except a NaN, which tiktoken's pool waits on forever
+  and which is refused here with `ValueError`. Every array returned is read-only, as tiktoken's are.
 - **The load module.** `matisse_tokenizer.load` gives tiktoken's `load_tiktoken_bpe()`, `read_file_cached()` and
   `read_file()` with tiktoken's behavior, so that Meta's tokenizer.py reads Llama 3's ranks with it, but reads only
   local files and http and https URLs, refusing with `ValueError` the other schemes tiktoken reads through blobfile.
@@ -333,5 +339,5 @@ each under its version, and the tests that read them skip without them.
 - **test_reports.py** holds each shipped report to the report `validate()` decides at the registry's width, and its
   refusal under a pattern of other class symbols.
 
-With every input given, the suite is 149 tests, all passing, in about a minute and a half on the machine above; with no
-vocabulary, 14 pass and 135 skip.
+With every input given, the suite is 174 tests, all passing, in about a minute and a half on the machine above; with no
+vocabulary, 14 pass and 160 skip.

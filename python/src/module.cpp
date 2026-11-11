@@ -21,6 +21,7 @@
 #include <string>
 #include <string_view>
 #include <thread>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -110,14 +111,28 @@ template <typename Work>
 }
 
 /**
- * @brief Returns the ids of an iterable of Python integers, each read through its `__index__`, as tiktoken reads them.
- * @param tokens The iterable.
+ * @brief Returns the ids of a sequence of Python integers, each read through its `__index__`, as tiktoken reads them.
+ * @param tokens The sequence.
  * @return The ids.
+ * @throws nb::builtin_exception A TypeError if the object is a string or not a sequence, with tiktoken's messages.
  * @throws std::overflow_error If an integer is negative or does not fit 32 bits, as tiktoken's conversion refuses it.
- * @throws nb::python_error If the object is not iterable or an item is not an integer.
+ * @throws nb::python_error If an item is not an integer.
  */
 [[nodiscard]] Ids_t ids_of(const nb::handle tokens)
 {
+    if (nb::isinstance<nb::str>(tokens))
+    {
+        throw nb::builtin_exception{nb::exception_type::type_error, "Can't extract `str` to `Vec`"};
+    }
+
+    if (PySequence_Check(tokens.ptr()) == 0)
+    {
+        const auto message{
+                std::format("'{}' object is not an instance of 'Sequence'", nb::type_name(tokens.type()).c_str())};
+
+        throw nb::builtin_exception{nb::exception_type::type_error, message.c_str()};
+    }
+
     Ids_t ids{};
 
     for (const auto item : tokens)
@@ -165,6 +180,17 @@ template <typename Work>
     const nb::capsule owner{owned.release(), [](void* held) noexcept { delete static_cast<Ids_t*>(held); }};
 
     return Id_array_t{data, {size}, owner};
+}
+
+/**
+ * @brief Refuses an object that is not a string or a string that holds a lone surrogate, as an encoding call would.
+ * @param text The object.
+ * @throws nb::builtin_exception A TypeError if the object is not a string.
+ * @throws nb::python_error The UnicodeEncodeError CPython raises for a lone surrogate.
+ */
+void check_text(const nb::handle text)
+{
+    std::ignore = utf8_of(text);
 }
 
 /**
@@ -475,8 +501,9 @@ void construct_cache(matisse::encode::Piece_cache* cache, const matisse::encode:
 /**
  * @brief Returns the bytes a run of ids spells, raw.
  * @param encoder The encoder.
- * @param tokens The ids, an iterable of integers.
+ * @param tokens The ids, a sequence of integers.
  * @return The bytes.
+ * @throws nb::builtin_exception A TypeError if the ids are a string or not a sequence, as tiktoken refuses them.
  * @throws nb::builtin_exception A KeyError if an id names no token, ordinary or special, as tiktoken raises it.
  * @throws std::overflow_error If an id is negative or does not fit 32 bits.
  */
@@ -533,6 +560,7 @@ NB_MODULE(_core, module)
     nb::class_<matisse::encode::Piece_cache>(module, "Piece_cache", "A piece cache one thread keeps across its calls.")
             .def("__init__", &construct_cache, nb::arg("encoder"), nb::keep_alive<1, 2>());
 
+    module.def("check_text", &check_text, nb::arg("text").none(), "Refuses a text no encoding call takes.");
     module.def(
             "vendor_specials", &vendor_specials, nb::arg("tokenizer"),
             "The vendor's special tokens of a rank file read under a tokenizer's pattern.");

@@ -8,6 +8,7 @@ import pickle
 import shutil
 import threading
 
+import numpy
 import pytest
 import tiktoken
 
@@ -342,3 +343,104 @@ def test_the_package_s_version_is_its_metadata_s_and_the_user_agent_s():
 
     assert matisse_tokenizer.__version__ == version("matisse-tokenizer")
     assert load.USER_AGENT == f"matisse-tokenizer/{matisse_tokenizer.__version__}"
+
+
+def test_allowed_special_holds_strings_alone_as_tiktoken_requires(pair):
+    ours, theirs = pair
+    spelling = sorted(theirs.special_tokens_set)[0]
+    for allowed in ({1}, {None}, {spelling, 1}):
+        for text in ("a", f"a{spelling}"):
+            for disallowed in ("all", ()):
+                arguments = {"allowed_special": allowed, "disallowed_special": disallowed}
+                assert outcome(lambda: ours.encode(text, **arguments)) == outcome(
+                    lambda: theirs.encode(text, **arguments)
+                )
+                assert raised_or_ids(lambda: ours.encode(text, **arguments)) == raised_or_ids(
+                    lambda: theirs.encode(text, **arguments)
+                )
+                assert raised_or_ids(lambda: ours.encode_batch([text], **arguments)) == raised_or_ids(
+                    lambda: theirs.encode_batch([text], **arguments)
+                )
+
+
+def raised_or_ids(call: object) -> object:
+    """Returns what a call returns, or the type and message of the exception it raises.
+
+    Args:
+        call: The call, taking no argument.
+
+    Returns:
+        The result, or the exception's type and message.
+    """
+    try:
+        return call()
+    except Exception as error:
+        return type(error), str(error)
+
+
+def test_decoding_takes_a_sequence_as_tiktoken_requires(pair):
+    ours, theirs = pair
+    for tokens in ({1, 2}, frozenset({1}), {1: 2}, iter([1]), (token for token in [1]), "ab", [1, 2], (1, 2), b"ab",
+                   range(3), numpy.array([1, 2], dtype=numpy.uint32)):
+        rebuilt = (lambda: (token for token in [1])) if hasattr(tokens, "__next__") else (lambda: tokens)
+        assert raised_or_ids(lambda: ours.decode(rebuilt())) == raised_or_ids(lambda: theirs.decode(rebuilt()))
+        assert raised_or_ids(lambda: ours.decode_bytes(rebuilt())) == raised_or_ids(
+            lambda: theirs.decode_bytes(rebuilt())
+        )
+    assert raised_or_ids(lambda: ours.decode_batch([{1}])) == raised_or_ids(lambda: theirs.decode_batch([{1}]))
+    assert raised_or_ids(lambda: ours.decode_bytes_batch([{1}])) == raised_or_ids(
+        lambda: theirs.decode_bytes_batch([{1}])
+    )
+
+
+def test_a_single_token_is_a_string_or_bytes_as_tiktoken_requires(pair):
+    ours, theirs = pair
+    for value in (None, 5, 1.0, memoryview(b"a"), bytearray(b"a"), "\ud800", b"a", "a"):
+        assert raised_or_ids(lambda: ours.encode_single_token(value)) == raised_or_ids(
+            lambda: theirs.encode_single_token(value)
+        )
+
+
+def test_the_constructor_refuses_special_tokens_as_tiktoken_s_conversion_refuses_them(pairs):
+    if "gpt2" not in pairs:
+        pytest.skip("the vocabulary does not hold gpt2")
+    _, theirs = pairs["gpt2"]
+    ranks = theirs._mergeable_ranks
+    for specials in ({"<|x|>": 2**32}, {"<|x|>": -1}, {"<|x|>": 2**64}, {"<|x|>": 1.5}, {"\ud800": 50300},
+                     {5: 50300}):
+        arguments = {"pat_str": theirs._pat_str, "mergeable_ranks": ranks, "special_tokens": specials}
+        assert raised(lambda: matisse_tokenizer.Encoding("x", **arguments)) == raised(
+            lambda: tiktoken.Encoding("x", **arguments)
+        )
+
+
+def test_the_text_is_read_before_the_allowed_special_tokens_as_tiktoken_s_core_reads_them(pair):
+    ours, theirs = pair
+    spelling = sorted(theirs.special_tokens_set)[0]
+    for text in ("a\ud800", None, 5, "a"):
+        for call in ("encode", "encode_to_numpy"):
+            arguments = {"allowed_special": [spelling], "disallowed_special": ()}
+            assert raised(lambda: getattr(ours, call)(text, **arguments)) == raised(
+                lambda: getattr(theirs, call)(text, **arguments)
+            )
+
+
+def test_every_array_is_read_only_as_tiktoken_s_is(pair):
+    ours, theirs = pair
+    spelling = sorted(theirs.special_tokens_set)[0]
+    text = f"a{spelling}b"
+    assert theirs.encode_to_numpy(text, allowed_special="all").flags.writeable is False
+    assert ours.encode_to_numpy(text, allowed_special="all").flags.writeable is False
+    assert ours.encode_to_numpy("ab").flags.writeable is False
+    assert ours.encode_parallel_to_numpy(text, 2, allowed_special="all").flags.writeable is False
+    assert all(not array.flags.writeable for array in ours.encode_batch_to_numpy([text, "ab"], allowed_special="all"))
+
+
+def test_an_unbounded_pool_runs_as_tiktoken_s_does(pair):
+    ours, theirs = pair
+    texts = ["a b", "c"]
+    for count in (float("inf"), 10**30):
+        assert ours.encode_ordinary_batch(texts, num_threads=count) == theirs.encode_ordinary_batch(
+            texts, num_threads=count
+        )
+        assert ours.encode_batch(texts, num_threads=count) == theirs.encode_batch(texts, num_threads=count)
