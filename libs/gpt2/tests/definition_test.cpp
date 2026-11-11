@@ -1,5 +1,6 @@
 #include "matisse/load/definition.hpp"
 
+#include <algorithm>
 #include <charconv>
 #include <cstddef>
 #include <filesystem>
@@ -7,6 +8,8 @@
 #include <gtest/gtest.h>
 #include <iterator>
 #include <optional>
+#include <ranges>
+#include <span>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -30,6 +33,13 @@ constexpr std::string_view gpt2_encoder_digest{"196139668be63f3b5d6574427317ae82
  * @brief The SHA-256 of GPT-2's vocab.bpe as pinned, gpt2-merges.txt in the vocabulary directory.
  */
 constexpr std::string_view gpt2_vocab_digest{"1ce1664773c50f3e0cc8842619a93edc4624525b728b188a9e0be33b7726adc5"};
+
+/**
+ * @brief The SHA-256 of GPT-2's tokenizer.json as pinned, gpt2-tokenizer.json in the vocabulary directory, taken from
+ *        huggingface.co/openai-community/gpt2 at commit 607a30d783dfa663caf39e06633721c8d4cfcd7e.
+ */
+constexpr std::string_view gpt2_tokenizer_json_digest{
+        "8414cab924d8b9b33013f0d221c5862f365ee9be39c5c2bfae8a5a9e970478a6"};
 
 /**
  * @brief What the known-answer fixture holds, counted as it is checked.
@@ -249,6 +259,22 @@ void expect_fixture_line(Fixture_check& check, const std::string& line)
     }
 }
 
+/**
+ * @brief Returns whether two merge tables list the same merges in the same order.
+ * @param merges The one table.
+ * @param expected The other.
+ * @return True when they do.
+ */
+bool same_merges(
+        const std::span<const munch::verifier::Merge> merges, const std::span<const munch::verifier::Merge> expected)
+{
+    const auto same{[](const munch::verifier::Merge& merge, const munch::verifier::Merge& other) {
+        return merge.left == other.left && merge.right == other.right;
+    }};
+
+    return std::ranges::equal(merges, expected, same);
+}
+
 } // namespace
 
 TEST(Definition_test, The_special_tokens_of_a_rank_file_under_gpt2_are_the_vendor_s)
@@ -299,4 +325,33 @@ TEST(Definition_test, The_ids_of_every_known_answer_of_the_fixture_spell_its_tex
     EXPECT_EQ(check.counts.universes, 1U);
     EXPECT_EQ(check.counts.encodings, 15U);
     EXPECT_EQ(check.counts.corpora, 3U);
+}
+
+TEST(Definition_test, The_pinned_gpt2_tokenizer_json_reads_as_gpt2_s_files_with_its_end_of_text_a_special_token)
+{
+    const auto gpt2{pinned_gpt2()};
+    const auto path{pinned("gpt2-tokenizer.json")};
+
+    if (!gpt2 || !path)
+    {
+        GTEST_SKIP() << "MATISSE_VOCAB_DIR names no directory holding GPT-2's files and gpt2-tokenizer.json";
+    }
+
+    EXPECT_EQ(matisse::common::sha256(contents(*path)), gpt2_tokenizer_json_digest);
+    EXPECT_EQ(tokenizer_json_spelling(*path), matisse::gpt2::spelling());
+
+    const auto [merge_rule, whole_piece_lookup, spellings, merges, specials]{
+            read_tokenizer_json(*path, matisse::gpt2::spelling())};
+
+    // The file's added token <|endoftext|> is special, so its id 50256 leaves the ordinary tokens encoder.json lists.
+    const auto ordinary{gpt2->spellings | std::views::take(50256)};
+
+    EXPECT_EQ(merge_rule, Merge_rule::pairs);
+    EXPECT_FALSE(whole_piece_lookup);
+    EXPECT_EQ(spellings.size(), 50256U);
+    EXPECT_TRUE(std::ranges::equal(spellings, ordinary));
+    EXPECT_TRUE(same_merges(merges, gpt2->merges));
+    ASSERT_EQ(specials.size(), 1U);
+    EXPECT_EQ(specials[0].spelling, "<|endoftext|>");
+    EXPECT_EQ(specials[0].id, 50256U);
 }

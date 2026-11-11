@@ -5,24 +5,26 @@
 #include <filesystem>
 #include <span>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include <munch/verifier/merge_tower.hpp>
 
 /**
  * @file
- * @brief The loaders, read_gpt2() and read_tiktoken(), each reading a real tokenizer's files into one Definition: its
- *        merge rule and whether it looks a whole piece up, the bytes of every ordinary token by id, the merge table in
- *        rank order and the special tokens.
+ * @brief The loaders, read_gpt2(), read_tiktoken() and read_tokenizer_json(), each reading a real tokenizer's files
+ *        into one Definition: its merge rule and whether it looks a whole piece up, the bytes of every ordinary token
+ *        by id, the merge table in rank order and the special tokens; and tokenizer_json_spelling(), which names the
+ *        pattern a tokenizer.json is read under.
  *
  * A definition is held in raw bytes throughout, with GPT-2's byte-to-character map undone by the loader. Content a
  * loader cannot take exactly is refused with std::invalid_argument naming the item and where it is, ids that are not
  * dense from zero, an empty token and a spelling a file lists twice among them, and a file that cannot be read throws
  * std::runtime_error. A tiktoken rank file names neither its pattern nor its special tokens, so the caller gives the
  * vendor's special tokens, which the tokenizer library of the pattern supplies; the pattern itself is the tokenizer
- * library's description, which the stages take beside the definition. read_tokenizer_json(), the Hugging Face reader,
- * is not declared yet; docs/design.md sketches it, and it sets the whole-piece lookup to the BPE model's
- * `ignore_merges`.
+ * library's description, which the stages take beside the definition. A tokenizer.json names both, and its reader takes
+ * the published spelling of the pattern, which the tokenizer library also gives, and recognizes the file's
+ * pre-tokenizer by it.
  */
 namespace matisse::load
 {
@@ -147,6 +149,62 @@ struct Definition
  *         ranks.
  */
 [[nodiscard]] Definition read_tiktoken(const std::filesystem::path& path, std::span<const Special_token> specials);
+
+/**
+ * @brief Reads a Hugging Face tokenizer.json with a BPE model, as Hugging Face's tokenizers encodes with it, its
+ *        pre-tokenizer recognized only by the published spelling of the pattern the file is read under.
+ *
+ * Three pre-tokenizers are recognized, each with `add_prefix_space` false: a ByteLevel with its regex, which is GPT-2's
+ * pattern as encoder.py spells it, when that is the published spelling; a Sequence of a Split on the published spelling
+ * followed by a ByteLevel without its regex, the Split isolated and not inverted, or removed and inverted, which keeps
+ * the same pieces of a total pattern, as every pattern matisse describes is; and for an empty spelling a ByteLevel
+ * without its regex alone, which splits nothing, for a merge table read without a pattern. A null pre-tokenizer is none
+ * of them, since Hugging Face's BPE then merges the text's characters and not its bytes. A Split on a spelling that
+ * holds an interval followed by a plus is refused, since Oniguruma, Hugging Face's engine, reads `{1,3}+` as the
+ * interval repeated and not as possessive, so cl100k's published pattern is read otherwise than it is published; the
+ * cl100k conversions on the Hugging Face Hub, Xenova/gpt-4 among them, carry its spelling from before the possessive
+ * rewrite, which is Llama 3's pattern.
+ *
+ * The vocabulary's spellings and the merges' parts are read with GPT-2's byte map undone, as the ByteLevel
+ * pre-tokenizer maps the bytes. The `added_tokens` marked special are the special tokens, by id ascending, and the
+ * ordinary tokens are the vocabulary's other entries. Hugging Face reads no added token's own id but gives it one: its
+ * id in the vocabulary when its spelling is there, and otherwise the vocabulary's size, or one past the greatest id
+ * given before it in the file's order when that is no less, so a token whose id is another is refused. The definition
+ * has the pair rule, which is Hugging Face's own, with the merges in the file's order, each a string of two parts
+ * separated by a space or an array of two strings, and not every part of a merge need be formed before it, as
+ * read_gpt2() requires of its files; the whole-piece lookup is the model's `ignore_merges`, false when it is absent. Its ids are
+ * those Hugging Face's encode() gives with `add_special_tokens` false: the tokens a post-processor adds under
+ * `add_special_tokens` are the caller's to add. The model's `unk_token` is not read, since the encoder refuses a
+ * definition in which a byte is no token, and under one in which every byte is a token no text holds an unknown
+ * character.
+ * @param path The path of tokenizer.json.
+ * @param published The published spelling of the pattern the file is read under, as the pattern's tokenizer library
+ *        gives it, or empty for a pre-tokenizer that splits nothing.
+ * @return The definition.
+ * @throws std::runtime_error If the file cannot be read.
+ * @throws std::invalid_argument If the file is not JSON, its model is not BPE or has dropout, a continuing-subword
+ *         prefix, an end-of-word suffix or byte fallback, its normalizer, truncation or padding is not null, its
+ *         pre-tokenizer is not one of the three under the published spelling or its pattern holds an interval followed
+ *         by a plus or is empty, its post-processor is not null, ByteLevel, TemplateProcessing or a Sequence of them,
+ *         an added token is not special, strips white space, matches single words or has another id than the one
+ *         Hugging Face gives it, the ordinary ids are not dense from zero, a token is empty or holds a character the
+ *         byte map does not carry, two tokens have one spelling, a merge is not two parts, or a pair is listed twice;
+ *         the message names the member of the file and what it holds, or the ids or the tokens.
+ */
+[[nodiscard]] Definition read_tokenizer_json(const std::filesystem::path& path, std::string_view published);
+
+/**
+ * @brief Returns the published spelling of the pattern a tokenizer.json's pre-tokenizer runs, as read_tokenizer_json()
+ *        recognizes it, for a caller that finds the tokenizer library of a file by the file itself: GPT-2's for a
+ *        ByteLevel with its regex, the Split's for a Split followed by a ByteLevel without its regex, and empty for a
+ *        ByteLevel without its regex alone.
+ * @param path The path of tokenizer.json.
+ * @return The spelling.
+ * @throws std::runtime_error If the file cannot be read.
+ * @throws std::invalid_argument If the file is not JSON, or its pre-tokenizer is none of the three or its pattern holds
+ *         an interval followed by a plus; the message names the member of the file and what it holds.
+ */
+[[nodiscard]] std::string tokenizer_json_spelling(const std::filesystem::path& path);
 
 } // namespace matisse::load
 

@@ -35,6 +35,7 @@ The build takes these options:
 
 ```cpp
 #include <matisse/cl100k/tokenizer.hpp>
+#include <matisse/llama3/tokenizer.hpp>
 #include <matisse/load/definition.hpp>
 
 // A rank file names neither its pattern nor its special tokens, so the tokenizer's library supplies them.
@@ -42,6 +43,9 @@ auto cl100k{matisse::load::read_tiktoken("cl100k_base.tiktoken", matisse::cl100k
 
 // GPT-2's two files, as openai/gpt-2's encoder.py reads them.
 auto gpt2{matisse::load::read_gpt2("encoder.json", "vocab.bpe")};
+
+// A tokenizer.json, its pre-tokenizer recognized by the published spelling of the pattern it is read under.
+auto llama3{matisse::load::read_tokenizer_json("tokenizer.json", matisse::llama3::spelling())};
 ```
 
 A `load::Definition` holds a tokenizer in raw bytes, and its ids are `load::Token_id_t`, 32 bits. Its members are:
@@ -58,18 +62,33 @@ tokens the caller gives, by id ascending. Its definition has the rank rule and t
 is read as `" the"`. Its definition has the pair rule, no whole-piece lookup and no special tokens, since encoder.py
 reads `<|endoftext|>` as text.
 
-Both refuse content they cannot take exactly with `std::invalid_argument`, naming the file and the line, the byte
-offset, the token or the merge, and a file they cannot read with `std::runtime_error`. `read_tiktoken()` refuses a line
-that is not a base64 token and a decimal rank, ranks that are not dense from zero, and two tokens with one spelling.
-`read_gpt2()` refuses, among others, ids that are not dense from zero, an empty token, two tokens with one spelling, a
-pair listed twice, and a table on which encoder.py's pass and one join at a time could differ, as [limits.md](limits.md)
-describes.
+`read_tokenizer_json(path, published)` reads a Hugging Face tokenizer.json with a BPE model, its vocabulary and merges
+with GPT-2's byte map undone and its special added tokens as the special tokens. It takes the published spelling of the
+pattern the file is read under, as the tokenizer's library gives it with `spelling()`, and recognizes the file's
+pre-tokenizer only by it: GPT-2's ByteLevel under `gpt2::spelling()`, a Split on the spelling followed by a ByteLevel
+without its regex, which Llama 3's file and Xenova's conversions of cl100k and o200k carry, and a ByteLevel without its
+regex alone under the empty spelling. Xenova's cl100k conversion carries Llama 3's pattern, so it is read under
+`llama3::spelling()`, and `cl100k::spelling()` reads no file, since Hugging Face's engine reads cl100k's published
+pattern otherwise. Its definition has the pair rule, Hugging Face's own, and the whole-piece lookup the model's
+`ignore_merges` gives, and its ids are those Hugging Face's `encode()` gives with `add_special_tokens` false.
+`tokenizer_json_spelling(path)` returns the spelling a file's pre-tokenizer runs, for a caller that chooses the
+tokenizer by the file.
+
+All three refuse content they cannot take exactly with `std::invalid_argument`, naming the file and the line, the byte
+offset, the token, the merge or the member, and a file they cannot read with `std::runtime_error`. `read_tiktoken()`
+refuses a line that is not a base64 token and a decimal rank, ranks that are not dense from zero, and two tokens with
+one spelling. `read_gpt2()` refuses, among others, ids that are not dense from zero, an empty token, two tokens with one
+spelling, a pair listed twice, and a table on which encoder.py's pass and one join at a time could differ, as
+[limits.md](limits.md) describes. `read_tokenizer_json()` refuses every model, normalizer, pre-tokenizer, post-processor
+and added token it does not take, as [design.md](design.md) lists them, naming the member by its path from the root,
+such as `pre_tokenizer.pretokenizers[0].pattern.Regex`, what it holds and what the reader takes there.
 
 ## **Choosing a tokenizer**
 
-Each tokenizer library declares two functions in `matisse/<name>/tokenizer.hpp`: `pattern()`, the description of the
-vendor's pre-tokenizer as a `pretok::Pattern`, and `specials()`, the vendor's special tokens of a rank file read under
-it. A program that knows its tokenizer calls them directly, as the README's program calls `cl100k::pattern()` and
+Each tokenizer library declares three functions in `matisse/<name>/tokenizer.hpp`: `pattern()`, the description of the
+vendor's pre-tokenizer as a `pretok::Pattern`, `spelling()`, the pattern as its vendor publishes it, which
+`read_tokenizer_json()` takes, and `specials()`, the vendor's special tokens of a rank file read under it. A program
+that knows its tokenizer calls them directly, as the README's program calls `cl100k::pattern()` and
 `cl100k::specials()`. A program that chooses at run time finds the tokenizer by name:
 
 ```cpp
@@ -85,8 +104,8 @@ if (!tokenizer)
 auto definition{matisse::load::read_tiktoken("o200k_base.tiktoken", tokenizer->specials)};
 ```
 
-`lookup::tokenizer(name)` returns a `lookup::Tokenizer`, its `name`, `pattern` and `specials`, or `std::nullopt` for a
-name it does not know, and `lookup::tokenizers()` lists all four.
+`lookup::tokenizer(name)` returns a `lookup::Tokenizer`, its `name`, `pattern`, `spelling` and `specials`, or
+`std::nullopt` for a name it does not know, and `lookup::tokenizers()` lists all four.
 
 ## **Validating a pattern**
 
@@ -212,7 +231,7 @@ pretok also gives the pieces the stages are built from, for a caller that wants 
 
 ## **The command line**
 
-`matisse-validate` reports a rank file read under a known pattern:
+`matisse-validate` reports a tokenizer.json or a rank file read under a known pattern:
 
 ```
 matisse-validate [--tiktoken PATTERN] [--windows N] [--input FILE] [--json] FILE
@@ -220,10 +239,12 @@ matisse-validate [--tiktoken PATTERN] [--windows N] [--input FILE] [--json] FILE
 
 `--tiktoken` names the pattern of the rank file, gpt2, cl100k, o200k or llama3, since the file names none, and the
 pattern and the vendor's special tokens are found through `lookup::tokenizer()`. A file named without it is a
-command-line error, since a tokenizer.json has no reader yet, and GPT-2 reaches the command line only as a rank file
-under `--tiktoken gpt2`, since encoder.json and vocab.bpe are two files. `--windows` is the widest window decided, 2 to
-5, 5 unless given. `--input` adds the anchor supply of both inventories on a text. The text report is headed by the file
-and the tokenizer it was read as, with its token counts. `--json` writes one document instead, holding the path, the
+tokenizer.json, read under the tokenizer whose `spelling` its pre-tokenizer runs, as `tokenizer_json_spelling()` finds
+it; a pre-tokenizer whose pattern no tokenizer has is a refusal, as is any content the reader refuses, and the JSON
+document's tokenizer is then null. GPT-2 reaches the command line as its tokenizer.json or as a rank file under
+`--tiktoken gpt2`, since encoder.json and vocab.bpe are two files. `--windows` is the widest window decided, 2 to 5, 5
+unless given. `--input` adds the anchor supply of both inventories on a text. The text report is headed by the file and
+the tokenizer it was read as, with its token counts. `--json` writes one document instead, holding the path, the
 tokenizer, the refusal or null, the token counts, the report and the supply. The exit status is 0 when the definition
 was read and reported, 1 when the loader refused it, the refusal written in place of the report, and 2 on a command-line
 error, with the usage, or on a file or an input the command cannot read, an input that is not UTF-8 among them.

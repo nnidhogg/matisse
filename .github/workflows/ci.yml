@@ -221,18 +221,20 @@ jobs:
           gcovr --version
 
       - name: Restore the pinned vocabulary files
-        # The four public files the tests pin are kept in the Actions cache under their digests, so the vendors' hosts
+        # The seven public files the tests pin are kept in the Actions cache under their digests, so the vendors' hosts
         # are read on the first run and after the cache expires, and never on a hit.
         id: vocab
         uses: actions/cache@v4
         with:
           path: ${{ runner.temp }}/vocab
-          key: vocab-196139668be63f3b-1ce1664773c50f3e-223921b76ee99bde-446a9538cb6c348e
+          key: vocab-196139668be6-1ce1664773c5-223921b76ee9-446a9538cb6c-8414cab924d8-239eb2359f79-43a3ad4618a6
 
       - name: Fetch the pinned vocabulary files
-        # The four public files the tests pin, under the names the tests expect, each held to the SHA-256 the tests
+        # The seven public files the tests pin, under the names the tests expect, each held to the SHA-256 the tests
         # hold it to, so that the loaders', the encoders' and the CLI's real-vocabulary tests run in the measured
-        # build. Llama 3's tokenizer.model is gated behind its vendor's license and is not fetched; its tests skip.
+        # build: GPT-2's two files and the two rank files from OpenAI, and three tokenizer.json files from the Hugging
+        # Face Hub at pinned commits. Llama 3's files are gated behind its vendor's license and are not fetched; their
+        # tests skip.
         if: steps.vocab.outputs.cache-hit != 'true'
         run: |
           mkdir -p "$RUNNER_TEMP/vocab"
@@ -241,10 +243,20 @@ jobs:
           curl -sSfL -o gpt2-merges.txt https://openaipublic.blob.core.windows.net/gpt-2/encodings/main/vocab.bpe
           curl -sSfL -o cl100k_base.tiktoken https://openaipublic.blob.core.windows.net/encodings/cl100k_base.tiktoken
           curl -sSfL -o o200k_base.tiktoken https://openaipublic.blob.core.windows.net/encodings/o200k_base.tiktoken
+          curl -sSfL -o gpt2-tokenizer.json \
+                https://huggingface.co/openai-community/gpt2/resolve/607a30d783dfa663caf39e06633721c8d4cfcd7e/tokenizer.json
+          curl -sSfL -o cl100k-tokenizer.json \
+                https://huggingface.co/Xenova/gpt-4/resolve/1d9f1f1b1fae88c0e4df1dab0a397f8de6229075/tokenizer.json
+          curl -sSfL -o o200k-tokenizer.json \
+                https://huggingface.co/Xenova/gpt-4o/resolve/7956d98f2a83b2751a98ea7136fdf7fe6cf54e69/tokenizer.json
           echo "196139668be63f3b5d6574427317ae82f612a97c5d1cdaf36ed2256dbf636783  gpt2-vocab.json" | sha256sum -c -
           echo "1ce1664773c50f3e0cc8842619a93edc4624525b728b188a9e0be33b7726adc5  gpt2-merges.txt" | sha256sum -c -
           echo "223921b76ee99bde995b7ff738513eef100fb51d18c93597a113bcffe865b2a7  cl100k_base.tiktoken" | sha256sum -c -
           echo "446a9538cb6c348e3516120d7c08b09f57c36495e2acfffe59a5bf8b0cfb1a2d  o200k_base.tiktoken" | sha256sum -c -
+          echo "8414cab924d8b9b33013f0d221c5862f365ee9be39c5c2bfae8a5a9e970478a6  gpt2-tokenizer.json" | sha256sum -c -
+          echo "239eb2359f79c38497476671aaa835e01fb43d42743c612a8514a0dfa2ac93a2  cl100k-tokenizer.json" \
+                | sha256sum -c -
+          echo "43a3ad4618a6a938f8c2614154ea10c31ad53a62d5683ae0b0e6133575cef07e  o200k-tokenizer.json" | sha256sum -c -
 
       - name: Configure build with CMake
         # -fprofile-update=atomic: the parallel encoder runs on several threads, and gcov's counters are not atomic
@@ -325,7 +337,9 @@ jobs:
           cmake -G Ninja .. -DCMAKE_BUILD_TYPE=Release -DMATISSE_BUILD_FUZZER=ON -DMATISSE_BUILD_TESTS=OFF
 
       - name: Build the fuzz harnesses
-        run: cmake --build build --target matisse_tiktoken_fuzzer matisse_gpt2_fuzzer matisse_encoder_fuzzer
+        run: |
+          cmake --build build --target matisse_tiktoken_fuzzer matisse_gpt2_fuzzer matisse_tokenizer_json_fuzzer \
+                matisse_encoder_fuzzer
 
       # A bounded run on every push: a minute per harness, each seeded from its directory under tools/fuzz/seeds. No
       # harness reads a vocabulary file, so none is fetched: the readers are fed the fuzz input itself, and the
@@ -344,6 +358,12 @@ jobs:
           mkdir gpt2-corpus
           ./build/tools/fuzz/matisse_gpt2_fuzzer gpt2-corpus tools/fuzz/seeds/gpt2 -max_total_time=60 -timeout=10 \
                 -rss_limit_mb=4096 -print_new_funcs=0
+
+      - name: Fuzz the tokenizer.json reader
+        run: |
+          mkdir tokenizer-json-corpus
+          ./build/tools/fuzz/matisse_tokenizer_json_fuzzer tokenizer-json-corpus tools/fuzz/seeds/tokenizer_json \
+                -max_total_time=60 -timeout=10 -rss_limit_mb=4096 -print_new_funcs=0
 
       # The encoder harness decides its four reports before its first input, some seconds of its minute, and holds
       # encode_parallel() to encode() at a chunk count each input draws.

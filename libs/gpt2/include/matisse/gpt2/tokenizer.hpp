@@ -1,6 +1,7 @@
 #ifndef MATISSE_LIBS_GPT2_INCLUDE_MATISSE_GPT2_TOKENIZER_HPP
 #define MATISSE_LIBS_GPT2_INCLUDE_MATISSE_GPT2_TOKENIZER_HPP
 
+#include <string_view>
 #include <vector>
 
 #include "matisse/load/definition.hpp"
@@ -8,11 +9,12 @@
 
 /**
  * @file
- * @brief GPT-2's tokenizer as matisse describes it: its pre-tokenizer pattern, pattern(), and the vendor's special
- *        tokens of a rank file read under it, specials().
+ * @brief GPT-2's tokenizer as matisse describes it: its pre-tokenizer pattern, pattern(), the pattern's published
+ *        spelling, spelling(), and the vendor's special tokens of a rank file read under it, specials().
  *
- * GPT-2's files, encoder.json and vocab.bpe, are read by load::read_gpt2() and a tiktoken rank file of the gpt2 or
- * r50k_base encoding by load::read_tiktoken() with specials(); the stages take pattern() beside the definition.
+ * GPT-2's files, encoder.json and vocab.bpe, are read by load::read_gpt2(), a tiktoken rank file of the gpt2 or
+ * r50k_base encoding by load::read_tiktoken() with specials(), and a tokenizer.json by load::read_tokenizer_json() with
+ * spelling(); the stages take pattern() beside the definition.
  */
 namespace matisse::gpt2
 {
@@ -27,6 +29,13 @@ namespace matisse::gpt2
  * @return The pattern, its languages built with munch's combinators.
  */
 [[nodiscard]] pretok::Pattern pattern();
+
+/**
+ * @brief Returns GPT-2's pattern as openai/gpt-2's src/encoder.py publishes it, the spelling
+ *        load::read_tokenizer_json() recognizes a tokenizer.json's pre-tokenizer by.
+ * @return The spelling.
+ */
+[[nodiscard]] std::string_view spelling();
 
 /**
  * @brief Returns the vendor's special tokens of a rank file read under GPT-2's pattern, those of the gpt2 and r50k_base

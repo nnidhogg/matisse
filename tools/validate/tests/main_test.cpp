@@ -177,6 +177,55 @@ void expect_command_error(const Run& ran, const std::string_view diagnostic)
     EXPECT_TRUE(err.starts_with(std::format("matisse-validate: {}\n\nusage: matisse-validate", diagnostic))) << err;
 }
 
+/**
+ * @brief Llama 3's pattern as a JSON string spells it, each backslash doubled.
+ */
+constexpr std::string_view llama3_json_spelling{
+        R"((?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\\r\\n\\p{L}\\p{N}]?\\p{L}+|\\p{N}{1,3}| ?[^\\s\\p{L}\\p{N}]+[\\r\\n]*|)"
+        R"(\\s*[\\r\\n]+|\\s+(?!\\S)|\\s+)"};
+
+/**
+ * @brief Writes a tokenizer.json of the 256 single bytes, each spelled under GPT-2's byte map at its own id, and
+ *        `<|endoftext|>` as a special token, the definition bytes.tiktoken is under gpt2.
+ * @param path The file's path.
+ * @param pre_tokenizer The pre-tokenizer, as JSON text.
+ * @param normalizer The normalizer, as JSON text.
+ */
+void write_bytes_tokenizer_json(
+        const std::filesystem::path& path, const std::string_view pre_tokenizer, const std::string_view normalizer)
+{
+    constexpr unsigned byte_count{256};
+
+    std::string vocab{};
+
+    unsigned next{0x100};
+
+    for (unsigned byte{0}; byte < byte_count; ++byte)
+    {
+        const auto printable{(byte >= 0x21U && byte <= 0x7EU) || (byte >= 0xA1U && byte <= 0xACU) || byte >= 0xAEU};
+
+        const auto character{printable ? byte : next++};
+
+        vocab += std::format(R"({}"\u{:04X}": {})", byte == 0 ? "" : ", ", character, byte);
+    }
+
+    std::ofstream{path, std::ios::binary} << std::format(
+            R"({{"normalizer": {}, "pre_tokenizer": {}, "post_processor": null,
+                 "added_tokens": [{{"id": 256, "content": "<|endoftext|>", "special": true}}],
+                 "model": {{"type": "BPE", "vocab": {{{}}}, "merges": []}}}})",
+            normalizer, pre_tokenizer, vocab);
+}
+
+/**
+ * @brief Returns a command's text output after its first line, the heading that names the file.
+ * @param out The output.
+ * @return The output after the heading.
+ */
+std::string after_heading(const std::string_view out)
+{
+    return std::string{out.substr(out.find('\n') + 1)};
+}
+
 } // namespace
 
 TEST(Output_test, Each_pattern_prints_the_report_and_the_supply_the_fixture_holds)
@@ -332,9 +381,6 @@ TEST(Command_line_test, A_command_line_error_exits_two_with_the_usage)
     expect_command_error(
             run({"--tiktoken", "o200k_base", file}),
             "--tiktoken takes one of gpt2, cl100k, o200k, llama3, not 'o200k_base'");
-    expect_command_error(
-            run({file}),
-            std::format("{} is read as a rank file with --tiktoken PATTERN; a tokenizer.json has no reader yet", file));
 
     for (const std::string width : {"1", "6", "4x", ""})
     {
@@ -342,4 +388,75 @@ TEST(Command_line_test, A_command_line_error_exits_two_with_the_usage)
                 run({"--tiktoken", "gpt2", file, "--windows", width}),
                 std::format("--windows takes 2 to 5, not '{}'", width));
     }
+}
+
+TEST(Command_line_test, A_tokenizer_json_is_read_under_the_tokenizer_whose_pattern_its_pre_tokenizer_runs)
+{
+    const auto dir{scratch()};
+
+    const auto gpt2_file{(dir / "gpt2.tokenizer.json").string()};
+    const auto llama3_file{(dir / "llama3.tokenizer.json").string()};
+
+    write_bytes_tokenizer_json(gpt2_file, R"({"type": "ByteLevel", "add_prefix_space": false})", "null");
+
+    write_bytes_tokenizer_json(
+            llama3_file,
+            std::format(
+                    R"({{"type": "Sequence", "pretokenizers": [
+                           {{"type": "Split", "pattern": {{"Regex": "{}"}}, "behavior": "Isolated", "invert": false}},
+                           {{"type": "ByteLevel", "add_prefix_space": false, "use_regex": false}}]}})",
+                    llama3_json_spelling),
+            "null");
+
+    const auto [gpt2_status, gpt2_out, gpt2_err]{run({gpt2_file, "--windows", "2"})};
+    const auto [ranks_status, ranks_out, ranks_err]{run({"--tiktoken", "gpt2", data(bytes_file), "--windows", "2"})};
+
+    EXPECT_EQ(gpt2_status, 0) << gpt2_err;
+    EXPECT_TRUE(gpt2_out.starts_with(std::format("== {}\n-- tokenizer gpt2: 256 tokens, 1 special token\n", gpt2_file)))
+            << gpt2_out;
+    EXPECT_EQ(after_heading(gpt2_out), after_heading(ranks_out));
+
+    const auto [llama3_status, llama3_out, llama3_err]{run({llama3_file, "--windows", "2", "--json"})};
+
+    EXPECT_EQ(llama3_status, 0) << llama3_err;
+    EXPECT_TRUE(llama3_out.contains(R"("tokenizer": "llama3",)")) << llama3_out;
+    EXPECT_TRUE(llama3_out.contains(R"("tokens": 256,)")) << llama3_out;
+
+    std::filesystem::remove_all(dir);
+}
+
+TEST(Command_line_test, A_refused_tokenizer_json_exits_one_with_the_refusal_and_no_tokenizer)
+{
+    const auto dir{scratch()};
+
+    const auto normalized{(dir / "normalized.tokenizer.json").string()};
+    const auto unknown{(dir / "unknown.tokenizer.json").string()};
+
+    write_bytes_tokenizer_json(normalized, R"({"type": "ByteLevel", "add_prefix_space": false})", R"({"type": "NFC"})");
+
+    write_bytes_tokenizer_json(
+            unknown,
+            R"({"type": "Sequence", "pretokenizers": [
+                   {"type": "Split", "pattern": {"Regex": "\\p{L}+"}, "behavior": "Isolated", "invert": false},
+                   {"type": "ByteLevel", "add_prefix_space": false, "use_regex": false}]})",
+            "null");
+
+    const auto [status, out, err]{run({normalized})};
+
+    const auto refusal{std::format(
+            R"(read_tokenizer_json: normalizer of {} is a "NFC" object, where the reader takes null)", normalized)};
+
+    EXPECT_EQ(status, 1);
+    EXPECT_EQ(err, "");
+    EXPECT_EQ(out, std::format("== {}\nrefused: {}\n", normalized, refusal));
+
+    const auto [json_status, json_out, json_err]{run({unknown, "--json"})};
+
+    EXPECT_EQ(json_status, 1);
+    EXPECT_TRUE(json_out.contains(R"("tokenizer": null,)")) << json_out;
+    EXPECT_TRUE(
+            json_out.contains(R"(runs the pattern \"\\p{L}+\", and no tokenizer matisse describes has that pattern)"))
+            << json_out;
+
+    std::filesystem::remove_all(dir);
 }

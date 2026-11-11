@@ -28,6 +28,7 @@
 #include "matisse/encode/stream_encoder.hpp"
 #include "matisse/encode/window_index.hpp"
 #include "matisse/gpt2/tokenizer.hpp"
+#include "matisse/load/definition.hpp"
 #include "matisse/pretok/classes.hpp"
 #include "matisse/pretok/segmenter.hpp"
 #include "matisse/validate/report.hpp"
@@ -48,6 +49,13 @@ constexpr std::string_view gpt2_encoder_digest{"196139668be63f3b5d6574427317ae82
  * @brief The SHA-256 of GPT-2's vocab.bpe as pinned, gpt2-merges.txt in the vocabulary directory.
  */
 constexpr std::string_view gpt2_vocab_digest{"1ce1664773c50f3e0cc8842619a93edc4624525b728b188a9e0be33b7726adc5"};
+
+/**
+ * @brief The corpora of the test strategy, small enough to encode whole in a test, on which the vendors' ids are
+ *        Hugging Face's among them.
+ */
+constexpr std::array<std::string_view, 3> strategy_corpora{
+        "twitter.json", "munch-python@15b2863c.txt", "munch-cpp@15b2863c.txt"};
 
 /**
  * @brief What the known-answer fixture holds, counted as it is checked.
@@ -994,5 +1002,53 @@ TEST(Encoder_test, A_stream_pushed_in_parts_of_every_size_returns_prefixes_of_en
             expect_streamed(encoder, text, one_byte_cuts);
             expect_streamed(encoder, text, std::array{text.size()});
         }
+    }
+}
+
+TEST(Encoder_test, The_pinned_gpt2_tokenizer_json_encodes_the_test_strategy_s_corpora_to_hugging_face_s_ids)
+{
+    const auto path{pinned("gpt2-tokenizer.json")};
+
+    if (!path)
+    {
+        GTEST_SKIP() << "MATISSE_VOCAB_DIR names no directory holding gpt2-tokenizer.json";
+    }
+
+    const auto [universes, corpora, vendor_ids]{vendor_fixture()};
+
+    EXPECT_EQ(universes, 1U);
+
+    auto definition{matisse::load::read_tokenizer_json(*path, matisse::gpt2::spelling())};
+
+    const auto encoder{gpt2_encoder(std::move(definition))};
+
+    std::string absent{};
+
+    for (const auto name : strategy_corpora)
+    {
+        const auto corpus{corpus_path(name)};
+
+        if (!corpus)
+        {
+            absent += absent.empty() ? std::string{name} : ", " + std::string{name};
+
+            continue;
+        }
+
+        const auto ids{encoder.encode(contents(*corpus))};
+
+        matisse::common::Sha256 hash{};
+
+        add_ids(hash, ids);
+
+        const auto& [count, digest]{vendor_ids.at(std::string{name})};
+
+        EXPECT_EQ(ids.size(), count) << name;
+        EXPECT_EQ(hash.digest(), digest) << name;
+    }
+
+    if (!absent.empty())
+    {
+        GTEST_SKIP() << "MATISSE_CORPUS_DIR names no directory holding " << absent;
     }
 }

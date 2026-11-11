@@ -3,14 +3,17 @@
 #include <charconv>
 #include <cstddef>
 #include <filesystem>
+#include <format>
 #include <fstream>
 #include <gtest/gtest.h>
 #include <iterator>
 #include <optional>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <tuple>
+#include <unistd.h>
 #include <utility>
 #include <vector>
 
@@ -25,6 +28,13 @@ namespace
  * @brief The SHA-256 of cl100k_base.tiktoken as pinned.
  */
 constexpr std::string_view cl100k_digest{"223921b76ee99bde995b7ff738513eef100fb51d18c93597a113bcffe865b2a7"};
+
+/**
+ * @brief The SHA-256 of cl100k's tokenizer.json as pinned, cl100k-tokenizer.json in the vocabulary directory, taken
+ *        from huggingface.co/Xenova/gpt-4 at commit 1d9f1f1b1fae88c0e4df1dab0a397f8de6229075.
+ */
+constexpr std::string_view cl100k_tokenizer_json_digest{
+        "239eb2359f79c38497476671aaa835e01fb43d42743c612a8514a0dfa2ac93a2"};
 
 /**
  * @brief What the known-answer fixture holds, counted as it is checked.
@@ -244,6 +254,26 @@ void expect_fixture_line(Fixture_check& check, const std::string& line)
     }
 }
 
+/**
+ * @brief Returns the refusal read_tokenizer_json() makes of a file under cl100k's published spelling, empty when it
+ *        makes none.
+ * @param path The file's path.
+ * @return The refusal's message.
+ */
+std::string cl100k_refusal(const std::filesystem::path& path)
+{
+    try
+    {
+        std::ignore = read_tokenizer_json(path, matisse::cl100k::spelling());
+    }
+    catch (const std::invalid_argument& refusal)
+    {
+        return refusal.what();
+    }
+
+    return {};
+}
+
 } // namespace
 
 TEST(Definition_test, The_special_tokens_of_the_cl100k_rank_file_are_the_vendor_s)
@@ -294,4 +324,50 @@ TEST(Definition_test, The_ids_of_every_known_answer_of_the_fixture_spell_its_tex
     EXPECT_EQ(check.counts.universes, 1U);
     EXPECT_EQ(check.counts.encodings, 15U);
     EXPECT_EQ(check.counts.corpora, 3U);
+}
+
+TEST(Definition_test, The_pinned_cl100k_tokenizer_json_carries_llama3_s_pattern_and_is_refused_under_cl100k_s)
+{
+    const auto path{pinned("cl100k-tokenizer.json")};
+
+    if (!path)
+    {
+        GTEST_SKIP() << "MATISSE_VOCAB_DIR names no directory holding cl100k-tokenizer.json";
+    }
+
+    EXPECT_EQ(matisse::common::sha256(contents(*path)), cl100k_tokenizer_json_digest);
+
+    const auto refusal{cl100k_refusal(*path)};
+
+    EXPECT_TRUE(refusal.contains("pre_tokenizer.pretokenizers[0].pattern.Regex of")) << refusal;
+    EXPECT_TRUE(refusal.contains(R"(is "(?i:'s|'t|'re|'ve|'m|'ll|'d)|)")) << refusal;
+    EXPECT_TRUE(refusal.contains(R"(where the reader takes a Split on "'(?i:[sdmt]|ll|ve|re)|)")) << refusal;
+}
+
+TEST(Definition_test, A_tokenizer_json_spelling_cl100k_s_published_pattern_is_refused_as_oniguruma_reads_it_otherwise)
+{
+    std::string spelling{};
+
+    for (const auto character : matisse::cl100k::spelling())
+    {
+        spelling += character == '\\' ? std::string{R"(\\)"} : std::string{character};
+    }
+
+    const auto text{std::format(
+            R"({{"normalizer": null, "pre_tokenizer": {{"type": "Sequence", "pretokenizers": [
+                   {{"type": "Split", "pattern": {{"Regex": "{}"}}, "behavior": "Isolated", "invert": false}},
+                   {{"type": "ByteLevel", "add_prefix_space": false, "use_regex": false}}]}},
+                 "model": {{"type": "BPE", "vocab": {{"a": 0}}, "merges": []}}}})",
+            spelling)};
+
+    const auto name{std::format("matisse-cl100k-tokenizer-{}.json", ::getpid())};
+
+    const auto path{std::filesystem::temp_directory_path() / name};
+
+    std::ofstream{path, std::ios::binary} << text;
+
+    const auto refusal{cl100k_refusal(path)};
+
+    EXPECT_TRUE(refusal.contains(R"(whose "{1,3}+" Oniguruma, Hugging Face's engine, reads as the interval repeated)"))
+            << refusal;
 }

@@ -33,6 +33,7 @@
 #include "matisse/encode/stream_encoder.hpp"
 #include "matisse/encode/window_index.hpp"
 #include "matisse/llama3/tokenizer.hpp"
+#include "matisse/load/definition.hpp"
 #include "matisse/pretok/classes.hpp"
 #include "matisse/pretok/segmenter.hpp"
 #include "matisse/validate/report.hpp"
@@ -48,6 +49,13 @@ namespace
  * @brief The SHA-256 of llama3.tiktoken as pinned.
  */
 constexpr std::string_view llama3_digest{"82e9d31979e92ab929cd544440f129d9ecd797b69e327f80f17e1c50d5551b55"};
+
+/**
+ * @brief The corpora of the test strategy, small enough to encode whole in a test, on which the vendors' ids are
+ *        Hugging Face's among them.
+ */
+constexpr std::array<std::string_view, 3> strategy_corpora{
+        "twitter.json", "munch-python@15b2863c.txt", "munch-cpp@15b2863c.txt"};
 
 /**
  * @brief The rank of no join, above every rank.
@@ -120,8 +128,8 @@ struct Vendor_corpus
 };
 
 /**
- * @brief The vendors' ids of a corpus under Llama 3's definition: their count and their SHA-256 as little-endian 32-bit
- *        words, the documents' ids concatenated.
+ * @brief The vendors' ids of a corpus under a universe's definition: their count and their SHA-256 as little-endian
+ *        32-bit words, the documents' ids concatenated.
  */
 struct Vendor_ids
 {
@@ -137,13 +145,13 @@ struct Vendor_ids
 };
 
 /**
- * @brief The vendor fixture as the tests of Llama 3 read it: its universe lines naming llama3, every corpus, and the
- *        vendors' ids of each under Llama 3's definition, by the corpus's file name.
+ * @brief The vendor fixture as the tests of Llama 3 read it: its universe lines naming the universe read, every corpus,
+ *        and the vendors' ids of each under the universe's definition, by the corpus's file name.
  */
 struct Vendor_fixture
 {
     /**
-     * @brief The universe lines naming llama3.
+     * @brief The universe lines naming the universe read.
      */
     std::size_t universes{0};
 
@@ -414,11 +422,12 @@ void expect_fixture_line(Fixture_check& check, const Encoder& encoder, const std
 }
 
 /**
- * @brief Returns the vendor fixture read for Llama 3: the corpus lines before the first universe line, and the ids
- *        lines of Llama 3's universe, a line of another universe skipped and a line of another kind a failure.
+ * @brief Returns the vendor fixture read for a universe: the corpus lines before the first universe line, and the ids
+ *        lines of the universe, a line of another universe skipped and a line of another kind a failure.
+ * @param named The universe, llama3, or cl100k for cl100k's vocabulary read under Llama 3's pattern.
  * @return The fixture.
  */
-Vendor_fixture vendor_fixture()
+Vendor_fixture vendor_fixture(const std::string_view named)
 {
     std::ifstream file{std::string{SOURCE_DIR} + "/libs/load/tests/data/vendors_reference.txt"};
 
@@ -443,7 +452,7 @@ Vendor_fixture vendor_fixture()
         {
             fields >> universe;
 
-            if (universe == "llama3")
+            if (universe == named)
             {
                 ++fixture.universes;
             }
@@ -467,7 +476,7 @@ Vendor_fixture vendor_fixture()
             continue;
         }
 
-        if (universe != "llama3")
+        if (universe != named)
         {
             continue;
         }
@@ -884,7 +893,7 @@ TEST(Encoder_test, Every_corpus_of_the_vendor_fixture_the_corpus_directory_holds
         GTEST_SKIP() << "MATISSE_VOCAB_DIR names no directory holding llama3.tiktoken";
     }
 
-    const auto [universes, corpora, vendor_ids]{vendor_fixture()};
+    const auto [universes, corpora, vendor_ids]{vendor_fixture("llama3")};
 
     EXPECT_EQ(universes, 1U);
     EXPECT_EQ(corpora.size(), 14U);
@@ -1229,5 +1238,102 @@ TEST(Encoder_test, A_stream_pushed_in_parts_of_every_size_returns_prefixes_of_en
             expect_streamed(encoder, text, one_byte_cuts);
             expect_streamed(encoder, text, std::array{text.size()});
         }
+    }
+}
+
+TEST(Encoder_test, The_pinned_llama3_tokenizer_json_encodes_the_test_strategy_s_corpora_to_hugging_face_s_ids)
+{
+    const auto path{pinned("llama3-tokenizer.json")};
+
+    if (!path)
+    {
+        GTEST_SKIP() << "MATISSE_VOCAB_DIR names no directory holding llama3-tokenizer.json";
+    }
+
+    const auto [universes, corpora, vendor_ids]{vendor_fixture("llama3")};
+
+    EXPECT_EQ(universes, 1U);
+
+    auto definition{matisse::load::read_tokenizer_json(*path, matisse::llama3::spelling())};
+
+    const auto encoder{llama3_encoder(std::move(definition))};
+
+    std::string absent{};
+
+    for (const auto name : strategy_corpora)
+    {
+        const auto corpus{corpus_path(name)};
+
+        if (!corpus)
+        {
+            absent += absent.empty() ? std::string{name} : ", " + std::string{name};
+
+            continue;
+        }
+
+        const auto ids{encoder.encode(contents(*corpus))};
+
+        matisse::common::Sha256 hash{};
+
+        add_ids(hash, ids);
+
+        const auto& [count, digest]{vendor_ids.at(std::string{name})};
+
+        EXPECT_EQ(ids.size(), count) << name;
+        EXPECT_EQ(hash.digest(), digest) << name;
+    }
+
+    if (!absent.empty())
+    {
+        GTEST_SKIP() << "MATISSE_CORPUS_DIR names no directory holding " << absent;
+    }
+}
+
+TEST(Encoder_test, The_pinned_cl100k_tokenizer_json_under_llama3_s_pattern_encodes_the_corpora_to_hugging_face_s_ids)
+{
+    const auto path{pinned("cl100k-tokenizer.json")};
+
+    if (!path)
+    {
+        GTEST_SKIP() << "MATISSE_VOCAB_DIR names no directory holding cl100k-tokenizer.json";
+    }
+
+    // Xenova's conversion of cl100k carries Llama 3's pattern, and the fixture's Hugging Face ids under cl100k are its.
+    const auto [universes, corpora, vendor_ids]{vendor_fixture("cl100k")};
+
+    EXPECT_EQ(universes, 1U);
+
+    auto definition{matisse::load::read_tokenizer_json(*path, matisse::llama3::spelling())};
+
+    const auto encoder{llama3_encoder(std::move(definition))};
+
+    std::string absent{};
+
+    for (const auto name : strategy_corpora)
+    {
+        const auto corpus{corpus_path(name)};
+
+        if (!corpus)
+        {
+            absent += absent.empty() ? std::string{name} : ", " + std::string{name};
+
+            continue;
+        }
+
+        const auto ids{encoder.encode(contents(*corpus))};
+
+        matisse::common::Sha256 hash{};
+
+        add_ids(hash, ids);
+
+        const auto& [count, digest]{vendor_ids.at(std::string{name})};
+
+        EXPECT_EQ(ids.size(), count) << name;
+        EXPECT_EQ(hash.digest(), digest) << name;
+    }
+
+    if (!absent.empty())
+    {
+        GTEST_SKIP() << "MATISSE_CORPUS_DIR names no directory holding " << absent;
     }
 }

@@ -10,12 +10,13 @@ it.
 
 matisse gives the token ids the vendor's tokenizer gives, exactly, or it throws. It does so for four tokenizers: GPT-2,
 read from encoder.json and vocab.bpe or from a tiktoken rank file, and cl100k_base, o200k_base and Llama 3, read from
-their tiktoken rank files, each under its published pre-tokenizer pattern and with the vendor's special tokens. On the
-fourteen corpora of [benchmarks.md](benchmarks.md) matisse's ids equal tiktoken's, Hugging Face tokenizers' and the bpe
-crate's by digest wherever each of them ran. The one caveat is the Unicode version: the class tables are pinned to
-Unicode 16.0.0, the version tiktoken's regex engine reads, and a text holding a code point whose class differs between
-Unicode versions can be segmented differently by an engine with tables of another version, as the section on Unicode
-below describes.
+their tiktoken rank files, each under its published pre-tokenizer pattern and with the vendor's special tokens, and for
+a Hugging Face tokenizer.json under GPT-2's, o200k's or Llama 3's pattern, whose ids are Hugging Face tokenizers' own
+for the file, with `add_special_tokens` false. On the fourteen corpora of [benchmarks.md](benchmarks.md) matisse's ids
+equal tiktoken's, Hugging Face tokenizers' and the bpe crate's by digest wherever each of them ran. The one caveat is
+the Unicode version: the class tables are pinned to Unicode 16.0.0, the version tiktoken's regex engine reads, and a
+text holding a code point whose class differs between Unicode versions can be segmented differently by an engine with
+tables of another version, as the section on Unicode below describes.
 
 The model excludes the following, some of it permanently and some only in this version:
 
@@ -32,10 +33,13 @@ The model excludes the following, some of it permanently and some only in this v
   beginning-of-sequence token adds its id itself. WordPiece, which would bring BERT's normalizer and so the first
   normalizer, is the next tokenizer [design.md](design.md) recommends.
 - **Training.** matisse reads the files a vendor published and trains nothing.
-- **A tokenizer.json reader.** Hugging Face's tokenizer.json has no reader yet; the reader is planned, and
-  [design.md](design.md) sketches it with the choice of JSON reader it waits on. Until then load reads GPT-2's
-  encoder.json and vocab.bpe through `read_gpt2()` and tiktoken rank files through `read_tiktoken()`, and
-  `matisse-validate` treats a file named without `--tiktoken` as a command-line error.
+- **tokenizer.json configurations.** `read_tokenizer_json()` reads a tokenizer.json with a BPE model and one of three
+  pre-tokenizers, GPT-2's ByteLevel with its regex, a Split on a published pattern followed by a ByteLevel without its
+  regex, or a ByteLevel without its regex alone, and refuses every other model, normalizer, pre-tokenizer,
+  post-processor and added token, naming the member, as [design.md](design.md) lists them. No tokenizer.json is read
+  under cl100k's published pattern, since Oniguruma, Hugging Face's engine, reads its `\p{N}{1,3}+` as the interval
+  repeated, so that Hugging Face would segment it otherwise than tiktoken; the cl100k conversions on the Hugging Face
+  Hub carry Llama 3's pattern and are read under it.
 - **Tokenizers beyond GPT-2, cl100k_base, o200k_base and Llama 3.** Those four have pattern descriptions, in the gpt2,
   cl100k, o200k and llama3 libraries, which lookup finds by name. A further tokenizer comes as a library of its own
   under `libs/`, named in the lookup's list, with no change to the stage libraries, once its pattern has a description
@@ -81,11 +85,14 @@ decoder gives for o200k_harmony's, so the other spelling decodes as that one.
 
 Both vendors' merge rules are supported, and every id is the rule's on every table and every piece. A rank file read by
 `read_tiktoken()` merges by tiktoken's rank rule, and GPT-2's encoder.json and vocab.bpe read by `read_gpt2()` merge by
-the pair rule, which is encoder.py's on every file `read_gpt2()` accepts. What is refused, and when:
+the pair rule, which is encoder.py's on every file `read_gpt2()` accepts, and a tokenizer.json read by
+`read_tokenizer_json()` merges by the pair rule, which is Hugging Face's own. What is refused, and when:
 
 - `read_gpt2()` refuses a merge table on which encoder.py's pass and one join at a time could differ, naming the merge,
   its rank and its line, and a pair listed twice, naming both ranks, which both vendors would read at its last rank.
   GPT-2's own table passes both checks.
+- `read_tokenizer_json()` refuses a pair listed twice, which Hugging Face would read at its last rank, and nothing of
+  the order of the merges, since its rule is Hugging Face's own.
 - When the encoder is built, `Merger` refuses a definition in which one of the 256 bytes is not a token, since every
   piece starts as its bytes, and under the pair rule a merge whose part or product is not a token. The message names the
   byte, or the merge, its rank and the spelling.
@@ -114,10 +121,11 @@ give way beside the token that does not meet it and to be merged to the rule's i
 
 The whole-piece lookup is the definition's `whole_piece_lookup` flag: whether a piece that is itself an ordinary token
 is that one token, looked up before any merge. `read_tiktoken()` sets it, since tiktoken looks every piece up, and
-`read_gpt2()` leaves it false, since encoder.py never does. It changes no id on cl100k, o200k or GPT-2, where every
-multi-byte token is formed by the merge rule from its own bytes, GPT-2's `<|endoftext|>` aside, which its pattern never
-leaves as one piece. It is load-bearing on Llama 3's rank file, where 588 of 127,744 multi-byte tokens are not formed
-from their own bytes and the lookup is what gives each of them whole.
+`read_gpt2()` leaves it false, since encoder.py never does, and `read_tokenizer_json()` sets it to the BPE model's
+`ignore_merges`, as Hugging Face's model reads it. It changes no id on cl100k, o200k or GPT-2, where every multi-byte
+token is formed by the merge rule from its own bytes, GPT-2's `<|endoftext|>` aside, which its pattern never leaves as
+one piece. It is load-bearing on Llama 3's rank file, where 588 of 127,744 multi-byte tokens are not formed from their
+own bytes and the lookup is what gives each of them whole.
 
 ## **Parallel: Certified Cuts, or One Chunk**
 

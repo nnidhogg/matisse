@@ -264,6 +264,12 @@ pretok::Pattern pattern()
     return {.alphabet = alphabet(), .alternatives = alternatives()};
 }
 
+std::string_view spelling()
+{
+    return R"('(?i:[sdmt]|ll|ve|re)|[^\r\n\p{L}\p{N}]?+\p{L}++|\p{N}{1,3}+| ?[^\s\p{L}\p{N}]++[\r\n]*+|)"
+           R"(\s++$|\s*[\r\n]|\s+(?!\S)|\s)";
+}
+
 std::vector<load::Special_token> specials()
 {
     return {{.spelling = "<|endoftext|>", .id = 100257},

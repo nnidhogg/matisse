@@ -33,11 +33,12 @@ parser toolkit.
 A tokenizer reaches matisse as two things read apart. Its files are read by load into a `load::Definition`, which holds
 the merge rule, whether a piece is looked up whole, the bytes of every ordinary token, the merge table and the special
 tokens. Its pre-tokenizer is a `pretok::Pattern`, the published regex described as data, which the tokenizer's own
-library supplies with `pattern()`, beside `specials()`, the vendor's special tokens for a rank file that names none.
-validate decides a report of the pattern once: the windows of classes that certify a cut under each of two certificates,
-and the right context each certificate needs. encode builds an `Encoder` from the definition, the report, the inventory
-of certified windows chosen and the special tokens allowed, and the encoder encodes a text sequentially, in parallel at
-certified cuts, and as a stream through a `Stream_encoder` over it. For cl100k_base:
+library supplies with `pattern()`, beside `spelling()`, the published regex as its vendor spells it, by which a
+tokenizer.json's pre-tokenizer is recognized, and `specials()`, the vendor's special tokens for a rank file that names
+none. validate decides a report of the pattern once: the windows of classes that certify a cut under each of two
+certificates, and the right context each certificate needs. encode builds an `Encoder` from the definition, the report,
+the inventory of certified windows chosen and the special tokens allowed, and the encoder encodes a text sequentially,
+in parallel at certified cuts, and as a stream through a `Stream_encoder` over it. For cl100k_base:
 
 ```
 cl100k_base.tiktoken ──▶ load::read_tiktoken() ──▶ load::Definition ────┐
@@ -52,13 +53,14 @@ cl100k::pattern() ──▶ validate::validate() ──▶ validate::Report ─�
 
 The libraries are of two kinds, as hopper's generic parse library sits beside its json and clike grammars. The four
 stage libraries hold nothing of a specific tokenizer and take its description as data. load reads tokenizer files into
-one definition type; its `read_gpt2()` reads the file format GPT-2 published, and `read_tiktoken()` the rank files
-tiktoken publishes. pretok holds the pre-tokenizer machinery over a pattern description: the classes of a text, the
-runtime segmenter, and the construction of a pattern's verifier. validate decides the certified windows and their right
-context and measures anchor supply. encode is the runtime. Beside them every tokenizer is a small library of its own,
-gpt2, cl100k, o200k and llama3, holding its pattern description, its generated class tables, the vendor's special tokens
-for a file that names none, and its tests, and lookup finds the tokenizer libraries by name, for `matisse-validate` and
-any caller choosing a tokenizer at run time.
+one definition type; its `read_gpt2()` reads the file format GPT-2 published, `read_tiktoken()` the rank files tiktoken
+publishes, and `read_tokenizer_json()` Hugging Face's tokenizer.json with a BPE model, its JSON read by hopper's parser.
+pretok holds the pre-tokenizer machinery over a pattern description: the classes of a text, the runtime segmenter, and
+the construction of a pattern's verifier. validate decides the certified windows and their right context and measures
+anchor supply. encode is the runtime. Beside them every tokenizer is a small library of its own, gpt2, cl100k, o200k and
+llama3, holding its pattern description, the pattern's published spelling, its generated class tables, the vendor's
+special tokens for a file that names none, and its tests, and lookup finds the tokenizer libraries by name, for
+`matisse-validate` and any caller choosing a tokenizer at run time.
 
 Each library is a target `matisse_<name>` with the alias `matisse::<name>`, in namespace `matisse::<name>`, and the
 umbrella `matisse::matisse` links all of them, as `hopper::hopper` links hopper's. A consumer that encodes under one
@@ -69,10 +71,10 @@ lives in the build tree only, with no alias, no install rule and no place in the
 name munch types links munch publicly, as hopper_json does: load, whose definition holds `munch::verifier::Merge`,
 pretok, whose pattern's sets are `munch::regex::utf8::Code_point_range` tables and whose verifier is a
 `munch::verifier::Verifier`, and validate, which decides on that verifier. A tokenizer library reaches munch through
-pretok.
+pretok. load links hopper_json privately, since none of its headers names a hopper type.
 
 The repository is laid out as hopper's is, one library per subject under libs/, each with include/, src/ and tests/, the
-tools beside them, munch as a git submodule and googletest beside it:
+tools beside them, munch and hopper as git submodules and googletest beside them:
 
 ```
 matisse/
@@ -81,7 +83,7 @@ matisse/
   .github/workflows/  ci.yml  codeql.yml
   cmake/matisse-config.cmake
   docs/  design.md  usage.md  limits.md  benchmarks.md
-  external/  CMakeLists.txt  googletest/  munch/          (submodule, pinned to the munch release it builds against)
+  external/  CMakeLists.txt  googletest/  hopper/  munch/  (submodules, pinned to the releases it builds against)
   libs/
     CMakeLists.txt
     common/     include/matisse/common/                   (the tests' SHA-256, neither installed nor exported)
@@ -106,6 +108,17 @@ The top-level CMakeLists.txt is hopper's with the prefix changed, and munch is c
 the submodule by default, or with `MATISSE_SYSTEM_MUNCH` an installed munch found by `find_package(munch REQUIRED)` at
 the top level, so that every library sees its imported targets. Installing requires the installed munch, because an
 exported target can refer to munch only as an installed package. [usage.md](usage.md) lists the options.
+
+hopper is the second submodule, pinned to hopper 1.0.0, for `hopper::json::Parser`, its RFC 8259 parser held to the
+JSONTestSuite, which reads tokenizer.json, so that the family has one JSON parser and matisse vendors no new dependency.
+matisse needs from it the parser and its `Value` tree, objects keeping their members in the file's order, strings with
+every escape resolved and surrogate pairs combined, numbers as spelled. hopper 1.0.0's top level adds its own munch
+submodule unless hopper is built against an installed munch, which would define munch's targets twice beside matisse's
+own submodule, so external/CMakeLists.txt adds hopper's parse and json libraries directly, and both link `munch::munch`,
+the submodule's or the installed one; hopper 1.0.0's sources build unchanged against munch 3.0.0. A hopper release whose
+external/CMakeLists.txt adds its munch submodule only when the target `munch::munch` does not exist yet, one more
+condition on the line that adds it, would let matisse add hopper whole. Installing installs hopper's two libraries with
+matisse's targets, since load links hopper_json privately and a static library carries it to the consumer's link.
 
 ## **A tokenizer is data**
 
@@ -146,21 +159,22 @@ it, such as the one a report keeps, stands apart from the strings and tables it 
 construction reads is in the description, so `split_verifier()` and `factorization_lexer()` take the pattern and nothing
 else.
 
-Each tokenizer library declares the same two functions in `matisse/<name>/tokenizer.hpp`. `pattern()` is the description
-of the published pattern over its classes, 14 for GPT-2, 16 for cl100k and Llama 3 and 30 for o200k. Each alternative is
-built with munch's combinators, below a comment quoting the vendor's alternative it describes, from small documented
-pieces of the library's source, each one symbol of a set or literal the pattern names, such as `letter()` for `\p{L}`
-and `white_space()` for `\s`, or the contractions, so that what the alternatives share is written once. Its sets are
-copied from constants of the library's source, among them the Unicode tables generated into the library's
-src/class_ranges.inc. `specials()` is the vendor's special tokens of a rank file read under the pattern, which
-`read_tiktoken()` takes, quoted from tiktoken's openai_public.py for the OpenAI encodings (for cl100k_base
-`<|endoftext|>` 100257, `<|fim_prefix|>` 100258, `<|fim_middle|>` 100259, `<|fim_suffix|>` 100260 and `<|endofprompt|>`
-100276) and from Meta's tokenizer.py for Llama 3's 256 special tokens. GPT-2's encoder.json and vocab.bpe are read by
-`read_gpt2()`, which needs nothing from the description, and a file format of its own would be a reader binding in the
-tokenizer's library beside `specials()`. The library's tests hold the description to the classes, segmentation and
-known-answer fixtures, each alternative's combinators to its spelling over the class symbols in munch's pattern syntax,
-both compiled to the same minimal DFA state for state, the pinned vocabulary to its digest, and the vendor's special
-tokens to their quoted values.
+Each tokenizer library declares the same three functions in `matisse/<name>/tokenizer.hpp`. `pattern()` is the
+description of the published pattern over its classes, 14 for GPT-2, 16 for cl100k and Llama 3 and 30 for o200k. Each
+alternative is built with munch's combinators, below a comment quoting the vendor's alternative it describes, from small
+documented pieces of the library's source, each one symbol of a set or literal the pattern names, such as `letter()` for
+`\p{L}` and `white_space()` for `\s`, or the contractions, so that what the alternatives share is written once. Its sets
+are copied from constants of the library's source, among them the Unicode tables generated into the library's
+src/class_ranges.inc. `spelling()` is the published pattern as its vendor spells it, the regex the description
+describes, which `read_tokenizer_json()` recognizes a tokenizer.json's pre-tokenizer by. `specials()` is the vendor's
+special tokens of a rank file read under the pattern, which `read_tiktoken()` takes, quoted from tiktoken's
+openai_public.py for the OpenAI encodings (for cl100k_base `<|endoftext|>` 100257, `<|fim_prefix|>` 100258,
+`<|fim_middle|>` 100259, `<|fim_suffix|>` 100260 and `<|endofprompt|>` 100276) and from Meta's tokenizer.py for Llama
+3's 256 special tokens. GPT-2's encoder.json and vocab.bpe are read by `read_gpt2()`, which needs nothing from the
+description, and a file format of its own would be a reader binding in the tokenizer's library beside `specials()`. The
+library's tests hold the description to the classes, segmentation and known-answer fixtures, each alternative's
+combinators to its spelling over the class symbols in munch's pattern syntax, both compiled to the same minimal DFA
+state for state, the pinned vocabulary to its digest, and the vendor's special tokens to their quoted values.
 
 `lookup::tokenizers()` lists every tokenizer library by name, gpt2, cl100k, o200k and llama3, and `lookup::tokenizer()`
 finds one by its name. The list is one function naming the libraries explicitly, the simplest form that needs no
@@ -171,16 +185,16 @@ library, so a consumer of one tokenizer links that library alone and calls it di
 ### **Adding a tokenizer**
 
 A tokenizer is added as a new directory under libs/, as o200k and Llama 3 were, and the stage libraries do not change.
-libs/o200k/ holds its CMakeLists.txt, `matisse/o200k/tokenizer.hpp` declaring `pattern()` and `specials()`,
-src/tokenizer.cpp with the description, its alternatives built with munch's combinators below the vendor's alternatives
-they describe, src/class_ranges.inc generated by tools/unicode/generate_classes.py with the sets its pattern names, and
-its tests, which check the lines of its universe in the shared fixtures and hold each alternative's combinators to its
-spelling in munch's pattern syntax. Outside the directory it is named in five places: its `add_subdirectory()` in
-libs/CMakeLists.txt, its entry in `tokenizers()` with the link in libs/lookup/CMakeLists.txt, its alias and umbrella
-link in the top-level CMakeLists.txt, its target and include directory in the install rules, and its name in
-`matisse-validate`'s usage text. Its pattern must meet the conditions of the class theorem above, which the fixtures
-hold it to. `split_verifier()` refuses a pattern that is not total and names a shortest residual no alternative matches,
-which is where a wrong description shows first.
+libs/o200k/ holds its CMakeLists.txt, `matisse/o200k/tokenizer.hpp` declaring `pattern()`, `spelling()` and
+`specials()`, src/tokenizer.cpp with the description, its alternatives built with munch's combinators below the vendor's
+alternatives they describe, src/class_ranges.inc generated by tools/unicode/generate_classes.py with the sets its
+pattern names, and its tests, which check the lines of its universe in the shared fixtures and hold each alternative's
+combinators to its spelling in munch's pattern syntax. Outside the directory it is named in five places: its
+`add_subdirectory()` in libs/CMakeLists.txt, its entry in `tokenizers()` with the link in libs/lookup/CMakeLists.txt,
+its alias and umbrella link in the top-level CMakeLists.txt, its target and include directory in the install rules, and
+its name in `matisse-validate`'s usage text. Its pattern must meet the conditions of the class theorem above, which the
+fixtures hold it to. `split_verifier()` refuses a pattern that is not total and names a shortest residual no alternative
+matches, which is where a wrong description shows first.
 
 ## **Classes, not code points**
 
@@ -365,18 +379,79 @@ equivalence of its Definition 3, one merge at a time at the leftmost occurrence,
 holds under the ordering condition that clause (b) of their revised Definition 5 (2024) states, which is C. GPT-2's
 table satisfies C. `read_gpt2()` checks it once at load and refuses a table outside it, naming the merge, its rank and
 its line, so on every file `read_gpt2()` accepts the pair rule is encoder.py's. It also refuses a pair listed twice,
-which both vendors would read at its last rank.
+which both vendors would read at its last rank. On a tokenizer.json the pair rule is Hugging Face's rule itself, Llama
+3's list included, which violates C in 149,956 places, so `read_tokenizer_json()` reads the merges as the file lists
+them and checks no C; it refuses a pair listed twice, as `read_gpt2()` does.
 
 `whole_piece_lookup` says whether a piece that is itself an ordinary token is that one token, looked up before any
-merge. tiktoken looks every piece up, so `read_tiktoken()` sets it, and encoder.py never does, so `read_gpt2()` leaves
-it false. It changes nothing on cl100k, o200k or GPT-2, where every multi-byte token is formed by the merge rule from
-its own bytes, GPT-2's `<|endoftext|>` aside, which its pattern never leaves as one piece. It is load-bearing on Llama
-3, where 588 of 127,744 multi-byte tokens are not formed from their own bytes.
+merge. tiktoken looks every piece up, so `read_tiktoken()` sets it, encoder.py never does, so `read_gpt2()` leaves it
+false, and `read_tokenizer_json()` sets it to the BPE model's `ignore_merges`, which is true in Llama 3's file and
+absent, so false, in GPT-2's and in Xenova's conversions of cl100k and o200k. It changes nothing on cl100k, o200k or
+GPT-2, where every multi-byte token is formed by the merge rule from its own bytes, GPT-2's `<|endoftext|>` aside, which
+its pattern never leaves as one piece. It is load-bearing on Llama 3, where 588 of 127,744 multi-byte tokens are not
+formed from their own bytes.
 
 A definition is held in raw bytes throughout, and it names no pattern, since the pattern is the tokenizer library's
 description, which the stages take beside the definition. GPT-2's byte-to-character map is undone by the loader, so
 `"Ġthe"` is read as `" the"`. `Token_id_t` is 32 bits because ids are what a model reads, and every vocabulary in scope
 fits.
+
+## **Reading a tokenizer.json**
+
+`read_tokenizer_json(path, published)` reads a Hugging Face tokenizer.json with a BPE model. It takes the published
+spelling of the pattern the file is read under, which the tokenizer library's `spelling()` gives, and recognizes the
+file's pre-tokenizer only by that exact spelling. Three pre-tokenizers are recognized, each with `add_prefix_space`
+false. A ByteLevel with its regex, `use_regex` true or absent, runs GPT-2's pattern as encoder.py spells it, so it is
+recognized under `gpt2::spelling()`. A Sequence of a Split on the published spelling followed by a ByteLevel without its
+regex runs that pattern, the Split isolated and not inverted, as Llama 3's file writes it, or removed and inverted, as
+Xenova's conversions write it, which keeps the regex's matches and drops what lies between them, nothing under a total
+pattern, so that both keep the same pieces. The empty spelling reads a ByteLevel without its regex alone, which maps the
+bytes and splits nothing, for the merge tables without a pre-tokenizer of the open questions below. A null pre-tokenizer
+is none of them, since Hugging Face's BPE then merges a text's characters and not its bytes: under GPT-2's vocabulary,
+whose space is the character `Ġ`, it drops every space.
+
+A spelling is the vendor's regex, and the description describes it under the vendor's engine, so a spelling is read only
+where Hugging Face's engine reads it as published. Oniguruma, the engine of Hugging Face's tokenizers, reads the
+possessive `?+`, `*+` and `++` as the vendors' engines do, but its Ruby syntax has no possessive interval and reads
+`{1,3}+` as the interval repeated. cl100k's published pattern holds `\p{N}{1,3}+`, which tokenizers 0.23.3 reads as
+`(?:\p{N}{1,3})+`, so that a1234b is the pieces a, 1234 and b where tiktoken's are a, 123, 4 and b. A Split whose
+pattern holds an interval followed by a plus is therefore refused, and no tokenizer.json is read under
+`cl100k::spelling()`. The cl100k conversions on the Hugging Face Hub, Xenova/gpt-4 among them, carry cl100k's pattern as
+tiktoken shipped it before its possessive rewrite, which is Llama 3's pattern, so they are read under
+`llama3::spelling()`: cl100k's vocabulary under Llama 3's description and verifier. On every corpus of the vendor
+fixture that Hugging Face ran on, its ids of Xenova's file are tiktoken's cl100k ids.
+
+The vocabulary's spellings and the merges' parts are read with GPT-2's byte map undone, as the ByteLevel maps a text's
+bytes before the model reads them. The `added_tokens` marked special become the special tokens, by id ascending, and the
+ordinary tokens are the vocabulary's other entries, their ids dense from zero: GPT-2's `<|endoftext|>` stands in its
+vocabulary at 50256 and leaves the ordinary tokens as a special token, the special tokens of Xenova's conversions stand
+in their vocabularies above the ordinary ids, and Llama 3's stand in its added tokens alone. Hugging Face reads no added
+token's own id but gives it one, in the file's order: its id in the vocabulary when its spelling is there, and otherwise
+the vocabulary's size, or one past the greatest id given before it when that is no less. The reader refuses a special
+token whose id is another, naming the id Hugging Face gives it, so that every special token stands at Hugging Face's id.
+The ids are those Hugging Face's `encode()` gives with `add_special_tokens` false. A post-processor is taken when it
+adds tokens only under `add_special_tokens`: ByteLevel, which moves offsets alone, TemplateProcessing, as Llama 3's file
+adds its `<|begin_of_text|>` with one, or a Sequence of the two, and a caller that wants such a token adds its id, as
+[limits.md](limits.md) says of every beginning-of-sequence token.
+
+The reader refuses, naming the member by its path from the root, such as `pre_tokenizer.pretokenizers[1].use_regex`,
+what it holds and what the reader takes there: a model other than BPE, dropout, a continuing-subword prefix, an
+end-of-word suffix or byte fallback; a normalizer, truncation or padding other than null; any other pre-tokenizer or
+pattern, the empty pattern among them, which splits a text into its characters, and any other post-processor; an added
+token that is not special, since Hugging Face matches every added token in the text before its pre-tokenizer, or that
+strips white space or matches single words; ordinary ids that are not dense from zero, an empty token, two tokens with
+one spelling, a character the byte map does not carry, a merge that is not two parts, and a pair listed twice. The
+model's `unk_token` is not read, since the encoder refuses a definition in which a byte is no token.
+`tokenizer_json_spelling(path)` returns the spelling a file's pre-tokenizer runs, by the same recognition, for a caller
+that finds the tokenizer library by the file, as `matisse-validate` does through lookup.
+
+load's tests hold every recognition and refusal on small files the tests write. The tokenizer libraries' tests read the
+pinned tokenizer.json files: GPT-2's under `gpt2::spelling()` holds encoder.json's tokens but `<|endoftext|>`,
+vocab.bpe's merges and the special token; o200k's and Llama 3's hold their rank files' tokens and the vendor's special
+tokens; Xenova/gpt-4's holds cl100k_base.tiktoken's tokens under `llama3::spelling()` and is refused under
+`cl100k::spelling()`, naming the pattern it carries. The encoder tests of gpt2, o200k and llama3 hold the ids of the
+definitions read, Xenova/gpt-4's among them under Llama 3's pattern, to the vendor fixture's Hugging Face ids on the
+three corpora of the test strategy, and `matisse_tokenizer_json_fuzzer` feeds the reader arbitrary bytes.
 
 ## **One merge, three routes, the same ids**
 
@@ -767,22 +842,29 @@ beyond the ids and the speeds measured there.
 Each library has a GoogleTest suite registered with CTest, as hopper's do. The reference vocabularies are pinned by
 SHA-256:
 
-| File | SHA-256 |
-|---|---|
-| gpt2-merges.txt (vocab.bpe) | 1ce1664773c50f3e0cc8842619a93edc4624525b728b188a9e0be33b7726adc5 |
-| gpt2-vocab.json (encoder.json) | 196139668be63f3b5d6574427317ae82f612a97c5d1cdaf36ed2256dbf636783 |
-| cl100k_base.tiktoken | 223921b76ee99bde995b7ff738513eef100fb51d18c93597a113bcffe865b2a7 |
-| o200k_base.tiktoken | 446a9538cb6c348e3516120d7c08b09f57c36495e2acfffe59a5bf8b0cfb1a2d |
-| llama3.tiktoken | 82e9d31979e92ab929cd544440f129d9ecd797b69e327f80f17e1c50d5551b55 |
-| twitter.json | 30721e496a8d73cfc50658923c34eb2c0fbe15ee6835005e43ee624d8dedf200 |
+| File                                        | SHA-256                                                          |
+|---------------------------------------------|------------------------------------------------------------------|
+| gpt2-merges.txt (vocab.bpe)                 | 1ce1664773c50f3e0cc8842619a93edc4624525b728b188a9e0be33b7726adc5 |
+| gpt2-vocab.json (encoder.json)              | 196139668be63f3b5d6574427317ae82f612a97c5d1cdaf36ed2256dbf636783 |
+| cl100k_base.tiktoken                        | 223921b76ee99bde995b7ff738513eef100fb51d18c93597a113bcffe865b2a7 |
+| o200k_base.tiktoken                         | 446a9538cb6c348e3516120d7c08b09f57c36495e2acfffe59a5bf8b0cfb1a2d |
+| llama3.tiktoken                             | 82e9d31979e92ab929cd544440f129d9ecd797b69e327f80f17e1c50d5551b55 |
+| gpt2-tokenizer.json (openai-community/gpt2) | 8414cab924d8b9b33013f0d221c5862f365ee9be39c5c2bfae8a5a9e970478a6 |
+| cl100k-tokenizer.json (Xenova/gpt-4)        | 239eb2359f79c38497476671aaa835e01fb43d42743c612a8514a0dfa2ac93a2 |
+| o200k-tokenizer.json (Xenova/gpt-4o)        | 43a3ad4618a6a938f8c2614154ea10c31ad53a62d5683ae0b0e6133575cef07e |
+| llama3-tokenizer.json                       | e134af98b985517b4f068e3755ae90d4e9cd2d45d328325dc503f1c6b2d06cc7 |
+| twitter.json                                | 30721e496a8d73cfc50658923c34eb2c0fbe15ee6835005e43ee624d8dedf200 |
 
 The vocabulary files are not in the tree. CTest without network needs them on disk, and their own terms would have to be
 checked before they were vendored, so `MATISSE_VOCAB_DIR` names a directory holding them, each held to its digest, and
 nothing is fetched at test time. Every test program of the libraries and the validator registers with CTest whether or
 not a directory is named, and the tests in it that read the files skip when none is. The corpus probe and the bench in
-tools/probes read all four tokenizers, so they register only when the directory holds every pinned file, Llama 3's
-included. The tokenizer.json files [benchmarks.md](benchmarks.md) runs Hugging Face tokenizers on are pinned there by
-their digests.
+tools/probes read all four tokenizers, so they register only when the directory holds every pinned vocabulary file but
+the tokenizer.json files, which they do not read, Llama 3's rank file included. The three public tokenizer.json files
+were taken once from the Hugging Face Hub, GPT-2's from openai-community/gpt2 at commit
+607a30d783dfa663caf39e06633721c8d4cfcd7e, cl100k's from Xenova/gpt-4 at 1d9f1f1b1fae88c0e4df1dab0a397f8de6229075 and
+o200k's from Xenova/gpt-4o at 7956d98f2a83b2751a98ea7136fdf7fe6cf54e69, the files [benchmarks.md](benchmarks.md) runs
+Hugging Face tokenizers on, and Llama 3's, gated by its vendor as its rank file is, is held beside the rank file.
 
 ### **The fixtures**
 
@@ -885,10 +967,12 @@ vendor ran on there is none.
 The fuzz harnesses in tools/fuzz follow hopper's contract: a refusal is the answer to bad input, and a crash, a
 sanitizer report or a hang is a finding. Each is its own target with its own seeds under tools/fuzz/seeds, so that each
 corpus holds inputs of one format. `matisse_tiktoken_fuzzer` writes arbitrary bytes to the rank file `read_tiktoken()`
-reads, and `matisse_gpt2_fuzzer` to the encoder.json and the vocab.bpe `read_gpt2()` reads, the input cut at its first
-NUL byte, which no encoder.json holds. A `std::invalid_argument` is the answer, and a definition read is held to what
-its reader promises: the merge rule and the lookup, tokens none empty and none spelled twice, and under GPT-2 no pair
-listed twice.
+reads, `matisse_gpt2_fuzzer` to the encoder.json and the vocab.bpe `read_gpt2()` reads, the input cut at its first NUL
+byte, which no encoder.json holds, and `matisse_tokenizer_json_fuzzer` to the tokenizer.json `read_tokenizer_json()`
+reads under the spelling `tokenizer_json_spelling()` finds. A `std::invalid_argument` is the answer, and a definition
+read is held to what its reader promises: the merge rule and the lookup, tokens none empty and none spelled twice, under
+GPT-2 and a tokenizer.json no pair listed twice, and a tokenizer.json's special tokens past every ordinary id and
+refused under any other spelling.
 
 `matisse_encoder_fuzzer` feeds arbitrary well-formed UTF-8 to the encoder, each maximal ill-formed subpart of the input
 replaced by U+FFFD. It asserts that `encode_parallel()` equals `encode()` at a chunk count drawn from the input, from
@@ -907,11 +991,12 @@ job builds, and with Clang 19. An ARM64 job builds where plain char is unsigned.
 sanitizers run, and so does munch's thread-sanitizer job, because the encoder spawns threads, which is also why the
 coverage build takes munch's `-fprofile-update=atomic` flag. The fuzz job runs each harness for a minute, and an
 installed-consumer job builds a consumer against the installed package. Every job runs on each push to master and each
-pull request against it, and CodeQL runs on both and weekly. The coverage job fetches the four public vocabulary files
-the tests pin, held to their digests, so the real-vocabulary tests of the loaders, the encoders and the command line run
-in the measured build. Llama 3's file is gated by its vendor, so its tests skip there and the two probes' tests are not
-registered. Under the instrumented build each tokenizer's suite runs for many minutes, so that job runs the suites four
-at a time, each given an hour.
+pull request against it, and CodeQL runs on both and weekly. The coverage job fetches the seven public vocabulary files
+the tests pin, GPT-2's two files and the two rank files from OpenAI and the three tokenizer.json files from the Hugging
+Face Hub at their commits, held to their digests, so the real-vocabulary tests of the loaders, the encoders and the
+command line run in the measured build. Llama 3's files are gated by its vendor, so their tests skip there and the two
+probes' tests are not registered. Under the instrumented build each tokenizer's suite runs for many minutes, so that job
+runs the suites four at a time, each given an hour.
 
 ## **What matisse needs from munch**
 
@@ -958,40 +1043,15 @@ munch does not yet offer four things matisse could use. Each is general, so it w
 
 ## **Open questions**
 
-**A tokenizer.json reader.** load reads GPT-2's files and tiktoken rank files. A reader of Hugging Face's tokenizer.json
-with a BPE model is planned and not written, as `read_tokenizer_json(path, published)`, taking the published spelling of
-the pattern the file is read under, which the tokenizer library's description would carry. It would recognize a
-pre-tokenizer only by that exact spelling. A ByteLevel pre-tokenizer with `use_regex` true and `add_prefix_space` false
-is GPT-2's, and a Split on cl100k's published pattern, isolated and not inverted, followed by ByteLevel without its
-regex is cl100k's. An empty spelling would read a null pre-tokenizer, for the merge tables below. The `added_tokens`
-marked special would become the special tokens. It would refuse, naming the member, a model other than BPE, a normalizer
-other than null, any other pre-tokenizer or pattern, `byte_fallback`, a post-processor that adds tokens, ordinary ids
-that are not dense from zero, and an empty token. The cl100k pattern as tiktoken shipped it before its possessive
-rewrite is a different pattern, Llama 3's, which the llama3 library's verifier covers. On a tokenizer.json the pair rule
-is Hugging Face's rule itself, Llama 3's list included, which violates C in 149,956 places. The reader would set the
-whole-piece lookup to the BPE model's `ignore_merges`, which is true for Llama 3's file and absent, so false, in
-GPT-2's. Its tests would need a GPT-2 and a cl100k tokenizer.json, taken once and pinned by digest, and it would get a
-fuzz harness of its own. Until it exists, `matisse-validate` treats a file named without `--tiktoken` as a command-line
-error, and GPT-2 reaches the command line only as a rank file under `--tiktoken gpt2`, since encoder.json and vocab.bpe
-are two files.
-
-The reader needs a JSON reader, and which one is open. tokenizer.json and encoder.json are JSON with `\u` escapes, and a
-JSON reader must take surrogate pairs, though GPT-2's byte-map characters lie at or below U+0143 and its vocabulary
-needs none. hopper has a complete RFC 8259 parser, `hopper::json::Parser`, held to the JSONTestSuite, munch has none,
-and a third-party library would be a new vendored dependency. Taking hopper means a second submodule, and hopper's
-external/CMakeLists.txt adds its own munch submodule unless hopper is built against a system munch, which would define
-munch's targets twice beside matisse's own submodule. The recommendation is hopper's parser, with matisse keeping its
-own munch submodule as hopper does and hopper skipping its submodule when `munch::munch` already exists, a one-line
-change in hopper's next release, which has to build against munch 3.0.0 anyway. A third JSON parser in the family would
-duplicate a tested one.
-
 **Merge tables without a pre-tokenizer.** The `Encoder` segments by a pattern, so a definition without a pre-tokenizer
 has no encoder. Certifying the windows of such a byte-level merge table is planned and not written, as
 `validate_merges()`, the lazy certification: it would build munch's `token_automaton()` once and decide each candidate
 window by `miscovering()` on it, returning each candidate with its refutation or none. munch's `token_automaton()`
 refuses a table that recreates a token, and that refusal would pass through as the loader's. The candidates would be
 given by the caller, and the command line would draw them from an input, every byte and the most frequent byte pairs and
-triples, since all byte windows of width three are too many to decide at full scale.
+triples, since all byte windows of width three are too many to decide at full scale. Such a table published as a
+tokenizer.json, its pre-tokenizer a ByteLevel without its regex, is read by `read_tokenizer_json()` under the empty
+spelling.
 
 **Character-level merge tables.** SentencePiece BPE tokenizers without a pre-tokenizer, Llama 2 among them, merge
 Unicode characters, and munch's `token_automaton()` refuses a part that is not a byte or an earlier product. They also

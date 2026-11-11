@@ -6,6 +6,7 @@ project(matisse_load)
 add_library(${PROJECT_NAME}
         src/read_gpt2.cpp
         src/read_tiktoken.cpp
+        src/read_tokenizer_json.cpp
 )
 
 # The exported target carries the standard it needs.
@@ -19,9 +20,12 @@ target_include_directories(${PROJECT_NAME}
 )
 
 # munch is header-visible: a definition holds its merge table as munch::verifier::Merge, so consumers link it too.
+# hopper's JSON parser reads tokenizer.json and appears in no header.
 target_link_libraries(${PROJECT_NAME}
         PUBLIC
         munch::munch_verifier
+        PRIVATE
+        hopper_json
 )
 
 if (MATISSE_BUILD_TESTS)

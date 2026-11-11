@@ -19,8 +19,8 @@
 namespace matisse::lookup
 {
 /**
- * @brief A tokenizer as a tokenizer library describes it: its name, its pre-tokenizer pattern, and the vendor's special
- *        tokens of a rank file read under it.
+ * @brief A tokenizer as a tokenizer library describes it: its name, its pre-tokenizer pattern, the vendor's special
+ *        tokens of a rank file read under it, and the pattern's published spelling.
  */
 struct Tokenizer
 {
@@ -38,6 +38,11 @@ struct Tokenizer
      * @brief The vendor's special tokens, by id ascending.
      */
     std::vector<load::Special_token> specials{};
+
+    /**
+     * @brief The pattern's published spelling, which load::read_tokenizer_json() recognizes a pre-tokenizer by.
+     */
+    std::string_view spelling{};
 };
 
 /**

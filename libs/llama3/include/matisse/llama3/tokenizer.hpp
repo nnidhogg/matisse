@@ -1,6 +1,7 @@
 #ifndef MATISSE_LIBS_LLAMA3_INCLUDE_MATISSE_LLAMA3_TOKENIZER_HPP
 #define MATISSE_LIBS_LLAMA3_INCLUDE_MATISSE_LLAMA3_TOKENIZER_HPP
 
+#include <string_view>
 #include <vector>
 
 #include "matisse/load/definition.hpp"
@@ -8,10 +9,12 @@
 
 /**
  * @file
- * @brief Llama 3's tokenizer as matisse describes it: its pre-tokenizer pattern, pattern(), and the vendor's special
- *        tokens of its rank file, specials().
+ * @brief Llama 3's tokenizer as matisse describes it: its pre-tokenizer pattern, pattern(), the pattern's published
+ *        spelling, spelling(), and the vendor's special tokens of its rank file, specials().
  *
- * llama3.tiktoken is read by load::read_tiktoken() with specials(); the stages take pattern() beside the definition.
+ * llama3.tiktoken is read by load::read_tiktoken() with specials(), and a tokenizer.json by load::read_tokenizer_json()
+ * with spelling(), Llama 3's own and the cl100k conversions on the Hugging Face Hub, whose pattern is cl100k's as
+ * tiktoken shipped it before its possessive rewrite; the stages take pattern() beside the definition.
  */
 namespace matisse::llama3
 {
@@ -27,6 +30,13 @@ namespace matisse::llama3
  * @return The pattern, its languages built with munch's combinators.
  */
 [[nodiscard]] pretok::Pattern pattern();
+
+/**
+ * @brief Returns Llama 3's pattern as meta-llama/llama3's llama/tokenizer.py publishes it, the spelling
+ *        load::read_tokenizer_json() recognizes a tokenizer.json's pre-tokenizer by.
+ * @return The spelling.
+ */
+[[nodiscard]] std::string_view spelling();
 
 /**
  * @brief Returns the vendor's special tokens of llama3.tiktoken, as meta-llama/llama3's llama/tokenizer.py numbers them

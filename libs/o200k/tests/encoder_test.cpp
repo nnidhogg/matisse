@@ -27,6 +27,7 @@
 #include "matisse/encode/piece_cache.hpp"
 #include "matisse/encode/stream_encoder.hpp"
 #include "matisse/encode/window_index.hpp"
+#include "matisse/load/definition.hpp"
 #include "matisse/o200k/tokenizer.hpp"
 #include "matisse/pretok/classes.hpp"
 #include "matisse/pretok/segmenter.hpp"
@@ -43,6 +44,13 @@ namespace
  * @brief The SHA-256 of o200k_base.tiktoken as pinned.
  */
 constexpr std::string_view o200k_digest{"446a9538cb6c348e3516120d7c08b09f57c36495e2acfffe59a5bf8b0cfb1a2d"};
+
+/**
+ * @brief The corpora of the test strategy, small enough to encode whole in a test, on which the vendors' ids are
+ *        Hugging Face's among them.
+ */
+constexpr std::array<std::string_view, 3> strategy_corpora{
+        "twitter.json", "munch-python@15b2863c.txt", "munch-cpp@15b2863c.txt"};
 
 /**
  * @brief The width o200k's tests decide its report at, the windows fixture's, since every further symbol multiplies its
@@ -1058,5 +1066,53 @@ TEST(Encoder_test, A_stream_pushed_in_parts_of_every_size_returns_prefixes_of_en
             expect_streamed(encoder, text, one_byte_cuts);
             expect_streamed(encoder, text, std::array{text.size()});
         }
+    }
+}
+
+TEST(Encoder_test, The_pinned_o200k_tokenizer_json_encodes_the_test_strategy_s_corpora_to_hugging_face_s_ids)
+{
+    const auto path{pinned("o200k-tokenizer.json")};
+
+    if (!path)
+    {
+        GTEST_SKIP() << "MATISSE_VOCAB_DIR names no directory holding o200k-tokenizer.json";
+    }
+
+    const auto [universes, corpora, vendor_ids]{vendor_fixture()};
+
+    EXPECT_EQ(universes, 1U);
+
+    auto definition{matisse::load::read_tokenizer_json(*path, matisse::o200k::spelling())};
+
+    const auto encoder{o200k_encoder(std::move(definition))};
+
+    std::string absent{};
+
+    for (const auto name : strategy_corpora)
+    {
+        const auto corpus{corpus_path(name)};
+
+        if (!corpus)
+        {
+            absent += absent.empty() ? std::string{name} : ", " + std::string{name};
+
+            continue;
+        }
+
+        const auto ids{encoder.encode(contents(*corpus))};
+
+        matisse::common::Sha256 hash{};
+
+        add_ids(hash, ids);
+
+        const auto& [count, digest]{vendor_ids.at(std::string{name})};
+
+        EXPECT_EQ(ids.size(), count) << name;
+        EXPECT_EQ(hash.digest(), digest) << name;
+    }
+
+    if (!absent.empty())
+    {
+        GTEST_SKIP() << "MATISSE_CORPUS_DIR names no directory holding " << absent;
     }
 }

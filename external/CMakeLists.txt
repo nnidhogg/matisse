@@ -11,3 +11,9 @@ else ()
     # libraries as munch_boost; an installed munch does not carry it, so the submodule's fetch provides it here.
     add_subdirectory(munch/external/boost)
 endif ()
+
+# hopper's JSON parser reads tokenizer.json. hopper 1.0.0's top level adds its own munch submodule unless hopper is
+# built against an installed munch, which would define munch's targets twice beside the submodule above, so its two
+# libraries, parse and json, are added directly; both link munch::munch, the submodule's or the installed one.
+add_subdirectory(hopper/libs/parse)
+add_subdirectory(hopper/libs/json)

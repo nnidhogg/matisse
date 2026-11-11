@@ -55,11 +55,13 @@ constexpr std::string_view diagnostic_prefix{"matisse-validate: "};
  */
 constexpr std::string_view usage_text{R"(usage: matisse-validate [options] FILE
 
-Reads a tokenizer definition, a tiktoken rank file, and reports which windows of its pre-tokenizer's classes certify a
-cut, at which origin and with which right context, under the factorization and the policy certificate.
+Reads a tokenizer definition, a Hugging Face tokenizer.json or a tiktoken rank file, and reports which windows of its
+pre-tokenizer's classes certify a cut, at which origin and with which right context, under the factorization and the
+policy certificate.
 
   --tiktoken PATTERN    read FILE as a tiktoken rank file whose pre-tokenizer is PATTERN, gpt2, cl100k, o200k or
-                        llama3, since the file names none; a tokenizer.json, read without it, has no reader yet
+                        llama3, since the file names none; without it FILE is a tokenizer.json, read under the
+                        tokenizer whose pattern its pre-tokenizer runs
   --windows N           the widest window decided, 2 to 5, 5 unless given
   --input FILE          measure each inventory's certified-anchor supply on this file: the anchors, per kibibyte, the
                         gaps between them, the share of the pre-token boundaries they reach and the longest piece
@@ -80,7 +82,8 @@ struct Options
     std::string file{};
 
     /**
-     * @brief The name of the pattern a tiktoken rank file is read under, none when empty.
+     * @brief The name of the pattern a tiktoken rank file is read under, empty for a tokenizer.json, which names its
+     *        own.
      */
     std::string tiktoken{};
 
@@ -98,6 +101,22 @@ struct Options
      * @brief Whether the output is JSON rather than text.
      */
     bool json{false};
+};
+
+/**
+ * @brief A definition read, with the tokenizer whose pattern it is read under.
+ */
+struct Read
+{
+    /**
+     * @brief The tokenizer.
+     */
+    matisse::lookup::Tokenizer tokenizer{};
+
+    /**
+     * @brief The definition.
+     */
+    matisse::load::Definition definition{};
 };
 
 /**
@@ -170,8 +189,7 @@ struct Measured
  * @brief Reads the command line.
  * @param arguments The arguments after the program's name.
  * @return The options.
- * @throws std::invalid_argument If an option is unknown or lacks its value, no file or a second one is named, or the
- *         file is not read as a rank file by `--tiktoken`, since a tokenizer.json has no reader yet.
+ * @throws std::invalid_argument If an option is unknown or lacks its value, or no file or a second one is named.
  */
 [[nodiscard]] Options parse_options(const std::span<const std::string_view> arguments)
 {
@@ -229,12 +247,6 @@ struct Measured
         throw std::invalid_argument{"no file named"};
     }
 
-    if (options.tiktoken.empty())
-    {
-        throw std::invalid_argument{std::format(
-                "{} is read as a rank file with --tiktoken PATTERN; a tokenizer.json has no reader yet", options.file)};
-    }
-
     return options;
 }
 
@@ -257,8 +269,47 @@ struct Measured
 }
 
 /**
+ * @brief Reads the definition: a rank file under the tokenizer `--tiktoken` names, or a tokenizer.json under the
+ *        tokenizer whose pattern its pre-tokenizer runs, found by the pattern's published spelling.
+ * @param options The command line.
+ * @return The definition and its tokenizer.
+ * @throws std::invalid_argument If the loader refuses the file, or no tokenizer matisse describes has the pattern a
+ *         tokenizer.json's pre-tokenizer runs.
+ * @throws std::runtime_error If the file cannot be read.
+ */
+[[nodiscard]] Read read_definition(const Options& options)
+{
+    if (!options.tiktoken.empty())
+    {
+        // The name was checked against the lookup when the command line was read.
+        auto tokenizer{*matisse::lookup::tokenizer(options.tiktoken)};
+
+        auto definition{matisse::load::read_tiktoken(options.file, tokenizer.specials)};
+
+        return {.tokenizer = std::move(tokenizer), .definition = std::move(definition)};
+    }
+
+    const auto spelling{matisse::load::tokenizer_json_spelling(options.file)};
+
+    auto described{matisse::lookup::tokenizers()};
+
+    const auto found{std::ranges::find(described, spelling, &matisse::lookup::Tokenizer::spelling)};
+
+    if (found == described.end())
+    {
+        throw std::invalid_argument{std::format(
+                "the pre-tokenizer of {} runs the pattern \"{}\", and no tokenizer matisse describes has that pattern",
+                options.file, spelling)};
+    }
+
+    auto definition{matisse::load::read_tokenizer_json(options.file, spelling)};
+
+    return {.tokenizer = std::move(*found), .definition = std::move(definition)};
+}
+
+/**
  * @brief Writes a refused definition: its file's heading and the refusal as text, or the JSON document with the refusal
- *        and no report.
+ *        and no report, its tokenizer the one `--tiktoken` names and null for a tokenizer.json.
  * @param out The stream.
  * @param options The command line.
  * @param refused Why the definition was refused.
@@ -274,10 +325,12 @@ void write_refused(std::ostream& out, const Options& options, const std::string_
         return;
     }
 
+    const auto tokenizer{options.tiktoken.empty() ? std::string{"null"} : json_string(options.tiktoken)};
+
     out << std::format(
             "{{\n  \"path\": {},\n  \"tokenizer\": {},\n  \"refused\": {},\n  \"tokens\": null,\n"
             "  \"special_tokens\": null,\n  \"report\": null\n}}\n",
-            json_string(options.file), json_string(options.tiktoken), json_string(refused));
+            json_string(options.file), tokenizer, json_string(refused));
 }
 
 /**
@@ -312,20 +365,22 @@ void write_refused(std::ostream& out, const Options& options, const std::string_
  *        report, and the supply when an input was measured.
  * @param out The stream.
  * @param options The command line.
- * @param definition The definition read.
+ * @param read The definition read and its tokenizer.
  * @param report The report.
  * @param supplies The supply of each inventory on the input, none when none was given.
  */
 void write_json(
-        std::ostream& out, const Options& options, const matisse::load::Definition& definition,
-        const matisse::validate::Report& report, const std::optional<Measured>& supplies)
+        std::ostream& out, const Options& options, const Read& read, const matisse::validate::Report& report,
+        const std::optional<Measured>& supplies)
 {
     using matisse::validate::json_string;
+
+    const auto& [tokenizer, definition]{read};
 
     out << std::format(
             "{{\n  \"path\": {},\n  \"tokenizer\": {},\n  \"refused\": null,\n  \"tokens\": {},\n"
             "  \"special_tokens\": {},\n",
-            json_string(options.file), json_string(options.tiktoken), definition.spellings.size(),
+            json_string(options.file), json_string(tokenizer.name), definition.spellings.size(),
             definition.specials.size());
 
     auto document{matisse::validate::json(report)};
@@ -353,22 +408,24 @@ void write_json(
  *        and the supply section when an input was measured.
  * @param out The stream.
  * @param options The command line.
- * @param definition The definition read.
+ * @param read The definition read and its tokenizer.
  * @param report The report.
  * @param supplies The supply of each inventory on the input, none when none was given.
  */
 void write_text(
-        std::ostream& out, const Options& options, const matisse::load::Definition& definition,
-        const matisse::validate::Report& report, const std::optional<Measured>& supplies)
+        std::ostream& out, const Options& options, const Read& read, const matisse::validate::Report& report,
+        const std::optional<Measured>& supplies)
 {
     using matisse::validate::plural;
+
+    const auto& [tokenizer, definition]{read};
 
     const auto tokens{definition.spellings.size()};
 
     const auto specials{definition.specials.size()};
 
     out << std::format(
-            "== {}\n-- tokenizer {}: {} token{}, {} special token{}\n", options.file, options.tiktoken, tokens,
+            "== {}\n-- tokenizer {}: {} token{}, {} special token{}\n", options.file, tokenizer.name, tokens,
             plural(tokens), specials, plural(specials));
 
     out << matisse::validate::render(report);
@@ -399,14 +456,11 @@ void write_text(
         input = contents(options.input);
     }
 
-    // The name was checked against the lookup when the command line was read.
-    const auto [name, pattern, specials]{*matisse::lookup::tokenizer(options.tiktoken)};
-
-    std::optional<matisse::load::Definition> definition{};
+    std::optional<Read> read{};
 
     try
     {
-        definition = matisse::load::read_tiktoken(options.file, specials);
+        read = read_definition(options);
     }
     catch (const std::invalid_argument& error)
     {
@@ -415,7 +469,7 @@ void write_text(
         return false;
     }
 
-    const auto report{matisse::validate::validate(pattern, options.width)};
+    const auto report{matisse::validate::validate(read->tokenizer.pattern, options.width)};
 
     std::optional<Measured> supplies{};
 
@@ -426,11 +480,11 @@ void write_text(
 
     if (options.json)
     {
-        write_json(out, options, *definition, report, supplies);
+        write_json(out, options, *read, report, supplies);
     }
     else
     {
-        write_text(out, options, *definition, report, supplies);
+        write_text(out, options, *read, report, supplies);
     }
 
     return true;

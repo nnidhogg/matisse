@@ -1,0 +1,14 @@
+{"version": "1.0", "truncation": null, "padding": null,
+ "added_tokens": [{"id": 6, "content": "<|end|>", "single_word": false, "lstrip": false, "rstrip": false,
+                   "normalized": false, "special": true}],
+ "normalizer": null,
+ "pre_tokenizer": {"type": "Sequence", "pretokenizers": [
+     {"type": "Split", "pattern": {"Regex": "\\p{L}+|\\p{N}{1,3}|\\s+(?!\\S)|\\s+|[^\\s\\p{L}\\p{N}]+"},
+      "behavior": "Isolated", "invert": false},
+     {"type": "ByteLevel", "add_prefix_space": false, "trim_offsets": true, "use_regex": false}]},
+ "post_processor": {"type": "ByteLevel", "add_prefix_space": true, "trim_offsets": false},
+ "decoder": {"type": "ByteLevel", "add_prefix_space": true, "trim_offsets": true},
+ "model": {"type": "BPE", "dropout": null, "unk_token": null, "continuing_subword_prefix": "", "end_of_word_suffix": "",
+           "fuse_unk": false, "byte_fallback": false, "ignore_merges": true,
+           "vocab": {"a": 0, "b": 1, "Ġ": 2, "ab": 3, "Ġab": 4, "Ã©": 5, "<|end|>": 6},
+           "merges": ["a b", ["Ġ", "ab"]]}}

@@ -15,10 +15,19 @@ namespace matisse::lookup
 {
 std::vector<Tokenizer> tokenizers()
 {
-    return {{.name = "gpt2", .pattern = gpt2::pattern(), .specials = gpt2::specials()},
-            {.name = "cl100k", .pattern = cl100k::pattern(), .specials = cl100k::specials()},
-            {.name = "o200k", .pattern = o200k::pattern(), .specials = o200k::specials()},
-            {.name = "llama3", .pattern = llama3::pattern(), .specials = llama3::specials()}};
+    return {{.name = "gpt2", .pattern = gpt2::pattern(), .specials = gpt2::specials(), .spelling = gpt2::spelling()},
+            {.name = "cl100k",
+             .pattern = cl100k::pattern(),
+             .specials = cl100k::specials(),
+             .spelling = cl100k::spelling()},
+            {.name = "o200k",
+             .pattern = o200k::pattern(),
+             .specials = o200k::specials(),
+             .spelling = o200k::spelling()},
+            {.name = "llama3",
+             .pattern = llama3::pattern(),
+             .specials = llama3::specials(),
+             .spelling = llama3::spelling()}};
 }
 
 std::optional<Tokenizer> tokenizer(const std::string_view name)

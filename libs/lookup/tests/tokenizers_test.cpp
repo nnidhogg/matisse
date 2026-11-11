@@ -10,7 +10,7 @@ TEST(Tokenizers_test, Every_tokenizer_is_listed_by_name_in_order)
 {
     std::vector<std::string_view> names{};
 
-    for (const auto& [name, pattern, specials] : tokenizers())
+    for (const auto& [name, pattern, specials, spelling] : tokenizers())
     {
         names.push_back(name);
     }

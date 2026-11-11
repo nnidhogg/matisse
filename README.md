@@ -31,12 +31,12 @@ tables, and the runtime with its token ids, normalizers and special-token cuts.
 ## **Status**
 
 The version is 1.0.0, the first release, and matisse depends on munch 3.0.0, the release its submodule is pinned to. It
-loads GPT-2's encoder.json and vocab.bpe and tiktoken rank files, and it encodes text under GPT-2, cl100k_base,
-o200k_base and Llama 3 sequentially, in parallel at certified cuts and as a stream, with the vendors' special tokens cut
-out where they are allowed, and decodes ids back to bytes; validate decides each pattern's certified windows, and
-`matisse-validate` reports them for a rank file. The ids are held to the vendors' on pinned vocabularies, fixtures and
-corpora, with the classes of code points pinned to Unicode 16.0.0, tiktoken's version, while a Hugging Face
-tokenizer.json reader and the certification of merge tables without a pre-tokenizer are planned and not yet written. How
+loads GPT-2's encoder.json and vocab.bpe, tiktoken rank files and Hugging Face tokenizer.json files, and it encodes text
+under GPT-2, cl100k_base, o200k_base and Llama 3 sequentially, in parallel at certified cuts and as a stream, with the
+vendors' special tokens cut out where they are allowed, and decodes ids back to bytes; validate decides each pattern's
+certified windows, and `matisse-validate` reports them for a rank file or a tokenizer.json. The ids are held to the
+vendors' on pinned vocabularies, fixtures and corpora, with the classes of code points pinned to Unicode 16.0.0,
+tiktoken's version, while the certification of merge tables without a pre-tokenizer is planned and not yet written. How
 the libraries fit together and the decisions behind them are in [docs/design.md](docs/design.md), how each is called is
 in [docs/usage.md](docs/usage.md), and what every call guarantees is in [docs/limits.md](docs/limits.md).
 
@@ -44,8 +44,8 @@ in [docs/usage.md](docs/usage.md), and what every call guarantees is in [docs/li
 
 Four stage libraries hold nothing of a specific tokenizer and take its description as data:
 
-- **load** reads a tokenizer's files, GPT-2's encoder.json and vocab.bpe or a tiktoken rank file, into one definition
-  held in raw bytes, refusing whatever it cannot take exactly.
+- **load** reads a tokenizer's files, GPT-2's encoder.json and vocab.bpe, a tiktoken rank file or a Hugging Face
+  tokenizer.json, into one definition held in raw bytes, refusing whatever it cannot take exactly.
 - **pretok** holds the pre-tokenizers over a pattern description, the ordered alternatives with their languages and
   gates and the class alphabet: the classes of a text, the runtime segmenter, and the construction of the pattern's
   verifier for munch.
@@ -54,17 +54,19 @@ Four stage libraries hold nothing of a specific tokenizer and take its descripti
 - **encode** is the runtime, a sequential, a parallel and a streaming encoder, the parallel one's ids identical at every
   chunk count, and the piece cache a caller keeps across its calls.
 
-Each tokenizer is a small library of its own beside them, holding its pattern description, its Unicode class tables, the
-vendor's special tokens and its tests, and a consumer that encodes under one tokenizer links its library, which brings
-load and pretok, beside encode, which brings validate, as `matisse::cl100k matisse::encode` for cl100k:
+Each tokenizer is a small library of its own beside them, holding its pattern description and the pattern's published
+spelling, its Unicode class tables, the vendor's special tokens and its tests, and a consumer that encodes under one
+tokenizer links its library, which brings load and pretok, beside encode, which brings validate, as `matisse::cl100k
+matisse::encode` for cl100k:
 
-- **gpt2** describes GPT-2's pattern, whose files load reads from encoder.json and vocab.bpe or from a tiktoken rank
-  file.
+- **gpt2** describes GPT-2's pattern, whose files load reads from encoder.json and vocab.bpe, from a tiktoken rank file
+  or from its tokenizer.json.
 - **cl100k** describes cl100k_base's pattern, whose tiktoken rank file load reads with the special tokens it supplies.
 - **o200k** describes o200k_base's pattern over its 30 classes, whose tiktoken rank file load reads with the special
-  tokens it supplies.
+  tokens it supplies, and a tokenizer.json under it.
 - **llama3** describes Llama 3's pattern, which is cl100k's as tiktoken shipped it before the possessive rewrite; load
-  reads its rank file with the 256 special tokens it supplies.
+  reads its rank file with the 256 special tokens it supplies, and under it Llama 3's tokenizer.json and the cl100k
+  conversions on the Hugging Face Hub, which carry that pattern.
 
 The **lookup** library finds the tokenizer libraries by name, for the command line and any choice made at run time.
 
@@ -78,9 +80,10 @@ A further tokenizer is added as a new directory under `libs/` with no change to 
 - A C++23 compiler; GCC and Clang on Linux are the toolchains built and tested (GCC 13.3 and Clang 19 in CI), on x86-64
   and 64-bit ARM. Clang 18 and older cannot compile munch's tokenizer, which matisse builds against.
 - CMake 3.20.6 or later.
-- munch as the git submodule under `external/munch`, checked out at the release matisse builds against; googletest
-  beside it for the tests, and Boost's header-only container_hash, which munch fetches and the encoder builds with; an
-  installed matisse does not depend on it. Everything else is the standard library.
+- munch and hopper as the git submodules under `external/munch` and `external/hopper`, each checked out at the release
+  matisse builds against, hopper for its JSON parser, which reads tokenizer.json; googletest beside them for the tests,
+  and Boost's header-only container_hash, which munch fetches and the encoder builds with; an installed matisse does not
+  depend on it. Everything else is the standard library.
 
 ### **Building the Project**
 
@@ -211,31 +214,32 @@ vocabulary directory, it requires tiktoken to read every code point the tables l
 and given a build's `matisse_corpus` and corpora besides, it holds matisse's ids to tiktoken's on every Unicode scalar
 value in five contexts and on each corpus, as [docs/design.md](docs/design.md) describes.
 
-Three libFuzzer harnesses under `tools/fuzz/` feed arbitrary bytes to the tiktoken reader and to the GPT-2 reader, a
-`std::invalid_argument` being a loader's answer to a file it cannot take exactly, and arbitrary well-formed UTF-8 to the
-encoder, holding `encode_parallel()` to `encode()` at a chunk count drawn from the input; a crash, a sanitizer report, a
-violated property or a hang is a finding. They read no vocabulary file, the encoder's definition being built in its
-harness, and build in a dedicated tree configured with Clang and `-DMATISSE_BUILD_FUZZER=ON`, which instruments the
-whole tree, the munch submodule included, and CI runs each for a bounded minute on every push to master and every pull
-request against it.
+Four libFuzzer harnesses under `tools/fuzz/` feed arbitrary bytes to the tiktoken reader, the GPT-2 reader and the
+tokenizer.json reader, a `std::invalid_argument` being a loader's answer to a file it cannot take exactly, and arbitrary
+well-formed UTF-8 to the encoder, holding `encode_parallel()` to `encode()` at a chunk count drawn from the input; a
+crash, a sanitizer report, a violated property or a hang is a finding. They read no vocabulary file, the encoder's
+definition being built in its harness, and build in a dedicated tree configured with Clang and
+`-DMATISSE_BUILD_FUZZER=ON`, which instruments the whole tree, the munch and hopper submodules included, and CI runs
+each for a bounded minute on every push to master and every pull request against it.
 
 ## **Versioning and Stability**
 
 matisse follows semantic versioning from 1.0.0 on, munch's rule: a minor release adds and never removes or renames on
 the stable surface, and a major release is the only place a name disappears. The stable surface is the following, under
 the contracts their headers and [docs/limits.md](docs/limits.md) state. It holds load's `Token_id_t`, `Merge_rule`,
-`Special_token`, `Definition`, `read_gpt2()` and `read_tiktoken()`; pretok's `Code_point_set`, `Alphabet`,
-`Alternative`, `Pattern`, `Class_t`, `Class_table` with its constructor, `symbols()` and `classes()`, `classes_of()`,
-`Segmenter` with its constructor and `boundaries()`, `split_verifier()` and `factorization_lexer()`; validate's
-`Inventory`, `default_width`, `Certified_window`, `Window_table`, `Report`, `validate()`, `render()`, `json()`, `Gaps`,
-`Anchors`, `Supply`, `supply()`, `supply_json()` and `supply_section()`; encode's `Encoder` with its constructor, both
-`encode()`, `chunk_boundaries()`, `encode_parallel()`, `decode()`, `definition()` and `allowed()`, `Piece_cache` with
-its constructor, the bounds `piece_cache_capacity` and `longest_cached_piece`, and `Stream_encoder` with its
-constructor, `push()` and `finish()`; each tokenizer library's `pattern()` and `specials()`; lookup's `Tokenizer`,
-`tokenizers()` and `tokenizer()`; and the `matisse-validate` command line with its JSON document, as munch puts
-`munch-audit` on its surface. The class tables are pinned to Unicode 16.0.0, as [docs/limits.md](docs/limits.md)
-describes, and moving the pin changes the ids of some texts, those holding a code point whose class differs between the
-two versions, so the pin moves only in a major release.
+`Special_token`, `Definition`, `read_gpt2()`, `read_tiktoken()`, `read_tokenizer_json()` and
+`tokenizer_json_spelling()`; pretok's `Code_point_set`, `Alphabet`, `Alternative`, `Pattern`, `Class_t`, `Class_table`
+with its constructor, `symbols()` and `classes()`, `classes_of()`, `Segmenter` with its constructor and `boundaries()`,
+`split_verifier()` and `factorization_lexer()`; validate's `Inventory`, `default_width`, `Certified_window`,
+`Window_table`, `Report`, `validate()`, `render()`, `json()`, `Gaps`, `Anchors`, `Supply`, `supply()`, `supply_json()`
+and `supply_section()`; encode's `Encoder` with its constructor, both `encode()`, `chunk_boundaries()`,
+`encode_parallel()`, `decode()`, `definition()` and `allowed()`, `Piece_cache` with its constructor, the bounds
+`piece_cache_capacity` and `longest_cached_piece`, and `Stream_encoder` with its constructor, `push()` and `finish()`;
+each tokenizer library's `pattern()`, `spelling()` and `specials()`; lookup's `Tokenizer`, `tokenizers()` and
+`tokenizer()`; and the `matisse-validate` command line with its JSON document, as munch puts `munch-audit` on its
+surface. The class tables are pinned to Unicode 16.0.0, as [docs/limits.md](docs/limits.md) describes, and moving the
+pin changes the ids of some texts, those holding a code point whose class differs between the two versions, so the pin
+moves only in a major release.
 
 The classes the encoders are built from, `Merger`, `Backtracker`, `Join_table`, `Spelling_table`, `Token_trie`,
 `Window_index`, `Verifier_table` and `Live_runs`, and pretok's `automata` kit, which builds the verifier, are installed
@@ -280,9 +284,9 @@ is repaired or guessed, as [docs/limits.md](docs/limits.md) describes.
 **Platforms.** The promise is munch's: 64-bit Linux with GCC 13 or later and Clang 19 or later, source compatibility
 within a major version and no ABI promise. CI builds and tests on x86-64 and ARM64 and runs the address,
 undefined-behavior and thread sanitizers and the fuzz harnesses on x86-64. The munch submodule is pinned to a release,
-3.0.0 at this version, and a matisse release names the munch release it was built and tested against; the `Segmenter`
-runs a `munch::dfa::Simulator`, from the layer munch keeps outside its stable surface, so matisse's promise holds with
-the munch release it names.
+3.0.0 at this version, and so is the hopper submodule, 1.0.0, and a matisse release names the munch release it was built
+and tested against; the `Segmenter` runs a `munch::dfa::Simulator`, from the layer munch keeps outside its stable
+surface, so matisse's promise holds with the munch release it names.
 
 ## **License**
 

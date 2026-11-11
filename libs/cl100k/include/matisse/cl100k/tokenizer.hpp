@@ -1,6 +1,7 @@
 #ifndef MATISSE_LIBS_CL100K_INCLUDE_MATISSE_CL100K_TOKENIZER_HPP
 #define MATISSE_LIBS_CL100K_INCLUDE_MATISSE_CL100K_TOKENIZER_HPP
 
+#include <string_view>
 #include <vector>
 
 #include "matisse/load/definition.hpp"
@@ -8,11 +9,13 @@
 
 /**
  * @file
- * @brief cl100k_base's tokenizer as matisse describes it: its pre-tokenizer pattern, pattern(), and the vendor's
- *        special tokens of its rank file, specials().
+ * @brief cl100k_base's tokenizer as matisse describes it: its pre-tokenizer pattern, pattern(), the pattern's
+ *        published spelling, spelling(), and the vendor's special tokens of its rank file, specials().
  *
  * cl100k_base.tiktoken is read by load::read_tiktoken() with specials(); the stages take pattern() beside the
- * definition.
+ * definition. load::read_tokenizer_json() refuses a tokenizer.json under spelling(), since Hugging Face's engine reads
+ * its `\p{N}{1,3}+` as the interval repeated; the cl100k conversions on the Hugging Face Hub carry the spelling from
+ * before the possessive rewrite, which is Llama 3's, and are read with llama3::spelling().
  */
 namespace matisse::cl100k
 {
@@ -28,6 +31,13 @@ namespace matisse::cl100k
  * @return The pattern, its languages built with munch's combinators.
  */
 [[nodiscard]] pretok::Pattern pattern();
+
+/**
+ * @brief Returns cl100k's pattern as openai/tiktoken's tiktoken_ext/openai_public.py publishes it, the spelling
+ *        load::read_tokenizer_json() recognizes a tokenizer.json's pre-tokenizer by.
+ * @return The spelling.
+ */
+[[nodiscard]] std::string_view spelling();
 
 /**
  * @brief Returns the vendor's special tokens of cl100k_base's rank file, quoted from tiktoken's openai_public.py:

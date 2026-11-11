@@ -67,8 +67,9 @@ target_link_libraries(matisse_bench
         matisse_validate
 )
 
-# Both probes read all four tokenizers, so their tests need every pinned file in the directory; Llama 3's is gated by
-# its vendor, and a directory without it registers neither test.
+# Both probes read all four tokenizers, so their tests need every pinned rank file and GPT-2's two files in the
+# directory, and no tokenizer.json; Llama 3's rank file is gated by its vendor, and a directory without it registers
+# neither test.
 set(MATISSE_VOCAB_COMPLETE FALSE)
 
 if (MATISSE_VOCAB_DIR)

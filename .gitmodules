@@ -1,3 +1,6 @@
 [submodule "external/munch"]
 	path = external/munch
 	url = https://github.com/nnidhogg/munch.git
+[submodule "external/hopper"]
+	path = external/hopper
+	url = https://github.com/nnidhogg/hopper.git

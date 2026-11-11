@@ -2,7 +2,8 @@
 # std::invalid_argument is a loader's answer to a file it cannot take exactly, and a crash, a sanitizer report or a hang
 # is a finding, as is a violated property. Each harness is its own target so that each corpus holds inputs that decode
 # as its format and not as another's, and each is seeded from its own directory under seeds: a small rank file, a GPT-2
-# pair in one file cut at a NUL byte, and texts each led by the two bytes that choose the encoder and the chunk count.
+# pair in one file cut at a NUL byte, a small tokenizer.json, and texts each led by the two bytes that choose the
+# encoder and the chunk count.
 #
 # The invariant check and the files the loaders read, which the harnesses share, their header under
 # include/matisse/tools/fuzz.
@@ -42,6 +43,21 @@ target_link_libraries(matisse_gpt2_fuzzer
 )
 
 target_link_options(matisse_gpt2_fuzzer
+        PRIVATE
+        -fsanitize=fuzzer
+)
+
+add_executable(matisse_tokenizer_json_fuzzer
+        src/tokenizer_json_fuzzer.cpp
+)
+
+target_link_libraries(matisse_tokenizer_json_fuzzer
+        PRIVATE
+        matisse_fuzz
+        matisse_load
+)
+
+target_link_options(matisse_tokenizer_json_fuzzer
         PRIVATE
         -fsanitize=fuzzer
 )

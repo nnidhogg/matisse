@@ -148,6 +148,10 @@ if (MATISSE_INSTALL)
             matisse_cl100k matisse_o200k matisse_llama3 matisse_lookup matisse_validate_cli
             EXPORT matisse_targets)
 
+    # matisse_load reads tokenizer.json with hopper's JSON parser, linked privately and named by no header, and a static
+    # library carries it to the consumer's link, so hopper's two libraries are installed with matisse's targets.
+    install(TARGETS hopper_parse hopper_json EXPORT matisse_targets)
+
     install(DIRECTORY libs/load/include/ libs/pretok/include/ libs/validate/include/ libs/encode/include/
             libs/gpt2/include/ libs/cl100k/include/ libs/o200k/include/ libs/llama3/include/ libs/lookup/include/
             DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})

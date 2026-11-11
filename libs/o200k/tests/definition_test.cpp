@@ -7,6 +7,7 @@
 #include <gtest/gtest.h>
 #include <iterator>
 #include <optional>
+#include <ranges>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -25,6 +26,13 @@ namespace
  * @brief The SHA-256 of o200k_base.tiktoken as pinned.
  */
 constexpr std::string_view o200k_digest{"446a9538cb6c348e3516120d7c08b09f57c36495e2acfffe59a5bf8b0cfb1a2d"};
+
+/**
+ * @brief The SHA-256 of o200k's tokenizer.json as pinned, o200k-tokenizer.json in the vocabulary directory, taken from
+ *        huggingface.co/Xenova/gpt-4o at commit 7956d98f2a83b2751a98ea7136fdf7fe6cf54e69.
+ */
+constexpr std::string_view o200k_tokenizer_json_digest{
+        "43a3ad4618a6a938f8c2614154ea10c31ad53a62d5683ae0b0e6133575cef07e"};
 
 /**
  * @brief What the known-answer fixture holds, counted as it is checked.
@@ -294,4 +302,33 @@ TEST(Definition_test, The_ids_of_every_known_answer_of_the_fixture_spell_its_tex
     EXPECT_EQ(check.counts.universes, 1U);
     EXPECT_EQ(check.counts.encodings, 18U);
     EXPECT_EQ(check.counts.corpora, 3U);
+}
+
+TEST(Definition_test, The_pinned_o200k_tokenizer_json_reads_as_the_rank_file_with_hugging_face_s_merges)
+{
+    const auto o200k{pinned_o200k()};
+    const auto path{pinned("o200k-tokenizer.json")};
+
+    if (!o200k || !path)
+    {
+        GTEST_SKIP() << "MATISSE_VOCAB_DIR names no directory holding o200k_base.tiktoken and o200k-tokenizer.json";
+    }
+
+    EXPECT_EQ(matisse::common::sha256(contents(*path)), o200k_tokenizer_json_digest);
+    EXPECT_EQ(tokenizer_json_spelling(*path), matisse::o200k::spelling());
+
+    const auto [merge_rule, whole_piece_lookup, spellings, merges, specials]{
+            read_tokenizer_json(*path, matisse::o200k::spelling())};
+
+    EXPECT_EQ(merge_rule, Merge_rule::pairs);
+    EXPECT_FALSE(whole_piece_lookup);
+    EXPECT_EQ(spellings, o200k->spellings);
+    EXPECT_EQ(merges.size(), 199742U);
+    ASSERT_EQ(specials.size(), o200k->specials.size());
+
+    for (const auto& [special, vendor] : std::views::zip(specials, o200k->specials))
+    {
+        EXPECT_EQ(special.spelling, vendor.spelling);
+        EXPECT_EQ(special.id, vendor.id);
+    }
 }
