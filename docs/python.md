@@ -56,10 +56,11 @@ array = encoding.encode_to_numpy("a text whose ids need no Python list")
 parallel = encoding.encode_parallel(open("big.txt").read(), 16, disallowed_special=())
 ```
 
-`get_encoding()` takes gpt2, cl100k_base, o200k_base and o200k_harmony, and `load_encoding(name, path)` reads a rank
-file from a path under one of the encodings' patterns and special tokens, Llama 3's among them. `list_encoding_names()`
-lists them all. o200k_harmony is o200k_base's rank file and pattern with tiktoken's 1,091 special tokens of it, two of
-which, `<|endofprompt|>` and `<|reserved_200018|>`, share the id 200018: each encodes to it, and it decodes as
+`get_encoding()` takes gpt2, r50k_base, cl100k_base, o200k_base and o200k_harmony, and `load_encoding(name, path)` reads
+a rank file from a path under one of the encodings' patterns and special tokens, Llama 3's among them.
+`list_encoding_names()` lists them all. r50k_base is gpt2's rank file, pattern and special token under the other name
+tiktoken gives them. o200k_harmony is o200k_base's rank file and pattern with tiktoken's 1,091 special tokens of it, two
+of which, `<|endofprompt|>` and `<|reserved_200018|>`, share the id 200018: each encodes to it, and it decodes as
 `<|endofprompt|>`, as tiktoken's decoder gives it. An `Encoding` offers tiktoken's calls with tiktoken's arguments and
 defaults:
 
@@ -96,12 +97,11 @@ that matisse's loader reads, so any special tokens can stand beside them.
 Every call above returns tiktoken's ids, its exceptions' types and, for a disallowed special token, its message. These
 are the places where matisse-tokenizer does something else:
 
-- **Other encodings.** `get_encoding()` refuses with `ValueError` every name but gpt2, cl100k_base, o200k_base and
-  o200k_harmony, and llama3, whose rank file Meta distributes under its own license and which `load_encoding()` reads
-  from a path instead. Among tiktoken's other encodings, r50k_base is the rank file, pattern and special token gpt2
-  already reads, under another name the package does not register. p50k_base and p50k_edit read p50k_base.tiktoken under
-  the same pattern, and the constructor refuses its ranks, as matisse's loader refuses them: they skip 50256, the id of
-  `<|endoftext|>`, and so are not dense from zero.
+- **Other encodings.** `get_encoding()` refuses with `ValueError` every name but gpt2, r50k_base, cl100k_base,
+  o200k_base and o200k_harmony, and llama3, whose rank file Meta distributes under its own license and which
+  `load_encoding()` reads from a path instead. Among tiktoken's other encodings, p50k_base and p50k_edit read
+  p50k_base.tiktoken under GPT-2's pattern, and the constructor refuses its ranks, as matisse's loader refuses them:
+  they skip 50256, the id of `<|endoftext|>`, and so are not dense from zero.
 - **Other patterns and special tokens.** The constructor refuses with `ValueError` a pattern that is not one of the four
   as spelled, since matisse encodes only under a pattern it has a verified description of. It refuses ranks that are not
   dense from zero or that spell one token twice, as matisse's loader does. It refuses a special token whose spelling is

@@ -4,9 +4,9 @@ list_encoding_names() over them.
 Each encoding is a tiktoken rank file read under one of the patterns matisse describes, gpt2, cl100k, o200k and llama3,
 with the vendor's special tokens, and o200k_harmony is o200k_base's rank file and pattern with tiktoken's special tokens
 of it. GPT-2's rank file is r50k_base.tiktoken, which tiktoken builds its gpt2 encoding from as well: the same ranks,
-pattern and special token. The rank files of GPT-2, cl100k_base and o200k_base are fetched from the URLs tiktoken reads
-them from and held to the SHA-256 tiktoken pins; Llama 3's is distributed by Meta under its own license and is read from
-a file the caller names, with load_encoding().
+pattern and special token, which the package also serves as r50k_base, as tiktoken does. The rank files of GPT-2,
+cl100k_base and o200k_base are fetched from the URLs tiktoken reads them from and held to the SHA-256 tiktoken pins;
+Llama 3's is distributed by Meta under its own license and is read from a file the caller names, with load_encoding().
 """
 
 from __future__ import annotations
@@ -105,6 +105,14 @@ SOURCES: dict[str, Source] = {
         width=5,
         pat_str=R50K_PATTERN,
     ),
+    "r50k_base": Source(
+        tokenizer="gpt2",
+        file="r50k_base.tiktoken",
+        url="https://openaipublic.blob.core.windows.net/encodings/r50k_base.tiktoken",
+        sha256="306cd27f03c1a714eca7108e03d66b7dc042abe8c258b44c199a7ed9838dd930",
+        width=5,
+        pat_str=R50K_PATTERN,
+    ),
     "cl100k_base": Source(
         tokenizer="cl100k",
         file="cl100k_base.tiktoken",
@@ -175,7 +183,7 @@ def get_encoding(encoding_name: str) -> core.Encoding:
     to its SHA-256.
 
     Args:
-        encoding_name: gpt2, cl100k_base, o200k_base or o200k_harmony.
+        encoding_name: gpt2, r50k_base, cl100k_base, o200k_base or o200k_harmony.
 
     Returns:
         The encoding.
@@ -237,6 +245,6 @@ def list_encoding_names() -> list[str]:
     """Returns the names of every encoding matisse_tokenizer knows.
 
     Returns:
-        The names, gpt2, cl100k_base, o200k_base, o200k_harmony and llama3.
+        The names, gpt2, r50k_base, cl100k_base, o200k_base, o200k_harmony and llama3.
     """
     return list(SOURCES)

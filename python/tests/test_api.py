@@ -240,7 +240,8 @@ def test_a_rank_file_that_is_not_the_pinned_one_has_its_report_decided(vocabular
 
 
 def test_the_names_and_the_refusals_of_the_registry():
-    assert matisse_tokenizer.list_encoding_names() == ["gpt2", "cl100k_base", "o200k_base", "o200k_harmony", "llama3"]
+    names = ["gpt2", "r50k_base", "cl100k_base", "o200k_base", "o200k_harmony", "llama3"]
+    assert matisse_tokenizer.list_encoding_names() == names
     with pytest.raises(ValueError, match="Unknown encoding p50k_base"):
         matisse_tokenizer.get_encoding("p50k_base")
     with pytest.raises(ValueError, match="load_encoding"):
@@ -551,3 +552,18 @@ def test_streams_on_threads_each_return_tiktoken_s_ids(pair):
     for thread in threads:
         thread.join()
     assert [results[index] for index in range(8)] == [theirs.encode_ordinary(text) for text in texts]
+
+
+def test_r50k_base_is_gpt2_s_rank_file_pattern_and_special_token_under_tiktoken_s_name(pairs):
+    if "gpt2" not in pairs:
+        pytest.skip("the vocabulary does not hold gpt2")
+    from test_ids import adversarial_texts, random_texts
+
+    ours = matisse_tokenizer.get_encoding("r50k_base")
+    theirs = tiktoken.get_encoding("r50k_base")
+    assert ours.name == "r50k_base"
+    assert ours._report_shipped
+    assert (ours.n_vocab, ours.special_tokens_set) == (theirs.n_vocab, theirs.special_tokens_set)
+    for text in random_texts(300) + adversarial_texts()[:80]:
+        assert ours.encode(text, allowed_special="all") == theirs.encode(text, allowed_special="all")
+    assert pickle.loads(pickle.dumps(ours)).encode("pickled") == theirs.encode("pickled")
