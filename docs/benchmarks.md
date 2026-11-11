@@ -165,7 +165,8 @@ matisse that gave it, which each tokenizer's tests hold matisse's ids to on ever
 it built the `Encoding`, and was not run on the mixed file, twice that size; its ids of enwik9's pages, concatenated,
 have enwik9's digest, so every page begins at a piece boundary of every pattern, and the batch covers enwik9. Under
 o200k and Llama 3 matisse's ids equal every other encoder's on every corpus as well. Each engine carries Unicode tables
-of its own and matisse pins Unicode 15.0.0, and on these corpora the difference changes no id.
+of its own, and matisse's ids are the same under the tables of Unicode 15.0.0 the commits measured carry and under those
+of 16.0.0, tiktoken's version, which each tokenizer's tests hold to the vendor fixture.
 
 | Corpus                  | Tokenizer |         Ids | SHA-256 of the ids                                                 | Agreeing                             |
 |-------------------------|-----------|------------:|--------------------------------------------------------------------|--------------------------------------|

@@ -448,7 +448,7 @@ TEST(Classes_test, The_tables_and_the_classes_give_the_reference_answers_at_ever
     EXPECT_EQ(check.counts.universes, 1U);
     EXPECT_EQ(check.counts.classes, 30U);
     EXPECT_EQ(check.counts.ranges, 8U);
-    EXPECT_EQ(check.counts.points, 4732U);
+    EXPECT_EQ(check.counts.points, 4854U);
 }
 
 TEST(Classes_test, The_class_table_gives_every_scalar_value_the_symbol_of_the_first_set_holding_it)

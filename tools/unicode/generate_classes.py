@@ -12,17 +12,18 @@ point in two of them would be read as in the first alone: the sets named must be
 them share a code point is refused. The generated file is checked in, so building matisse never touches the network;
 rerun this script against a newer database to move the pinned Unicode version.
 
-Each tokenizer library keeps its own output, libs/<name>/src/class_ranges.inc, with the sets its pattern names.
-GPT-2's, cl100k's and Llama 3's patterns name \\p{L}, \\p{N} and \\s, and every table is pinned to Unicode 15.0.0, the
-version of the Python reference the fixtures are written by, so that the fixtures replay:
+Each tokenizer library keeps its own output, libs/<name>/src/class_ranges.inc, with the sets its pattern names. GPT-2's,
+cl100k's and Llama 3's patterns name \\p{L}, \\p{N} and \\s, and every table is pinned to Unicode 16.0.0, the version
+tiktoken's regex engine reads, so that matisse classes every code point as tiktoken does, and the version the Python
+reference the fixtures are written by reads, so that the fixtures replay:
 
-    tools/unicode/generate_classes.py --version 15.0.0 PropList.txt DerivedGeneralCategory.txt \\
+    tools/unicode/generate_classes.py --version 16.0.0 PropList.txt DerivedGeneralCategory.txt \\
         libs/gpt2/src/class_ranges.inc letter_ranges=L number_ranges=N white_space_ranges=White_Space
 
 and the same for libs/cl100k/src/class_ranges.inc and libs/llama3/src/class_ranges.inc. o200k's pattern names \\p{Lu},
 \\p{Ll}, \\p{Lt}, \\p{Lm}, \\p{Lo}, \\p{M}, \\p{N} and \\s:
 
-    tools/unicode/generate_classes.py --version 15.0.0 PropList.txt DerivedGeneralCategory.txt \\
+    tools/unicode/generate_classes.py --version 16.0.0 PropList.txt DerivedGeneralCategory.txt \\
         libs/o200k/src/class_ranges.inc upper_ranges=Lu lower_ranges=Ll title_ranges=Lt modifier_ranges=Lm \\
         other_letter_ranges=Lo mark_ranges=M number_ranges=N white_space_ranges=White_Space
 

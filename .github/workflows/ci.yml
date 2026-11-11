@@ -353,6 +353,73 @@ jobs:
           ./build/tools/fuzz/matisse_encoder_fuzzer encoder-corpus tools/fuzz/seeds/encoder -max_total_time=60 \
                 -timeout=10 -rss_limit_mb=4096 -print_new_funcs=0
 
+  class-data:
+    runs-on: ubuntu-24.04
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # The version tiktoken's regex engine reads, which the four tokenizers' class tables are pinned to.
+      - name: Fetch the pinned Unicode database
+        run: |
+          mkdir -p ucd
+          curl -sSf -o ucd/PropList.txt https://www.unicode.org/Public/16.0.0/ucd/PropList.txt
+          curl -sSf -o ucd/DerivedGeneralCategory.txt \
+                https://www.unicode.org/Public/16.0.0/ucd/extracted/DerivedGeneralCategory.txt
+          cd ucd
+          echo "53d614508e2a0b2305a8aa21cd60d993de9326cdf65993660dfcce4503548583  PropList.txt" | sha256sum -c -
+          echo "7676ab755a41ef82108460238569e60ad65c191ddafe61b36c6765ec1353f293  DerivedGeneralCategory.txt" \
+                | sha256sum -c -
+
+      - name: Regenerate the class tables
+        run: |
+          for name in gpt2 cl100k llama3; do
+            python3 tools/unicode/generate_classes.py --version 16.0.0 ucd/PropList.txt ucd/DerivedGeneralCategory.txt \
+                  libs/$name/src/class_ranges.inc letter_ranges=L number_ranges=N white_space_ranges=White_Space
+          done
+          python3 tools/unicode/generate_classes.py --version 16.0.0 ucd/PropList.txt ucd/DerivedGeneralCategory.txt \
+                libs/o200k/src/class_ranges.inc upper_ranges=Lu lower_ranges=Ll title_ranges=Lt modifier_ranges=Lm \
+                other_letter_ranges=Lo mark_ranges=M number_ranges=N white_space_ranges=White_Space
+
+      # The checked-in tables must be exactly what the pinned database generates.
+      - name: Verify the checked-in tables match
+        run: |
+          git diff --exit-code libs/gpt2/src/class_ranges.inc libs/cl100k/src/class_ranges.inc \
+                libs/llama3/src/class_ranges.inc libs/o200k/src/class_ranges.inc
+
+      - name: Restore the pinned vocabulary files
+        id: vocab
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/vocab
+          key: vocab-196139668be63f3b-1ce1664773c50f3e-223921b76ee99bde-446a9538cb6c348e
+
+      - name: Fetch the pinned vocabulary files
+        if: steps.vocab.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p "$RUNNER_TEMP/vocab"
+          cd "$RUNNER_TEMP/vocab"
+          curl -sSfL -o gpt2-vocab.json https://openaipublic.blob.core.windows.net/gpt-2/encodings/main/encoder.json
+          curl -sSfL -o gpt2-merges.txt https://openaipublic.blob.core.windows.net/gpt-2/encodings/main/vocab.bpe
+          curl -sSfL -o cl100k_base.tiktoken https://openaipublic.blob.core.windows.net/encodings/cl100k_base.tiktoken
+          curl -sSfL -o o200k_base.tiktoken https://openaipublic.blob.core.windows.net/encodings/o200k_base.tiktoken
+          echo "196139668be63f3b5d6574427317ae82f612a97c5d1cdaf36ed2256dbf636783  gpt2-vocab.json" | sha256sum -c -
+          echo "1ce1664773c50f3e0cc8842619a93edc4624525b728b188a9e0be33b7726adc5  gpt2-merges.txt" | sha256sum -c -
+          echo "223921b76ee99bde995b7ff738513eef100fb51d18c93597a113bcffe865b2a7  cl100k_base.tiktoken" | sha256sum -c -
+          echo "446a9538cb6c348e3516120d7c08b09f57c36495e2acfffe59a5bf8b0cfb1a2d  o200k_base.tiktoken" | sha256sum -c -
+
+      # The newest tiktoken, unpinned, so that a release whose regex engine reads a later Unicode version than the
+      # tables fails here. Llama 3's rank file is gated behind its vendor's license and is not fetched; its check skips.
+      - name: Hold the newest tiktoken to the class tables
+        run: |
+          python3 -m venv "$RUNNER_TEMP/venv"
+          "$RUNNER_TEMP/venv/bin/pip" install --quiet tiktoken
+          "$RUNNER_TEMP/venv/bin/python" -I tools/unicode/check_tiktoken.py "$RUNNER_TEMP/vocab"
+
   install-consumer:
     runs-on: ubuntu-24.04
 

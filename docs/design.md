@@ -192,7 +192,7 @@ symbols instead of the code points.
 `pretok::Class_table` holds the class symbol of every code point under an alphabet, built once from its sets: a table of
 the ASCII bytes, and a table of blocks of 256 code points with each distinct block kept once and every block's index
 among them. A code point's symbol is then two loads and an ASCII byte's one. GPT-2's, cl100k's and Llama 3's alphabets
-have 127, 128 and 128 distinct blocks, 37 KB a table, and o200k's 135, 39 KB. `symbols()` returns a text's class string
+have 133, 134 and 134 distinct blocks, 39 KB a table, and o200k's 141, 41 KB. `symbols()` returns a text's class string
 and `classes()` its classes, and `classes_of()` is `classes()` on a table built for the one text; the `Segmenter`, the
 encoder and `supply()` each build a table of their own. Malformed UTF-8 is refused with its byte offset, since the model
 is defined on code points and invalid text is outside it. The UTF-8 decoder is a small one of pretok's own, duplicated
@@ -209,13 +209,23 @@ White_Space. This follows munch-audit's precedent for logos, whose reader keeps 
 locked to rather than the library's. munch's own tables are of Unicode 17.0.0 and have no L or N, and matisse does not
 use them.
 
-The tables are pinned to Unicode 15.0.0, the version of the Python reference the fixtures are written by, so that the
-fixtures replay. The classes, and therefore the verifiers, the certified windows and the right context, do not depend on
-the version. Only the map from code points to classes does, and with it the ids of a text holding a code point whose
-class moved between versions. tiktoken's and Hugging Face's engines carry versions of their own, and the vendor
-cross-check below shows no difference on any corpus, so the pin stays. Moving it changes the ids of some texts, so it is
-a major release, as the README's Versioning and Stability section says, with the fixtures regenerated under the new
-version.
+The tables are pinned to Unicode 16.0.0, the version of the tables tiktoken 0.14.0's regex engine carries, so that
+matisse classes every code point as tiktoken does, and the version of Python 3.14's unicodedata, which the Python
+reference the fixtures are written by reads, so that the fixtures replay. The classes, and therefore the verifiers, the
+certified windows and the right context, do not depend on the version. Only the map from code points to classes does,
+and with it the ids of a text holding a code point whose class moved between versions. Hugging Face's engine carries a
+version of its own, and the vendor cross-check below shows no difference on any corpus. Moving the pin changes the ids
+of some texts, so it is a major release, as the README's Versioning and Stability section says, with the fixtures
+regenerated under the new version.
+
+tools/unicode/check_tiktoken.py holds the pin to tiktoken, run with the newest tiktoken and the pinned rank files. Its
+first check needs nothing else: every code point a tokenizer's tables leave out of their sets must be read by tiktoken
+as of the other class, the code point and an apostrophe one piece before `s`, where a letter, a number or, under o200k,
+a mark is a piece before the contraction, so a tiktoken release whose tables are of a later version fails it at the code
+points that version assigns. Its second check, given a build's corpus probe, encodes every Unicode scalar value in five
+contexts, one text per context, and every corpus named on its command line, with both matisse and tiktoken, and holds
+the two to the same count and digest of ids. CI runs the first check with the newest tiktoken on every push, beside the
+regeneration of the tables from the pinned database, which must leave them as checked in.
 
 ## **One automaton segments a text**
 
@@ -854,7 +864,7 @@ The tests run in three layers, each against something independent of the code un
 ### **The vendors themselves**
 
 The reference ids in the known-answer fixture are the Python references, encoder.py's loop and tiktoken's rank merge
-restated over Python's engine with Unicode 15.0, which are held to the published known answers. The vendor fixture holds
+restated over Python's engine with Unicode 16.0, which are held to the published known answers. The vendor fixture holds
 matisse to the vendors' own code as well. tiktoken, Hugging Face tokenizers and the bpe crate were run on the fourteen
 corpora of [benchmarks.md](benchmarks.md) outside the tree, and the fixture script records the digests of their ids in
 libs/load/tests/data/vendors_reference.txt, beside the known-answer fixture, holding them to the restated references' on

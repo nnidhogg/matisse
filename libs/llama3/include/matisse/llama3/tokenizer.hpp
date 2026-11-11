@@ -21,9 +21,9 @@ namespace matisse::llama3
  *        it, described over its 16 classes.
  *
  * The pattern is cl100k's as tiktoken shipped it before the possessive rewrite, so its classes are cl100k's, the
- * symbols `\t\n\r !'0Adelmrstv`, read from tables pinned to Unicode 15.0.0, the version of the Python reference the
- * fixtures are written by; it has no alternative anchored at the end of the input, so white space after a line break at
- * the end of a text is a piece of its own.
+ * symbols `\t\n\r !'0Adelmrstv`, read from tables pinned to Unicode 16.0.0, the version of tiktoken's regex engine and
+ * of the Python reference the fixtures are written by; it has no alternative anchored at the end of the input, so white
+ * space after a line break at the end of a text is a piece of its own.
  * @return The pattern, its languages built with munch's combinators.
  */
 [[nodiscard]] pretok::Pattern pattern();

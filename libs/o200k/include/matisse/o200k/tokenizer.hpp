@@ -28,8 +28,8 @@ namespace matisse::o200k
  * caselessly, is split into its upper and its lower case, and U+017F, the long s, which `s` matches caselessly and
  * which is a lower case letter, is in the class of `s`. A class with an ASCII member is written by one, and the four
  * with none, the other, title case and modifier letters and the marks, by `#`, `$`, `%` and `&`, bytes of the class of
- * everything else, `!`; the symbols are `\t\n\r !#$%&'/0ADELMRSTVadelmrstv`, read from tables pinned to Unicode 15.0.0,
- * the version of the Python reference the fixtures are written by.
+ * everything else, `!`; the symbols are `\t\n\r !#$%&'/0ADELMRSTVadelmrstv`, read from tables pinned to Unicode 16.0.0,
+ * the version of tiktoken's regex engine and of the Python reference the fixtures are written by.
  * @return The pattern, its languages built with munch's combinators.
  */
 [[nodiscard]] pretok::Pattern pattern();

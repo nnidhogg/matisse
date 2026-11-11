@@ -36,7 +36,7 @@ using Class_t = unsigned char;
  *        in that block, read in two.
  *
  * A code point's symbol is the symbol of the first set of the alphabet holding it, or the alphabet's other symbol.
- * GPT-2's and cl100k's alphabets have 127 and 128 distinct blocks, so an index is a byte and the table is 37 KB; it is
+ * GPT-2's and cl100k's alphabets have 133 and 134 distinct blocks, so an index is a byte and the table is 39 KB; it is
  * built in about a millisecond, so a caller that classes many texts holds one.
  */
 class Class_table

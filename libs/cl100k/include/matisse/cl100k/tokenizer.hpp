@@ -23,8 +23,8 @@ namespace matisse::cl100k
  *
  * The classes are GPT-2's with the carriage return and the line feed its own besides, and its contractions are
  * caseless, so each contraction letter's class holds both cases and that of `s` also U+017F, which matches `s`
- * caselessly; the symbols are `\t\n\r !'0Adelmrstv`, read from tables pinned to Unicode 15.0.0, the version of the
- * Python reference the fixtures are written by.
+ * caselessly; the symbols are `\t\n\r !'0Adelmrstv`, read from tables pinned to Unicode 16.0.0, the version of
+ * tiktoken's regex engine and of the Python reference the fixtures are written by.
  * @return The pattern, its languages built with munch's combinators.
  */
 [[nodiscard]] pretok::Pattern pattern();

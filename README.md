@@ -17,9 +17,10 @@
 sequential encoding. The first version does this for **GPT-2**, **cl100k_base**, **o200k_base** and **Llama 3**, whose
 deployed pre-tokenizer patterns have exact verifiers. It is not a general tokenizer library: it trains nothing, applies
 no normalizer but the identity, and does not try to match Hugging Face's feature surface. Its product is exactness
-against the reference tokenizer, shown on pinned vocabularies and corpora under the Unicode 15.0.0 tables it pins: a
-text holding a code point assigned a letter or a number since then can be segmented differently by an engine with newer
-tables, as [docs/limits.md](docs/limits.md) describes.
+against the reference tokenizer, shown on pinned vocabularies and corpora and on every code point under the Unicode
+16.0.0 tables it pins, the version tiktoken's regex engine reads: a text holding a code point whose class differs
+between Unicode versions can be segmented differently by an engine with tables of another version, as
+[docs/limits.md](docs/limits.md) describes.
 
 matisse is built on **[`munch`](https://github.com/nnidhogg/munch)**, and the two divide the work by one test: whether a
 piece would make sense if no LLM existed. munch keeps the general constructions, the verifier framework and the
@@ -34,10 +35,10 @@ loads GPT-2's encoder.json and vocab.bpe and tiktoken rank files, and it encodes
 o200k_base and Llama 3 sequentially, in parallel at certified cuts and as a stream, with the vendors' special tokens cut
 out where they are allowed, and decodes ids back to bytes; validate decides each pattern's certified windows, and
 `matisse-validate` reports them for a rank file. The ids are held to the vendors' on pinned vocabularies, fixtures and
-corpora, with the classes of code points pinned to Unicode 15.0.0, while a Hugging Face tokenizer.json reader and the
-certification of merge tables without a pre-tokenizer are planned and not yet written. How the libraries fit together
-and the decisions behind them are in [docs/design.md](docs/design.md), how each is called is in
-[docs/usage.md](docs/usage.md), and what every call guarantees is in [docs/limits.md](docs/limits.md).
+corpora, with the classes of code points pinned to Unicode 16.0.0, tiktoken's version, while a Hugging Face
+tokenizer.json reader and the certification of merge tables without a pre-tokenizer are planned and not yet written. How
+the libraries fit together and the decisions behind them are in [docs/design.md](docs/design.md), how each is called is
+in [docs/usage.md](docs/usage.md), and what every call guarantees is in [docs/limits.md](docs/limits.md).
 
 ## **Libraries**
 
@@ -205,6 +206,11 @@ in the tree either and which the page says how to build: it adds the probe on th
 and each tokenizer's tests hold matisse's ids of every corpus the directory holds to the vendors', whose digests
 libs/load/tests/data/vendors_reference.txt records, skipping by name the corpora the directory lacks.
 
+tools/unicode/check_tiktoken.py holds the class tables to tiktoken's and is run with the newest tiktoken. Given the
+vocabulary directory, it requires tiktoken to read every code point the tables leave out of their sets as matisse does,
+and given a build's `matisse_corpus` and corpora besides, it holds matisse's ids to tiktoken's on every Unicode scalar
+value in five contexts and on each corpus, as [docs/design.md](docs/design.md) describes.
+
 Three libFuzzer harnesses under `tools/fuzz/` feed arbitrary bytes to the tiktoken reader and to the GPT-2 reader, a
 `std::invalid_argument` being a loader's answer to a file it cannot take exactly, and arbitrary well-formed UTF-8 to the
 encoder, holding `encode_parallel()` to `encode()` at a chunk count drawn from the input; a crash, a sanitizer report, a
@@ -227,7 +233,7 @@ the contracts their headers and [docs/limits.md](docs/limits.md) state. It holds
 its constructor, the bounds `piece_cache_capacity` and `longest_cached_piece`, and `Stream_encoder` with its
 constructor, `push()` and `finish()`; each tokenizer library's `pattern()` and `specials()`; lookup's `Tokenizer`,
 `tokenizers()` and `tokenizer()`; and the `matisse-validate` command line with its JSON document, as munch puts
-`munch-audit` on its surface. The class tables are pinned to Unicode 15.0.0, as [docs/limits.md](docs/limits.md)
+`munch-audit` on its surface. The class tables are pinned to Unicode 16.0.0, as [docs/limits.md](docs/limits.md)
 describes, and moving the pin changes the ids of some texts, those holding a code point whose class differs between the
 two versions, so the pin moves only in a major release.
 
