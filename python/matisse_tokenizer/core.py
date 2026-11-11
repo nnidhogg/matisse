@@ -98,7 +98,8 @@ class Encoding:
 
     @classmethod
     def _of_file(cls, name: str, source: Source, path: str, digest: str) -> Encoding:
-        """Returns an encoding read from a rank file with the vendor's special tokens of its pattern.
+        """Returns an encoding read from a rank file with the source's special tokens, the vendor's of its pattern
+        unless the source lists its own.
 
         Args:
             name: The encoding's name.
@@ -110,7 +111,8 @@ class Encoding:
             The encoding.
         """
         encoding = cls.__new__(cls)
-        specials = dict(_core.vendor_specials(source.tokenizer))
+        given = source.special_tokens
+        specials = dict(_core.vendor_specials(source.tokenizer)) if given is None else dict(given)
         encoding._build(name, source, path, digest, specials)
         return encoding
 
@@ -131,7 +133,7 @@ class Encoding:
         self._path: str | None = None
         self._ranks: dict[bytes, int] | None = None
 
-        by_id = sorted(self._special_tokens.items(), key=lambda item: item[1])
+        by_id = sorted(_aliases_ordered(self._special_tokens).items(), key=lambda item: item[1])
         self._definition = _core.read_tiktoken(os.fspath(path), by_id)
 
         ordinary = self._definition.ordinary_count
@@ -1005,6 +1007,43 @@ def _threads(pool: float, tasks: int) -> int:
     if pool >= tasks:
         return max(1, tasks)
     return math.ceil(pool)
+
+
+def _aliases_ordered(special_tokens: dict[str, int]) -> dict[str, int]:
+    """Returns special tokens in the order matisse's encoder is given them, whose decoding spells an id two of them
+    share as the first listed: tiktoken's own table of o200k_harmony, in which <|endofprompt|> and <|reserved_200018|>
+    share 200018 and tiktoken's decoder gives the first, is ordered as the registry lists it.
+
+    tiktoken picks the spelling of a shared id by the hash order of its table, which matisse does not follow, so any
+    other table with a shared id is refused.
+
+    Args:
+        special_tokens: The special tokens with their ids.
+
+    Returns:
+        The special tokens, ordered.
+
+    Raises:
+        ValueError: If two special tokens share an id in a table that is not one of the registry's.
+    """
+    from matisse_tokenizer.registry import SOURCES
+
+    owners: dict[int, str] = {}
+    shared = None
+    for spelling, token in special_tokens.items():
+        if token in owners and shared is None:
+            shared = (owners[token], spelling, token)
+        owners.setdefault(token, spelling)
+    if shared is None:
+        return special_tokens
+    for source in SOURCES.values():
+        if source.special_tokens is not None and source.special_tokens == special_tokens:
+            return source.special_tokens
+    first, second, token = shared
+    raise ValueError(
+        f"the special tokens {first!r} and {second!r} share the id {token}: tiktoken decodes such an id as one of them "
+        f"by the hash order of its table, which matisse does not follow, and only o200k_harmony's table is checked"
+    )
 
 
 def _special_token_checked(spelling: object, token: object) -> None:

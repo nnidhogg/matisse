@@ -239,7 +239,7 @@ def test_a_rank_file_that_is_not_the_pinned_one_has_its_report_decided(vocabular
 
 
 def test_the_names_and_the_refusals_of_the_registry():
-    assert matisse_tokenizer.list_encoding_names() == ["gpt2", "cl100k_base", "o200k_base", "llama3"]
+    assert matisse_tokenizer.list_encoding_names() == ["gpt2", "cl100k_base", "o200k_base", "o200k_harmony", "llama3"]
     with pytest.raises(ValueError, match="Unknown encoding p50k_base"):
         matisse_tokenizer.get_encoding("p50k_base")
     with pytest.raises(ValueError, match="load_encoding"):
@@ -323,9 +323,13 @@ def test_special_tokens_of_which_one_begins_another_or_two_share_an_id_are_refus
     begins = {"<|a|>": len(ranks), "<|a|>b": len(ranks) + 1, "x<|a": len(ranks) + 2}
     with pytest.raises(ValueError, match="begins"):
         matisse_tokenizer.Encoding("overlap", pat_str=theirs._pat_str, mergeable_ranks=ranks, special_tokens=begins)
-    shared = {"<|a|>": len(ranks), "<|b|>": len(ranks)}
-    with pytest.raises(ValueError, match="has the id"):
-        matisse_tokenizer.Encoding("shared", pat_str=theirs._pat_str, mergeable_ranks=ranks, special_tokens=shared)
+    # tiktoken decodes an id two spellings share as one of them by the hash order of its table, whichever they are
+    # listed in, so a shared id is refused outside o200k_harmony's table.
+    for shared in ({"<|a|>": len(ranks), "<|b|>": len(ranks)}, {"<|b|>": len(ranks), "<|a|>": len(ranks)}):
+        reference = tiktoken.Encoding("shared", pat_str=theirs._pat_str, mergeable_ranks=ranks, special_tokens=shared)
+        assert reference.decode([len(ranks)]) == "<|b|>"
+        with pytest.raises(ValueError, match="share the id"):
+            matisse_tokenizer.Encoding("shared", pat_str=theirs._pat_str, mergeable_ranks=ranks, special_tokens=shared)
     # Overlapping without one beginning the other is taken, and its ids are tiktoken's.
     overlapping = {"<|a|>": len(ranks), "x<|a": len(ranks) + 1}
     mine = matisse_tokenizer.Encoding("ok", pat_str=theirs._pat_str, mergeable_ranks=ranks, special_tokens=overlapping)
@@ -444,3 +448,40 @@ def test_an_unbounded_pool_runs_as_tiktoken_s_does(pair):
             texts, num_threads=count
         )
         assert ours.encode_batch(texts, num_threads=count) == theirs.encode_batch(texts, num_threads=count)
+
+
+def test_o200k_harmony_is_tiktoken_s_its_shared_id_decoded_as_tiktoken_decodes_it(vocabulary):
+    if "o200k_base" not in vocabulary:
+        pytest.skip("the vocabulary does not hold o200k_base")
+    from test_ids import random_texts
+
+    ours = matisse_tokenizer.get_encoding("o200k_harmony")
+    theirs = tiktoken.get_encoding("o200k_harmony")
+    assert ours._report_shipped
+    figures = ("n_vocab", "max_token_value", "eot_token")
+    assert [getattr(ours, figure) for figure in figures] == [getattr(theirs, figure) for figure in figures]
+    assert ours.special_tokens_set == theirs.special_tokens_set
+    specials = sorted(theirs.special_tokens_set)
+    texts = [f"{text}{specials[index % len(specials)]}{text}" for index, text in enumerate(random_texts(400))]
+    texts += ["<|endofprompt|><|reserved_200018|>", "<|start|>user<|message|>hi<|end|><|start|>assistant"]
+    for text in texts:
+        for arguments in ({"allowed_special": "all"}, {"disallowed_special": ()}, {"allowed_special": {specials[0]}}):
+            assert outcome(lambda: ours.encode(text, **arguments)) == outcome(lambda: theirs.encode(text, **arguments))
+    for token in (200018, 199998, 200007, 201087):
+        assert ours.decode_single_token_bytes(token) == theirs.decode_single_token_bytes(token)
+        assert ours.decode([token]) == theirs.decode([token])
+    for spelling in ("<|endofprompt|>", "<|reserved_200018|>", "<|call|>"):
+        assert ours.encode_single_token(spelling) == theirs.encode_single_token(spelling)
+    assert pickle.loads(pickle.dumps(ours)) is not None
+
+
+def test_tiktoken_s_own_o200k_harmony_table_builds_through_the_constructor_in_any_order(vocabulary):
+    if "o200k_base" not in vocabulary:
+        pytest.skip("the vocabulary does not hold o200k_base")
+    theirs = tiktoken.get_encoding("o200k_harmony")
+    for specials in (theirs._special_tokens, dict(reversed(theirs._special_tokens.items()))):
+        arguments = {"pat_str": theirs._pat_str, "mergeable_ranks": theirs._mergeable_ranks, "special_tokens": specials}
+        ours = matisse_tokenizer.Encoding("o200k_harmony", **arguments)
+        assert ours.decode([200018]) == theirs.decode([200018])
+        text = "<|start|>user<|message|>x<|reserved_200018|>y<|endofprompt|><|end|>"
+        assert ours.encode(text, allowed_special="all") == theirs.encode(text, allowed_special="all")

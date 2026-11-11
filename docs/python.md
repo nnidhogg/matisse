@@ -56,9 +56,12 @@ array = encoding.encode_to_numpy("a text whose ids need no Python list")
 parallel = encoding.encode_parallel(open("big.txt").read(), 16, disallowed_special=())
 ```
 
-`get_encoding()` takes gpt2, cl100k_base and o200k_base, and `load_encoding(name, path)` reads a rank file from a path
-under one of the four encodings' patterns and special tokens, Llama 3's among them. `list_encoding_names()` lists the
-four. An `Encoding` offers tiktoken's calls with tiktoken's arguments and defaults:
+`get_encoding()` takes gpt2, cl100k_base, o200k_base and o200k_harmony, and `load_encoding(name, path)` reads a rank
+file from a path under one of the encodings' patterns and special tokens, Llama 3's among them. `list_encoding_names()`
+lists them all. o200k_harmony is o200k_base's rank file and pattern with tiktoken's 1,091 special tokens of it, two of
+which, `<|endofprompt|>` and `<|reserved_200018|>`, share the id 200018: each encodes to it, and it decodes as
+`<|endofprompt|>`, as tiktoken's decoder gives it. An `Encoding` offers tiktoken's calls with tiktoken's arguments and
+defaults:
 
 - `encode()`, `encode_ordinary()`, `encode_to_numpy()`, `encode_batch()` and `encode_ordinary_batch()`, with
   `allowed_special`, `disallowed_special` and `num_threads` as tiktoken reads them;
@@ -85,20 +88,21 @@ that matisse's loader reads, so any special tokens can stand beside them.
 Every call above returns tiktoken's ids, its exceptions' types and, for a disallowed special token, its message. These
 are the places where matisse-tokenizer does something else:
 
-- **Other encodings.** `get_encoding()` refuses with `ValueError` every name but gpt2, cl100k_base and o200k_base, and
-  llama3, whose rank file Meta distributes under its own license and which `load_encoding()` reads from a path instead.
-  Among tiktoken's other encodings, r50k_base is the rank file, pattern and special token gpt2 already reads, under
-  another name the package does not register. p50k_base and p50k_edit read p50k_base.tiktoken under the same pattern,
-  and the constructor refuses its ranks, as matisse's loader refuses them: they skip 50256, the id of `<|endoftext|>`,
-  and so are not dense from zero. o200k_harmony the constructor refuses, since two of its special tokens,
-  `<|endofprompt|>` and `<|reserved_200018|>`, share the id 200018.
+- **Other encodings.** `get_encoding()` refuses with `ValueError` every name but gpt2, cl100k_base, o200k_base and
+  o200k_harmony, and llama3, whose rank file Meta distributes under its own license and which `load_encoding()` reads
+  from a path instead. Among tiktoken's other encodings, r50k_base is the rank file, pattern and special token gpt2
+  already reads, under another name the package does not register. p50k_base and p50k_edit read p50k_base.tiktoken under
+  the same pattern, and the constructor refuses its ranks, as matisse's loader refuses them: they skip 50256, the id of
+  `<|endoftext|>`, and so are not dense from zero.
 - **Other patterns and special tokens.** The constructor refuses with `ValueError` a pattern that is not one of the four
   as spelled, since matisse encodes only under a pattern it has a verified description of. It refuses ranks that are not
   dense from zero or that spell one token twice, as matisse's loader does. It refuses a special token whose spelling is
-  empty or whose id is an ordinary token's, two special tokens that share an id, as matisse's encoder refuses them, and
-  a special token whose spelling begins another's, such as `<|a|>` and `<|a|>b`. tiktoken chooses between two such
-  spellings at one place by the order of its table and steps past a disallowed one by a byte, so its ids there follow no
-  rule matisse could hold to.
+  empty or whose id is an ordinary token's, as matisse's encoder refuses them, and a special token whose spelling begins
+  another's, such as `<|a|>` and `<|a|>b`. tiktoken chooses between two such spellings at one place by the order of its
+  table and steps past a disallowed one by a byte, so its ids there follow no rule matisse could hold to. It refuses two
+  special tokens that share an id in any table but tiktoken's own of o200k_harmony, in whatever order: tiktoken decodes
+  a shared id as one of its spellings by the hash order of its table, whichever order they are given in, and only
+  o200k_harmony's has been checked against it.
 - **Argument types.** The arguments are read as tiktoken 0.14.0 reads them, in its order, with its exceptions.
   `allowed_special` is `"all"` or a `set` or `frozenset` of strings, and anything else, a string or a list among them,
   is refused with `TypeError`. A text that is not a string is refused with `TypeError`, before `allowed_special` is

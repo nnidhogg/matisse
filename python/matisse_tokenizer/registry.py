@@ -2,10 +2,11 @@
 list_encoding_names() over them.
 
 Each encoding is a tiktoken rank file read under one of the patterns matisse describes, gpt2, cl100k, o200k and llama3,
-with the vendor's special tokens. GPT-2's rank file is r50k_base.tiktoken, which tiktoken builds its gpt2 encoding
-from as well: the same ranks, pattern and special token. The rank files of GPT-2, cl100k_base and o200k_base are
-fetched from the URLs tiktoken reads them from and held to the SHA-256 tiktoken pins; Llama 3's is distributed by Meta
-under its own license and is read from a file the caller names, with load_encoding().
+with the vendor's special tokens, and o200k_harmony is o200k_base's rank file and pattern with tiktoken's special tokens
+of it. GPT-2's rank file is r50k_base.tiktoken, which tiktoken builds its gpt2 encoding from as well: the same ranks,
+pattern and special token. The rank files of GPT-2, cl100k_base and o200k_base are fetched from the URLs tiktoken reads
+them from and held to the SHA-256 tiktoken pins; Llama 3's is distributed by Meta under its own license and is read from
+a file the caller names, with load_encoding().
 """
 
 from __future__ import annotations
@@ -38,6 +39,10 @@ class Source:
     pat_str: str
     """The pattern as tiktoken's Encoding takes it, spelled as its vendor publishes it."""
 
+    special_tokens: dict[str, int] | None = None
+    """The special tokens with their ids, in the order tiktoken lists them, or None for the vendor's special tokens of
+    the pattern, as the tokenizer's library supplies them."""
+
 
 R50K_PATTERN = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}++| ?\p{N}++| ?[^\s\p{L}\p{N}]++|\s++$|\s+(?!\S)|\s"""
 """GPT-2's pattern as tiktoken spells it for gpt2 and r50k_base, equivalent to the spelling of GPT-2's encoder.py."""
@@ -69,6 +74,28 @@ LLAMA3_PATTERN = (
 )
 """Llama 3's pattern, as meta-llama/llama3's llama/tokenizer.py spells it."""
 
+O200K_HARMONY_SPECIALS: dict[str, int] = {
+    "<|endoftext|>": 199999,
+    "<|endofprompt|>": 200018,
+    "<|startoftext|>": 199998,
+    "<|reserved_200000|>": 200000,
+    "<|reserved_200001|>": 200001,
+    "<|return|>": 200002,
+    "<|constrain|>": 200003,
+    "<|reserved_200004|>": 200004,
+    "<|channel|>": 200005,
+    "<|start|>": 200006,
+    "<|end|>": 200007,
+    "<|message|>": 200008,
+    "<|reserved_200009|>": 200009,
+    "<|reserved_200010|>": 200010,
+    "<|reserved_200011|>": 200011,
+    "<|call|>": 200012,
+} | {f"<|reserved_{i}|>": i for i in range(200013, 201088)}
+"""o200k_harmony's special tokens as tiktoken 0.14.0's openai_public.o200k_harmony() lists them, o200k_base's two
+first, so that `<|endofprompt|>` stands before `<|reserved_200018|>`, which shares its id 200018 and decodes as it, as
+tiktoken's decoder gives it."""
+
 SOURCES: dict[str, Source] = {
     "gpt2": Source(
         tokenizer="gpt2",
@@ -93,6 +120,15 @@ SOURCES: dict[str, Source] = {
         sha256="446a9538cb6c348e3516120d7c08b09f57c36495e2acfffe59a5bf8b0cfb1a2d",
         width=3,
         pat_str=O200K_PATTERN,
+    ),
+    "o200k_harmony": Source(
+        tokenizer="o200k",
+        file="o200k_base.tiktoken",
+        url="https://openaipublic.blob.core.windows.net/encodings/o200k_base.tiktoken",
+        sha256="446a9538cb6c348e3516120d7c08b09f57c36495e2acfffe59a5bf8b0cfb1a2d",
+        width=3,
+        pat_str=O200K_PATTERN,
+        special_tokens=O200K_HARMONY_SPECIALS,
     ),
     "llama3": Source(
         tokenizer="llama3",
@@ -139,7 +175,7 @@ def get_encoding(encoding_name: str) -> core.Encoding:
     to its SHA-256.
 
     Args:
-        encoding_name: gpt2, cl100k_base or o200k_base.
+        encoding_name: gpt2, cl100k_base, o200k_base or o200k_harmony.
 
     Returns:
         The encoding.
@@ -201,6 +237,6 @@ def list_encoding_names() -> list[str]:
     """Returns the names of every encoding matisse_tokenizer knows.
 
     Returns:
-        The names, gpt2, cl100k_base, o200k_base and llama3.
+        The names, gpt2, cl100k_base, o200k_base, o200k_harmony and llama3.
     """
     return list(SOURCES)
