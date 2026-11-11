@@ -73,10 +73,18 @@ defaults:
 - pickling, by name for an encoding `get_encoding()` gives, by name and path for one `load_encoding()` read, and by its
   ranks and special tokens otherwise, as tiktoken pickles.
 
-Three calls are matisse's own. `encode_parallel(text, chunks)` and `encode_parallel_to_numpy(text, chunks)` encode one
-text in up to that many chunks on as many threads, cut only at matisse's certified cuts, with the ids `encode()` returns
-and the same special-token arguments. `encode_batch_to_numpy()` takes `encode_batch()`'s arguments and returns each
-text's ids as a NumPy array, so that a batch makes no Python integer per id.
+Four calls are matisse's own, not tiktoken's. `encode_parallel(text, chunks)` and `encode_parallel_to_numpy(text,
+chunks)` encode one text in up to that many chunks on as many threads, cut only at matisse's certified cuts, with the
+ids `encode()` returns and the same special-token arguments. `encode_batch_to_numpy()` takes `encode_batch()`'s
+arguments and returns each text's ids as a NumPy array, so that a batch makes no Python integer per id. `stream()`
+returns matisse's streaming encoder over the encoding, whose `push(part)` reads the next part of a text, a string or
+bytes that may end inside a code point's UTF-8 sequence, and returns the ids that have become final, which no
+continuation of the text can change, and whose `finish()` returns the rest, after which the stream reads a new text.
+Every id a stream returns is one of `encode_ordinary()`'s of the whole text and all of them are, so every special
+token's spelling is read as text. How far the ids lag behind the parts is what [limits.md](limits.md) gives for
+matisse's `Stream_encoder`. A stream serves one thread at a time, its calls release the interpreter lock, and once it
+has refused a text, ill-formed UTF-8 or a text that ends inside a sequence, every further call is refused with
+`ValueError`.
 
 The constructor `Encoding(name, pat_str=..., mergeable_ranks=..., special_tokens=...)` is tiktoken's, as Meta's
 tokenizer.py and tiktoken's README call it. It takes a pattern only when it is one of the four, spelled exactly as
@@ -119,7 +127,7 @@ are the places where matisse-tokenizer does something else:
 - **Model names.** `encoding_for_model()` and `encoding_name_for_model()` refuse with `NotImplementedError`, since the
   package keeps no table of model names, which change with every model a vendor releases.
 - **`encode_with_unstable()`** refuses with `NotImplementedError`. matisse lists no completions of a text's last piece;
-  its streaming encoder, not yet in the package, returns the ids that are final whatever follows.
+  its streaming encoder, `stream()` above, returns the ids that are final whatever follows instead.
 - **Private calls.** tiktoken's `_core_bpe`, `_encode_single_piece()`, `_encode_only_native_bpe()` and `_encode_bytes()`
   do not exist.
 - **Messages.** The types of the exceptions are tiktoken's: `ValueError` for a disallowed special token, with tiktoken's

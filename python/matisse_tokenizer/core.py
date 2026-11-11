@@ -20,7 +20,7 @@ import os
 import re
 import tempfile
 import threading
-from collections.abc import Collection, Iterable, Sequence, Set
+from collections.abc import Callable, Collection, Iterable, Sequence, Set
 from concurrent.futures import ThreadPoolExecutor
 from importlib import resources
 from typing import TYPE_CHECKING, Literal, NoReturn
@@ -32,6 +32,78 @@ if TYPE_CHECKING:
     import numpy.typing as npt
 
     from matisse_tokenizer.registry import Source
+
+
+class Stream:
+    """matisse's streaming encoder over an encoding, which returns each id of a text read in parts once no continuation
+    of the text can change it, as Encoding.stream() describes.
+
+    A stream serves one thread at a time, and its calls run with the interpreter lock released, so that streams on other
+    threads read at once. Once a stream has refused a text, every further call is refused.
+    """
+
+    def __init__(self, encoder: _core.Encoder) -> None:
+        """Starts a stream over an encoder.
+
+        Args:
+            encoder: The encoder, kept alive for as long as the stream.
+        """
+        self._stream = _core.Stream_encoder(encoder)
+        self._lock = threading.Lock()
+        self._refused = False
+
+    def push(self, part: str | bytes) -> list[int]:
+        """Reads the next part of the text and returns the ids that have become final.
+
+        Args:
+            part: The part, a string, or bytes, which may end inside a code point's UTF-8 sequence, the rest of which a
+                later part completes.
+
+        Returns:
+            The ids, which no continuation of the text can change.
+
+        Raises:
+            TypeError: If the part is neither a string nor bytes.
+            UnicodeEncodeError: If a string part holds a lone surrogate, which no UTF-8 spells.
+            ValueError: If the bytes read are not well-formed UTF-8, or the stream has refused its text.
+        """
+        if isinstance(part, (bytearray, memoryview)):
+            part = bytes(part)
+        return self._call(lambda: self._stream.push(part))
+
+    def finish(self) -> list[int]:
+        """Ends the text and returns the rest of its ids, after which the stream reads a new text.
+
+        Returns:
+            The ids, so that those returned since the text began are encode_ordinary()'s of the whole text.
+
+        Raises:
+            ValueError: If the text ends inside a UTF-8 sequence, or the stream has refused its text.
+        """
+        return self._call(self._stream.finish)
+
+    def _call(self, call: Callable[[], list[int]]) -> list[int]:
+        """Runs a call of the stream under its lock, and refuses every further call once one has refused the text.
+
+        Args:
+            call: The call.
+
+        Returns:
+            What the call returns.
+
+        Raises:
+            ValueError: If the stream has refused its text, now or before.
+        """
+        with self._lock:
+            if self._refused:
+                raise ValueError("this stream refused its text; start a new one with Encoding.stream()")
+            try:
+                return call()
+            except UnicodeEncodeError:
+                raise
+            except ValueError:
+                self._refused = True
+                raise
 
 
 class Encoding:
@@ -404,6 +476,19 @@ class Encoding:
             parts.append(numpy.array([special], dtype=numpy.uint32))
             parts.append(self._encoder.encode_parallel_to_numpy(stretch, self._share(chunks, stretch, text)))
         return parts[0] if len(parts) == 1 else _read_only(numpy.concatenate(parts))
+
+    def stream(self) -> Stream:
+        """Returns a stream over the encoding, matisse's streaming encoder, which returns each id once it is final.
+
+        This call is matisse's and not tiktoken's. A stream reads a text in parts and returns, after each, the ids no
+        continuation of the text can change, and the rest when it is finished, so that every id it returns is one of
+        encode_ordinary()'s of the whole text and all of them are. Every special token's spelling is read as text, as
+        encode_ordinary() reads it.
+
+        Returns:
+            The stream.
+        """
+        return Stream(self._encoder)
 
     def encode_with_unstable(self, text: str, **kwargs: object) -> NoReturn:
         """Refuses: matisse has no list of the completions a text's last piece can take.

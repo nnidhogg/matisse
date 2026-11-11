@@ -1012,5 +1012,6 @@ takes that relation directly.
 
 **Python bindings.** The PyPI name matisse is taken, and the package is matisse-tokenizer, imported as
 `matisse_tokenizer`, which [python.md](python.md) describes: tiktoken's interface over the encoder, built from the
-libraries by scikit-build-core and nanobind, with the reports of the pinned tokenizers shipped. The streaming encoder,
-the policy inventory and other widths are not reached from Python yet, and neither munch nor hopper has bindings.
+libraries by scikit-build-core and nanobind, with the reports of the pinned tokenizers shipped, and the streaming
+encoder beside it, with no special token allowed. The policy inventory and other widths are not reached from Python yet,
+and neither munch nor hopper has bindings.

@@ -4,6 +4,7 @@ from ranks, and the calls matisse_tokenizer refuses."""
 
 from __future__ import annotations
 
+import contextlib
 import pickle
 import shutil
 import threading
@@ -485,3 +486,68 @@ def test_tiktoken_s_own_o200k_harmony_table_builds_through_the_constructor_in_an
         assert ours.decode([200018]) == theirs.decode([200018])
         text = "<|start|>user<|message|>x<|reserved_200018|>y<|endofprompt|><|end|>"
         assert ours.encode(text, allowed_special="all") == theirs.encode(text, allowed_special="all")
+
+
+def test_a_stream_returns_final_ids_that_are_a_prefix_of_tiktoken_s_and_all_of_them_at_finish(pair):
+    import random
+
+    from test_ids import adversarial_texts, random_texts
+
+    ours, theirs = pair
+    generator = random.Random(7)
+    texts = random_texts(300) + [text for text in adversarial_texts() if len(text) < 20000]
+    stream = ours.stream()
+    for text in texts:
+        expected = theirs.encode_ordinary(text)
+        data = text.encode("utf-8")
+        returned: list[int] = []
+        start = 0
+        while start < len(data):
+            end = min(len(data), start + generator.randrange(1, 70))
+            part = data[start:end]
+            # Half the parts are pushed as text where they hold whole code points, the rest as bytes.
+            if generator.random() < 0.5:
+                with contextlib.suppress(UnicodeDecodeError):
+                    part = part.decode("utf-8")
+            returned += stream.push(part)
+            assert expected[: len(returned)] == returned
+            start = end
+        returned += stream.finish()
+        assert returned == expected
+    assert stream.push("hello ") + stream.push("world") + stream.finish() == theirs.encode_ordinary("hello world")
+
+
+def test_a_stream_refuses_bytes_that_are_not_utf_8_and_then_every_further_call(pair):
+    ours, _ = pair
+    stream = ours.stream()
+    with pytest.raises(ValueError):
+        stream.push(b"ab\xffcd")
+        stream.finish()
+    with pytest.raises(ValueError, match="refused"):
+        stream.push("more")
+    unfinished = ours.stream()
+    unfinished.push(b"a\xc3")
+    with pytest.raises(ValueError):
+        unfinished.finish()
+    with pytest.raises(TypeError):
+        ours.stream().push(5)
+
+
+def test_streams_on_threads_each_return_tiktoken_s_ids(pair):
+    ours, theirs = pair
+    texts = [f"thread {index}: " + "streamed text, piece by piece. " * (index + 3) for index in range(8)]
+    results: dict[int, list[int]] = {}
+
+    def work(index: int) -> None:
+        stream = ours.stream()
+        ids: list[int] = []
+        for start in range(0, len(texts[index]), 5):
+            ids += stream.push(texts[index][start : start + 5])
+        results[index] = ids + stream.finish()
+
+    threads = [threading.Thread(target=work, args=(index,)) for index in range(8)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert [results[index] for index in range(8)] == [theirs.encode_ordinary(text) for text in texts]

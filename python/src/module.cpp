@@ -27,6 +27,7 @@
 
 #include "matisse/encode/encoder.hpp"
 #include "matisse/encode/piece_cache.hpp"
+#include "matisse/encode/stream_encoder.hpp"
 #include "matisse/load/definition.hpp"
 #include "matisse/lookup/tokenizers.hpp"
 #include "matisse/validate/report.hpp"
@@ -523,6 +524,53 @@ void construct_cache(matisse::encode::Piece_cache* cache, const matisse::encode:
     }
 }
 
+/**
+ * @brief Starts a stream in place over an encoder, which the Python object keeps alive for as long as the stream.
+ * @param stream Where the stream is constructed.
+ * @param encoder The encoder.
+ */
+void construct_stream(matisse::encode::Stream_encoder* stream, const matisse::encode::Encoder& encoder)
+{
+    new (stream) matisse::encode::Stream_encoder{encoder};
+}
+
+/**
+ * @brief Reads the next part of a streamed text and returns the ids that have become final, with the interpreter lock
+ *        released.
+ * @param stream The stream.
+ * @param part The part, a string read as its UTF-8, or bytes, which may end inside a code point's sequence.
+ * @return The ids.
+ * @throws nb::builtin_exception A TypeError if the part is neither a string nor bytes.
+ * @throws nb::python_error If a string part holds a lone surrogate.
+ * @throws std::invalid_argument If the bytes read are not well-formed UTF-8, as Stream_encoder::push() refuses them.
+ */
+[[nodiscard]] Ids_t stream_push(matisse::encode::Stream_encoder& stream, const nb::handle part)
+{
+    if (nb::isinstance<nb::bytes>(part))
+    {
+        const auto bytes{nb::borrow<nb::bytes>(part)};
+
+        const std::string_view view{bytes.c_str(), bytes.size()};
+
+        return released([&] { return stream.push(view); });
+    }
+
+    const auto view{utf8_of(part)};
+
+    return released([&] { return stream.push(view); });
+}
+
+/**
+ * @brief Ends a streamed text and returns the rest of its ids, with the interpreter lock released.
+ * @param stream The stream.
+ * @return The ids.
+ * @throws std::invalid_argument If the text ends inside a UTF-8 sequence, as Stream_encoder::finish() refuses it.
+ */
+[[nodiscard]] Ids_t stream_finish(matisse::encode::Stream_encoder& stream)
+{
+    return released([&] { return stream.finish(); });
+}
+
 } // namespace
 
 NB_MODULE(_core, module)
@@ -559,6 +607,12 @@ NB_MODULE(_core, module)
 
     nb::class_<matisse::encode::Piece_cache>(module, "Piece_cache", "A piece cache one thread keeps across its calls.")
             .def("__init__", &construct_cache, nb::arg("encoder"), nb::keep_alive<1, 2>());
+
+    nb::class_<matisse::encode::Stream_encoder>(
+            module, "Stream_encoder", "matisse's streaming encoder over an encoder.")
+            .def("__init__", &construct_stream, nb::arg("encoder"), nb::keep_alive<1, 2>())
+            .def("push", &stream_push, nb::arg("part").none(), "The ids a part makes final.")
+            .def("finish", &stream_finish, "The rest of the text's ids.");
 
     module.def("check_text", &check_text, nb::arg("text").none(), "Refuses a text no encoding call takes.");
     module.def(
