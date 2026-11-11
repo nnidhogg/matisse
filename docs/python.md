@@ -2,10 +2,12 @@
 
 matisse-tokenizer is matisse's Python package, imported as `matisse_tokenizer`, at version 0.1.0. It puts matisse's
 encoder behind tiktoken's interface for GPT-2, cl100k_base, o200k_base and Llama 3, so that a program written against
-tiktoken runs on matisse by its import, and its ids are tiktoken's, held to them by the tests below. Where matisse
-cannot do what tiktoken does, the package refuses with an error that says so, and this page lists every such place. How
-the encoder works is in [design.md](design.md), what it guarantees in [limits.md](limits.md), and the C++ interface in
-[usage.md](usage.md).
+tiktoken runs on matisse by its import, and its ids are tiktoken's, held to them by the tests below. matisse's class
+tables are pinned to Unicode 16.0.0, the version of the tables tiktoken 0.14.0's regex engine reads, so the two class
+every code point alike, as [limits.md](limits.md) describes; a tiktoken whose tables move past that version fails the
+package's tests. Where matisse cannot do what tiktoken does, the package refuses with an error that says so, and this
+page lists every such place. How the encoder works is in [design.md](design.md), what it guarantees in
+[limits.md](limits.md), and the C++ interface in [usage.md](usage.md).
 
 ## **Installing and building**
 
@@ -121,15 +123,6 @@ are the places where matisse-tokenizer does something else:
   does not fit 32 bits, `UnicodeEncodeError` where `encode_to_numpy()` meets a lone surrogate, which tiktoken's does not
   repair either, while `encode()` and the other calls replace it with U+FFFD first as tiktoken does. The other messages
   are matisse's own.
-- **The Unicode version.** matisse's class tables are pinned to Unicode 15.0.0, as [limits.md](limits.md) describes, and
-  tiktoken 0.14.0's regex engine reads tables of Unicode 16.0.0. A text holding one of the code points that 15.1 and
-  16.0 assign as letters or numbers, 5,004 of them, or under o200k as letters, numbers or marks, 5,055, is segmented by
-  tiktoken as holding a letter or a number and by matisse as holding a code point of the other class, and the ids can
-  differ, as `"\U0001406b'd"` shows under GPT-2's pattern: tiktoken reads the Egyptian hieroglyph of Unicode 16.0 as a
-  letter and `'d` as the contraction after it, and matisse reads the hieroglyph and the apostrophe as one piece. The ids
-  are tiktoken's at every code point of planes 0 to 3 and 14 that Unicode 15.0.0 assigns, and the letters, numbers and
-  marks of 17.0.0 are of the other class in both. matisse_tokenizer does not refuse such a text, as matisse's encoder
-  does not.
 
 ## **Vocabulary files and the cache**
 
@@ -313,8 +306,7 @@ writes GPT-2's rank file from its encoder.json and vocab.bpe with tiktoken's own
 and serves the files to both packages through one cache directory. With `MATISSE_TEST_DOWNLOAD=1` and no directory the
 three public files are fetched from tiktoken's URLs instead, as the wheels' tests are, and Llama 3's tests skip. With
 neither every test that needs a vocabulary skips. `MATISSE_CORPUS_DIR` names the corpora of
-[benchmarks.md](benchmarks.md) and `MATISSE_UCD_DIR` a directory of the UnicodeData.txt of Unicode 16.0.0 and 17.0.0,
-each under its version, and the tests that read them skip without them.
+[benchmarks.md](benchmarks.md), and the tests that read them skip without them.
 
 - **test_ids.py** holds matisse-tokenizer's ids to tiktoken's and to matisse's fixtures: the known answers of
   `known_answers_reference.txt`, 3,000 seeded random texts per encoding drawn from white space of every kind,
@@ -324,12 +316,10 @@ each under its version, and the tests that read them skip without them.
   spellings against letters and each other, every special token allowed alone and as text, and the ten corpora of
   [benchmarks.md](benchmarks.md) below a gigabyte, each held to the vendors' digests of `vendors_reference.txt` and to
   tiktoken's ids, through every encoding call, both batch calls and `encode_parallel()`.
-- **test_unicode.py** holds the Unicode boundary: at each of the 169,981 code points of planes 0 to 3 and 14 that
-  Unicode 15.0.0 leaves unassigned, matisse segments a probe as Unicode 15.0.0 does, tiktoken departs from it exactly at
-  the 5,004 letters and numbers of 15.1 and 16.0, 5,055 with the marks under o200k, and nowhere else, and at every code
-  point 15.0.0 assigns there, under three probes, the two packages give the same ids. The code points assigned after
-  15.0.0 are listed in the test, derived from the Unicode data files by a function beside them, which a test runs given
-  `MATISSE_UCD_DIR`.
+- **test_unicode.py** holds the Unicode version: matisse-tokenizer's ids are tiktoken's at every Unicode scalar value
+  followed by `'s`, and at every code point of planes 0 to 3 and 14 in three more contexts; the class tables are of
+  Unicode 16.0.0; and tiktoken reads every code point the tables leave out as the other class, by matisse's own
+  tools/unicode/check_tiktoken.py, so that a tiktoken whose tables are of a later version fails the test.
 - **test_api.py** holds the calls' arguments, defaults and refusals to tiktoken's: the special-token arguments in
   combination, the disallowed check's error and message, the vocabulary's figures, the single-token calls, decoding and
   its errors, lone surrogates, the batch calls and their thread counts, threads encoding at once, pickling, the
@@ -339,5 +329,5 @@ each under its version, and the tests that read them skip without them.
 - **test_reports.py** holds each shipped report to the report `validate()` decides at the registry's width, and its
   refusal under a pattern of other class symbols.
 
-With every input given, the suite is 174 tests, all passing, in about a minute and a half on the machine above; with no
-vocabulary, 14 pass and 160 skip.
+With every input given, the suite is 175 tests, all passing, in about six and a half minutes on the machine above, most
+of them the Unicode tests; with no vocabulary, 13 pass and 162 skip.

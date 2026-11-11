@@ -62,7 +62,15 @@ build-frontend = "build"
 manylinux-x86_64-image = "manylinux_2_34"
 manylinux-aarch64-image = "manylinux_2_34"
 test-groups = ["test"]
-test-sources = ["python/tests", "libs/load/tests/data"]
+test-sources = [
+    "python/tests",
+    "libs/load/tests/data",
+    "tools/unicode/check_tiktoken.py",
+    "libs/gpt2/src/class_ranges.inc",
+    "libs/cl100k/src/class_ranges.inc",
+    "libs/o200k/src/class_ranges.inc",
+    "libs/llama3/src/class_ranges.inc",
+]
 # The tests fetch the three public rank files from tiktoken's URLs; Llama 3's is gated by its vendor and skipped.
 test-environment = { MATISSE_TEST_DOWNLOAD = "1" }
 test-command = "python -m pytest python/tests"

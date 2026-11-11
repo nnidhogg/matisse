@@ -10,7 +10,6 @@ import numpy
 import pytest
 
 from conftest import FIXTURES, UNIVERSES, corpus_path
-from test_unicode import after_15
 
 SEED = 20261110
 """The seed of the random texts."""
@@ -51,8 +50,7 @@ def digest_of(ids: numpy.ndarray | list[int]) -> str:
 
 
 def random_texts(count: int) -> list[str]:
-    """Returns seeded random texts drawn from the pieces, with random code points of every plane among them, none of
-    them assigned after Unicode 15.0.0, which test_unicode.py holds apart.
+    """Returns seeded random texts drawn from the pieces, with random code points of every plane among them.
 
     Args:
         count: The number of texts.
@@ -61,14 +59,13 @@ def random_texts(count: int) -> list[str]:
         The texts.
     """
     generator = random.Random(SEED)
-    later = after_15()
     texts = []
     for _ in range(count):
         parts = []
         for _ in range(generator.randrange(0, 40)):
             if generator.random() < 0.1:
                 point = generator.randrange(0, 0x110000)
-                parts.append(chr(point if not 0xD800 <= point < 0xE000 and point not in later else 0x20))
+                parts.append(chr(point if not 0xD800 <= point < 0xE000 else 0x20))
             else:
                 parts.append(generator.choice(PIECES))
         texts.append("".join(parts))
