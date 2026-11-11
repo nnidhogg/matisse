@@ -338,11 +338,13 @@ neither every test that needs a vocabulary skips. `MATISSE_CORPUS_DIR` names the
 - **test_api.py** holds the calls' arguments, defaults and refusals to tiktoken's: the special-token arguments in
   combination, the disallowed check's error and message, the vocabulary's figures, the single-token calls, decoding and
   its errors, lone surrogates, the batch calls and their thread counts, threads encoding at once, pickling, the
-  constructor from ranks, a rank file that is not the pinned one, and the calls refused.
+  constructor from ranks, a rank file that is not the pinned one, the calls refused, o200k_harmony and r50k_base against
+  tiktoken's, the model table against tiktoken's, and streams in random parts and on threads, each id held to tiktoken's
+  `encode_ordinary()`.
 - **test_load.py** holds the fetch and the cache against a server on the loopback interface: tiktoken's cache keys and
   directories, the digest, a cached file that is not the pinned one, the cache turned off, and the request's headers.
 - **test_reports.py** holds each shipped report to the report `validate()` decides at the registry's width, and its
   refusal under a pattern of other class symbols.
 
-With every input given, the suite is 175 tests, all passing, in about six and a half minutes on the machine above, most
-of them the Unicode tests; with no vocabulary, 13 pass and 162 skip.
+With every input given, the suite is 193 tests, all passing, in about eight minutes on the machine above, most of them
+the Unicode tests; with no vocabulary, 15 pass and 178 skip.
