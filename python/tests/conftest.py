@@ -1,12 +1,15 @@
 """What the tests share: the pinned vocabularies served to both matisse_tokenizer and tiktoken through one cache
-directory, the two packages' encodings side by side, and matisse's fixtures and corpora.
+directory, the two packages' encodings side by side, the pinned tokenizer.json files, and matisse's fixtures and
+corpora.
 
 The vocabulary comes from the directory MATISSE_VOCAB_DIR names, as matisse's CMake option names it, holding
 cl100k_base.tiktoken, o200k_base.tiktoken and, for Llama 3, llama3.tiktoken, and GPT-2's gpt2-vocab.json and
-gpt2-merges.txt, from which GPT-2's rank file is written with tiktoken's own conversion and held to tiktoken's
-r50k_base digest. With MATISSE_TEST_DOWNLOAD=1 and no directory, the files are fetched from tiktoken's URLs instead,
-Llama 3's left out. With neither, every test that needs a vocabulary is skipped. MATISSE_CORPUS_DIR names the corpora of
-matisse's docs/benchmarks.md, and the tests of a corpus the directory lacks are skipped.
+gpt2-merges.txt, from which GPT-2's rank file is written with tiktoken's own conversion and held to tiktoken's r50k_base
+digest, and the tokenizer.json files gpt2-tokenizer.json, cl100k-tokenizer.json, o200k-tokenizer.json and
+llama3-tokenizer.json. With MATISSE_TEST_DOWNLOAD=1 and no directory, the files are fetched from tiktoken's URLs and
+from the Hugging Face Hub at pinned commits instead, Llama 3's left out. With neither, every test that needs a
+vocabulary is skipped. MATISSE_CORPUS_DIR names the corpora of matisse's docs/benchmarks.md, and the tests of a corpus
+the directory lacks are skipped.
 """
 
 from __future__ import annotations
@@ -36,6 +39,27 @@ GPT2_URLS = {
     "gpt2-vocab.json": "https://openaipublic.blob.core.windows.net/gpt-2/encodings/main/encoder.json",
 }
 """The URLs of GPT-2's two files, which tiktoken's own gpt2 encoding reads."""
+
+TOKENIZER_JSON_URLS = {
+    "gpt2-tokenizer.json": (
+        "https://huggingface.co/openai-community/gpt2/resolve/607a30d783dfa663caf39e06633721c8d4cfcd7e/tokenizer.json"
+    ),
+    "cl100k-tokenizer.json": (
+        "https://huggingface.co/Xenova/gpt-4/resolve/1d9f1f1b1fae88c0e4df1dab0a397f8de6229075/tokenizer.json"
+    ),
+    "o200k-tokenizer.json": (
+        "https://huggingface.co/Xenova/gpt-4o/resolve/7956d98f2a83b2751a98ea7136fdf7fe6cf54e69/tokenizer.json"
+    ),
+}
+"""The URLs of the public tokenizer.json files the tests pin, each at the commit its digest was taken at."""
+
+TOKENIZER_JSON_FILES = {
+    "gpt2-tokenizer.json": "8414cab924d8b9b33013f0d221c5862f365ee9be39c5c2bfae8a5a9e970478a6",
+    "cl100k-tokenizer.json": "239eb2359f79c38497476671aaa835e01fb43d42743c612a8514a0dfa2ac93a2",
+    "o200k-tokenizer.json": "43a3ad4618a6a938f8c2614154ea10c31ad53a62d5683ae0b0e6133575cef07e",
+    "llama3-tokenizer.json": "e134af98b985517b4f068e3755ae90d4e9cd2d45d328325dc503f1c6b2d06cc7",
+}
+"""Every pinned tokenizer.json by its name in the vocabulary directory, with its SHA-256, as design.md pins them."""
 
 LLAMA3_SPECIALS = [
     "<|begin_of_text|>",
@@ -175,6 +199,39 @@ def pair(request: pytest.FixtureRequest, pairs: dict[str, tuple[object, object]]
     if request.param not in pairs:
         pytest.skip(f"the vocabulary does not hold {request.param}")
     return pairs[request.param]
+
+
+@pytest.fixture(scope="session")
+def tokenizer_jsons(tmp_path_factory: pytest.TempPathFactory) -> dict[str, pathlib.Path]:
+    """Serves the pinned tokenizer.json files, each held to its digest, from the vocabulary directory or, with
+    MATISSE_TEST_DOWNLOAD=1 and no directory, fetched from the Hugging Face Hub.
+
+    Returns:
+        The path of each file by its name, Llama 3's only when the vocabulary directory holds it.
+    """
+    named = os.environ.get("MATISSE_VOCAB_DIR")
+    paths: dict[str, pathlib.Path] = {}
+
+    if named:
+        for file, digest in TOKENIZER_JSON_FILES.items():
+            path = pathlib.Path(named) / file
+            if not path.exists():
+                continue
+            assert sha256_of(path) == digest, f"{path} is not the pinned file"
+            paths[file] = path
+    elif os.environ.get("MATISSE_TEST_DOWNLOAD") == "1":
+        from matisse_tokenizer import load
+
+        files = tmp_path_factory.mktemp("tokenizer-json")
+        for file, url in TOKENIZER_JSON_URLS.items():
+            path = files / file
+            path.write_bytes(load.read_file(url))
+            assert sha256_of(path) == TOKENIZER_JSON_FILES[file], f"{url} is not the pinned file"
+            paths[file] = path
+    else:
+        pytest.skip("no vocabulary: set MATISSE_VOCAB_DIR, or MATISSE_TEST_DOWNLOAD=1 to fetch it")
+
+    return paths
 
 
 def corpus_path(name: str) -> pathlib.Path:

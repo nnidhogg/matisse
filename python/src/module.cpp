@@ -1,8 +1,9 @@
-// The extension module of matisse-tokenizer, matisse_tokenizer._core: matisse's loader, validator and encoder as Python
-// sees them. Python's matisse_tokenizer package builds the tiktoken interface on top; this module only converts and
-// calls, and every decision is matisse's. A text is read from a Python string as its UTF-8, which CPython keeps with
-// the string, and every encoding runs with the interpreter lock released, so that threads encode at once.
+// The extension module of matisse-tokenizer, matisse_tokenizer._core: matisse's loaders, validator and encoder as
+// Python sees them. Python's matisse_tokenizer package builds the tiktoken interface on top; this module only converts
+// and calls, and every decision is matisse's. A text is read from a Python string as its UTF-8, which CPython keeps
+// with the string, and every encoding runs with the interpreter lock released, so that threads encode at once.
 
+#include <algorithm>
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
@@ -235,6 +236,38 @@ void check_text(const nb::handle text)
     }
 
     return released([&] { return matisse::load::read_tiktoken(path, tokens); });
+}
+
+/**
+ * @brief Reads a Hugging Face tokenizer.json under the tokenizer whose pattern its pre-tokenizer runs, found by the
+ *        pattern's published spelling, as matisse-validate finds it.
+ * @param path The file's path.
+ * @return The tokenizer's name, as lookup::tokenizer() knows it, and the definition.
+ * @throws std::invalid_argument If read_tokenizer_json() refuses the file, or no tokenizer matisse describes has the
+ *         pattern its pre-tokenizer runs.
+ * @throws std::runtime_error If the file cannot be read.
+ */
+[[nodiscard]] std::pair<std::string, matisse::load::Definition> read_tokenizer_json(const std::string& path)
+{
+    return released([&] {
+        const auto spelling{matisse::load::tokenizer_json_spelling(path)};
+
+        auto described{matisse::lookup::tokenizers()};
+
+        const auto found{std::ranges::find(described, spelling, &matisse::lookup::Tokenizer::spelling)};
+
+        if (found == described.end())
+        {
+            throw std::invalid_argument{std::format(
+                    "the pre-tokenizer of {} runs the pattern \"{}\", and no tokenizer matisse describes has that "
+                    "pattern",
+                    path, spelling)};
+        }
+
+        auto definition{matisse::load::read_tokenizer_json(path, spelling)};
+
+        return std::pair{std::string{found->name}, std::move(definition)};
+    });
 }
 
 /**
@@ -621,6 +654,10 @@ NB_MODULE(_core, module)
     module.def(
             "read_tiktoken", &read_tiktoken, nb::arg("path"), nb::arg("specials"),
             "Reads a rank file with the special tokens given.");
+    module.def(
+            "read_tokenizer_json", &read_tokenizer_json, nb::arg("path"),
+            "Reads a tokenizer.json under the tokenizer whose pattern its pre-tokenizer runs, with that tokenizer's "
+            "name.");
     module.def(
             "validate", &validate, nb::arg("tokenizer"), nb::arg("width"),
             "Decides the report of a tokenizer's pattern.");

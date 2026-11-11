@@ -107,7 +107,8 @@ class Stream:
 
 
 class Encoding:
-    """An encoding: a rank file read under one of the patterns matisse describes, with its special tokens."""
+    """An encoding: a rank file or a Hugging Face tokenizer.json read under one of the patterns matisse describes, with
+    its special tokens."""
 
     def __init__(
         self,
@@ -188,6 +189,31 @@ class Encoding:
         encoding._build(name, source, path, digest, specials)
         return encoding
 
+    @classmethod
+    def _of_tokenizer_json(cls, path: str | os.PathLike[str]) -> Encoding:
+        """Returns an encoding read from a Hugging Face tokenizer.json, under the pattern its pre-tokenizer runs, named
+        by that pattern's encoding, with the file's special tokens.
+
+        Args:
+            path: The tokenizer.json's path.
+
+        Returns:
+            The encoding.
+        """
+        from matisse_tokenizer.load import sha256_of_file
+        from matisse_tokenizer.registry import TOKENIZER_JSONS, encoding_of_tokenizer
+
+        tokenizer, definition = _core.read_tokenizer_json(os.fspath(path))
+        name, source = encoding_of_tokenizer(tokenizer)
+        special_tokens = dict(definition.specials)
+        _aliases_ordered(special_tokens)
+
+        encoding = cls.__new__(cls)
+        shipped = TOKENIZER_JSONS.get(sha256_of_file(path)) == tokenizer
+        encoding._take(name, source, definition, special_tokens, shipped)
+        encoding._tokenizer_json = str(path)
+        return encoding
+
     def _build(self, name: str, source: Source, path: str, digest: str, special_tokens: dict[str, int]) -> None:
         """Reads the rank file and takes the pattern's report, the shipped one when the file is the pinned one.
 
@@ -198,15 +224,37 @@ class Encoding:
             digest: The rank file's SHA-256.
             special_tokens: The special tokens' spellings with their ids.
         """
+        by_id = sorted(_aliases_ordered(dict(special_tokens)).items(), key=lambda item: item[1])
+        definition = _core.read_tiktoken(os.fspath(path), by_id)
+        self._take(name, source, definition, special_tokens, digest == source.sha256)
+
+    def _take(
+        self,
+        name: str,
+        source: Source,
+        definition: _core.Definition,
+        special_tokens: dict[str, int],
+        shipped: bool,
+    ) -> None:
+        """Takes a definition read under a source's pattern, checks its special tokens as matisse's encoder takes them,
+        and takes the pattern's report, the shipped one when the file read is a pinned one, and builds the encoder.
+
+        Args:
+            name: The encoding's name.
+            source: The source of the encoding whose pattern the file is read under.
+            definition: The definition.
+            special_tokens: The special tokens' spellings with their ids.
+            shipped: Whether the file read is a pinned one, whose pattern's report the package ships.
+        """
         self.name = name
         self._pat_str = source.pat_str
         self._special_tokens = dict(special_tokens)
         self._registered = False
         self._path: str | None = None
+        self._tokenizer_json: str | None = None
         self._ranks: dict[bytes, int] | None = None
-
-        by_id = sorted(_aliases_ordered(self._special_tokens).items(), key=lambda item: item[1])
-        self._definition = _core.read_tiktoken(os.fspath(path), by_id)
+        self._definition = definition
+        by_id = sorted(self._special_tokens.items(), key=lambda item: item[1])
 
         ordinary = self._definition.ordinary_count
         for spelling, token in by_id:
@@ -226,7 +274,7 @@ class Encoding:
         self.max_token_value = max(ordinary - 1, max(self._special_tokens.values(), default=0))
         self._special_token_values = set(self._special_tokens.values())
 
-        self._report_shipped = digest == source.sha256
+        self._report_shipped = shipped
         if self._report_shipped:
             text = (resources.files("matisse_tokenizer") / "reports" / f"{source.tokenizer}.report").read_bytes()
             self._report = _core.deserialize(source.tokenizer, text)
@@ -698,7 +746,8 @@ class Encoding:
 
     def __getstate__(self) -> object:
         """Returns what pickles the encoding: its name when get_encoding() gives it, its name and path when
-        load_encoding() read it, and its ranks and special tokens otherwise, as tiktoken pickles an Encoding.
+        load_encoding() read it, its path when load_tokenizer_json() read it, and its ranks and special tokens
+        otherwise, as tiktoken pickles an Encoding.
 
         Returns:
             The state.
@@ -707,6 +756,8 @@ class Encoding:
             return self.name
         if self._path is not None:
             return {"name": self.name, "path": self._path}
+        if self._tokenizer_json is not None:
+            return {"tokenizer_json": self._tokenizer_json}
         return {
             "name": self.name,
             "pat_str": self._pat_str,
@@ -727,6 +778,9 @@ class Encoding:
             return
         if "path" in value:
             self.__dict__ = registry.load_encoding(value["name"], value["path"]).__dict__
+            return
+        if "tokenizer_json" in value:
+            self.__dict__ = registry.load_tokenizer_json(value["tokenizer_json"]).__dict__
             return
         self.__init__(**value)
 

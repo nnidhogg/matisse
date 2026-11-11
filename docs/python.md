@@ -18,12 +18,13 @@ them. NumPy is needed only by the calls that return arrays, `encode_to_numpy()`,
 
 The build is scikit-build-core with nanobind, both pinned in `pyproject.toml`, over the CMake build of the libraries.
 `pyproject.toml` stands at the root of the repository, not under `python/`, because the extension module builds from the
-root project's libraries and the munch submodule, and an sdist made from a subdirectory could not carry them. The
-package's own sources are under `python/`: `python/matisse_tokenizer/` the Python modules, `python/src/` the module's
-C++, `python/tests/` the tests and `python/bench/` the bench. The root `CMakeLists.txt` adds `python/` under the option
-`MATISSE_BUILD_PYTHON`, which `pyproject.toml` turns on and which builds every library as position-independent code;
-nothing else in the libraries changes. A build from source needs what the libraries need, a C++23 compiler, GCC 13 or
-Clang 19 or later, and CMake, and it fetches Boost's header-only modules as munch's build does:
+root project's libraries and the munch and hopper submodules, and an sdist made from a subdirectory could not carry
+them. The package's own sources are under `python/`: `python/matisse_tokenizer/` the Python modules, `python/src/` the
+module's C++, `python/tests/` the tests and `python/bench/` the bench. The root `CMakeLists.txt` adds `python/` under
+the option `MATISSE_BUILD_PYTHON`, which `pyproject.toml` turns on and which builds every library as
+position-independent code; nothing else in the libraries changes. A build from source needs what the libraries need, a
+C++23 compiler, GCC 13 or Clang 19 or later, and CMake, and it fetches Boost's header-only modules as munch's build
+does:
 
 ```bash
 git clone --recurse-submodules https://github.com/nnidhogg/matisse
@@ -75,23 +76,51 @@ and defaults:
 - pickling, by name for an encoding `get_encoding()` gives, by name and path for one `load_encoding()` read, and by its
   ranks and special tokens otherwise, as tiktoken pickles.
 
-Four calls are matisse's own, not tiktoken's. `encode_parallel(text, chunks)` and `encode_parallel_to_numpy(text,
-chunks)` encode one text in up to that many chunks on as many threads, cut only at matisse's certified cuts, with the
-ids `encode()` returns and the same special-token arguments. `encode_batch_to_numpy()` takes `encode_batch()`'s
-arguments and returns each text's ids as a NumPy array, so that a batch makes no Python integer per id. `stream()`
-returns matisse's streaming encoder over the encoding, whose `push(part)` reads the next part of a text, a string or
-bytes that may end inside a code point's UTF-8 sequence, and returns the ids that have become final, which no
-continuation of the text can change, and whose `finish()` returns the rest, after which the stream reads a new text.
-Every id a stream returns is one of `encode_ordinary()`'s of the whole text and all of them are, so every special
-token's spelling is read as text. How far the ids lag behind the parts is what [limits.md](limits.md) gives for
-matisse's `Stream_encoder`. A stream serves one thread at a time, its calls release the interpreter lock, and once it
-has refused a text, ill-formed UTF-8 or a text that ends inside a sequence, every further call is refused with
-`ValueError`.
+Five calls are matisse's own, not tiktoken's: `load_tokenizer_json()`, below, and four of an `Encoding`.
+`encode_parallel(text, chunks)` and `encode_parallel_to_numpy(text, chunks)` encode one text in up to that many chunks
+on as many threads, cut only at matisse's certified cuts, with the ids `encode()` returns and the same special-token
+arguments. `encode_batch_to_numpy()` takes `encode_batch()`'s arguments and returns each text's ids as a NumPy array, so
+that a batch makes no Python integer per id. `stream()` returns matisse's streaming encoder over the encoding, whose
+`push(part)` reads the next part of a text, a string or bytes that may end inside a code point's UTF-8 sequence, and
+returns the ids that have become final, which no continuation of the text can change, and whose `finish()` returns the
+rest, after which the stream reads a new text. Every id a stream returns is one of `encode_ordinary()`'s of the whole
+text and all of them are, so every special token's spelling is read as text. How far the ids lag behind the parts is
+what [limits.md](limits.md) gives for matisse's `Stream_encoder`. A stream serves one thread at a time, its calls
+release the interpreter lock, and once it has refused a text, ill-formed UTF-8 or a text that ends inside a sequence,
+every further call is refused with `ValueError`.
 
 The constructor `Encoding(name, pat_str=..., mergeable_ranks=..., special_tokens=...)` is tiktoken's, as Meta's
 tokenizer.py and tiktoken's README call it. It takes a pattern only when it is one of the four, spelled exactly as
 tiktoken spells gpt2's, cl100k_base's and o200k_base's and as Meta spells Llama 3's, and writes the ranks to a rank file
 that matisse's loader reads, so any special tokens can stand beside them.
+
+## **Reading a tokenizer.json**
+
+```python
+import matisse_tokenizer
+
+encoding = matisse_tokenizer.load_tokenizer_json("Meta-Llama-3-8B/tokenizer.json")
+
+assert encoding.name == "llama3"
+ids = encoding.encode("Hello, world!<|eot_id|>", allowed_special="all")
+```
+
+`load_tokenizer_json(path)` returns an `Encoding` read from a Hugging Face tokenizer.json by matisse's
+`read_tokenizer_json()`, under the one of the four patterns whose published spelling the file's pre-tokenizer runs, as
+`tokenizer_json_spelling()` finds it, and with the file's added special tokens as its special tokens. The encoding is
+named by that pattern's encoding, gpt2, o200k_base or llama3, and offers every call above. The cl100k conversions on the
+Hugging Face Hub, Xenova/gpt-4 among them, carry cl100k's pattern as tiktoken shipped it before its possessive rewrite,
+which is Llama 3's, so they read as llama3 with cl100k's vocabulary and special tokens, and on the corpora of the test
+strategy their ids are Hugging Face's, which are tiktoken's cl100k_base ids there. No file reads as cl100k_base, since
+Hugging Face's engine reads cl100k_base's published `\p{N}{1,3}+` as the interval repeated and so segments otherwise
+than tiktoken.
+
+Its ids are those Hugging Face tokenizers gives the file with `add_special_tokens=False`: a special token is cut out
+where it is allowed, as Hugging Face cuts its added tokens, and read as text where it is not, as Hugging Face's
+`encode_special_tokens` reads it. The tokens a post-processor adds under `add_special_tokens`, such as Llama 3's
+`<|begin_of_text|>`, are the caller's to add. A file whose SHA-256 is one of the four pinned tokenizer.json files' takes
+its pattern's shipped report, and any other file has the report decided when it is read. An encoding read so pickles by
+its path.
 
 ## **Where it refuses or differs**
 
@@ -112,6 +141,14 @@ are the places where matisse-tokenizer does something else:
   special tokens that share an id in any table but tiktoken's own of o200k_harmony, in whatever order: tiktoken decodes
   a shared id as one of its spellings by the hash order of its table, whichever order they are given in, and only
   o200k_harmony's has been checked against it.
+- **tokenizer.json.** `load_tokenizer_json()` refuses with `ValueError`, with matisse's loader's message, which names
+  the member of the file by its path from the root and what it holds, whatever the loader refuses: a model other than
+  BPE, a normalizer, truncation or padding, a pre-tokenizer whose pattern is none of the four, a post-processor that
+  adds tokens otherwise than under `add_special_tokens`, an added token that is not special or that stands at another id
+  than the one Hugging Face gives it, and ordinary ids that are not dense from zero, among the others
+  [design.md](design.md) lists. A file it cannot read is refused with `RuntimeError`. Its special tokens are refused as
+  the constructor's are, an empty one, one with an ordinary token's id and one whose spelling begins another's among
+  them.
 - **Argument types.** The arguments are read as tiktoken 0.14.0 reads them, in its order, with its exceptions.
   `allowed_special` is `"all"` or a `set` or `frozenset` of strings, and anything else, a string or a list among them,
   is refused with `TypeError`. A text that is not a string is refused with `TypeError`, before `allowed_special` is
@@ -309,7 +346,8 @@ encoder, whose tables [limits.md](limits.md) gives the cost of:
 ## **Tests**
 
 The tests are a pytest suite under `python/tests`, which holds every id to tiktoken 0.14.0's, pip-installed beside the
-package, under all four encodings:
+package, under all four encodings, and the ids of every tokenizer.json read to Hugging Face tokenizers 0.23.3's,
+pip-installed beside it too:
 
 ```bash
 pip install . --group test
@@ -318,10 +356,12 @@ MATISSE_VOCAB_DIR=VOCAB MATISSE_CORPUS_DIR=CORPORA python -m pytest python/tests
 
 `MATISSE_VOCAB_DIR` names the directory of the pinned vocabulary files, as matisse's CMake option does, and the suite
 writes GPT-2's rank file from its encoder.json and vocab.bpe with tiktoken's own conversion, held to r50k_base's digest,
-and serves the files to both packages through one cache directory. With `MATISSE_TEST_DOWNLOAD=1` and no directory the
-three public files are fetched from tiktoken's URLs instead, as the wheels' tests are, and Llama 3's tests skip. With
-neither every test that needs a vocabulary skips. `MATISSE_CORPUS_DIR` names the corpora of
-[benchmarks.md](benchmarks.md), and the tests that read them skip without them.
+and serves the files to both packages through one cache directory. The directory also holds the pinned tokenizer.json
+files that [design.md](design.md) lists, each held to its digest. With `MATISSE_TEST_DOWNLOAD=1` and no directory the
+three public rank files are fetched from tiktoken's URLs instead, as the wheels' tests are, and the three public
+tokenizer.json files from the Hugging Face Hub at their pinned commits, and Llama 3's tests skip. With neither every
+test that needs a vocabulary skips. `MATISSE_CORPUS_DIR` names the corpora of [benchmarks.md](benchmarks.md), and the
+tests that read them skip without them.
 
 - **test_ids.py** holds matisse-tokenizer's ids to tiktoken's and to matisse's fixtures: the known answers of
   `known_answers_reference.txt`, 3,000 seeded random texts per encoding drawn from white space of every kind,
@@ -341,10 +381,15 @@ neither every test that needs a vocabulary skips. `MATISSE_CORPUS_DIR` names the
   constructor from ranks, a rank file that is not the pinned one, the calls refused, o200k_harmony and r50k_base against
   tiktoken's, the model table against tiktoken's, and streams in random parts and on threads, each id held to tiktoken's
   `encode_ordinary()`.
+- **test_tokenizer_json.py** holds `load_tokenizer_json()` to Hugging Face tokenizers on each pinned tokenizer.json,
+  GPT-2's, Xenova's conversions of cl100k and o200k and Llama 3's: the known answers, 1,000 seeded random texts, the
+  adversarial texts, special tokens allowed and as text, and the three corpora of the test strategy, there held to the
+  vendors' digests as well; and the encoding's name, special tokens, report and pickling, a file of the bytes alone, and
+  the refusals, each the loader's message.
 - **test_load.py** holds the fetch and the cache against a server on the loopback interface: tiktoken's cache keys and
   directories, the digest, a cached file that is not the pinned one, the cache turned off, and the request's headers.
 - **test_reports.py** holds each shipped report to the report `validate()` decides at the registry's width, and its
   refusal under a pattern of other class symbols.
 
-With every input given, the suite is 193 tests, all passing, in about eight minutes on the machine above, most of them
-the Unicode tests; with no vocabulary, 15 pass and 178 skip.
+With every input given, the suite is 224 tests, all passing, in about nine minutes on the machine above, most of them
+the Unicode tests; with no vocabulary, 17 pass and 207 skip.

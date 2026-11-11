@@ -1,5 +1,5 @@
-"""The encodings matisse_tokenizer knows, under tiktoken's names, and get_encoding(), load_encoding() and
-list_encoding_names() over them.
+"""The encodings matisse_tokenizer knows, under tiktoken's names, and get_encoding(), load_encoding(),
+load_tokenizer_json() and list_encoding_names() over them.
 
 Each encoding is a tiktoken rank file read under one of the patterns matisse describes, gpt2, cl100k, o200k and llama3,
 with the vendor's special tokens, and o200k_harmony is o200k_base's rank file and pattern with tiktoken's special tokens
@@ -7,12 +7,15 @@ of it. GPT-2's rank file is r50k_base.tiktoken, which tiktoken builds its gpt2 e
 pattern and special token, which the package also serves as r50k_base, as tiktoken does. The rank files of GPT-2,
 cl100k_base and o200k_base are fetched from the URLs tiktoken reads them from and held to the SHA-256 tiktoken pins;
 Llama 3's is distributed by Meta under its own license and is read from a file the caller names, with load_encoding().
+A Hugging Face tokenizer.json is read under the pattern its pre-tokenizer runs, with load_tokenizer_json().
 """
 
 from __future__ import annotations
 
 import dataclasses
 import threading
+
+import os
 
 from matisse_tokenizer import core, load
 
@@ -149,6 +152,17 @@ SOURCES: dict[str, Source] = {
 }
 """Every encoding matisse_tokenizer knows, by its name."""
 
+TOKENIZER_JSONS: dict[str, str] = {
+    "8414cab924d8b9b33013f0d221c5862f365ee9be39c5c2bfae8a5a9e970478a6": "gpt2",
+    "239eb2359f79c38497476671aaa835e01fb43d42743c612a8514a0dfa2ac93a2": "llama3",
+    "43a3ad4618a6a938f8c2614154ea10c31ad53a62d5683ae0b0e6133575cef07e": "o200k",
+    "e134af98b985517b4f068e3755ae90d4e9cd2d45d328325dc503f1c6b2d06cc7": "llama3",
+}
+"""The SHA-256 of each pinned tokenizer.json with the pattern it is read under, in matisse's names:
+openai-community/gpt2's at commit 607a30d, Xenova/gpt-4's at 1d9f1f1, whose conversion of cl100k carries Llama 3's
+pattern, Xenova/gpt-4o's at 7956d98, and Meta's of Llama 3, as matisse's design.md pins them. A file with one of them
+takes the shipped report."""
+
 _lock = threading.RLock()
 """Held while an encoding is built, so that each is built once."""
 
@@ -239,6 +253,44 @@ def load_encoding(encoding_name: str, path: str) -> core.Encoding:
     encoding = core.Encoding._of_file(encoding_name, source, path, digest)
     encoding._path = str(path)
     return encoding
+
+
+def load_tokenizer_json(path: str | os.PathLike[str]) -> core.Encoding:
+    """Returns an encoding read from a Hugging Face tokenizer.json, under the pattern its pre-tokenizer runs and with
+    the special tokens of its added tokens.
+
+    matisse's loader recognizes the pre-tokenizer by the published spelling of each pattern matisse describes, and the
+    encoding is named by that pattern's encoding: gpt2, o200k_base or llama3, and llama3 for the cl100k conversions on
+    the Hugging Face Hub, which carry Llama 3's pattern; no tokenizer.json is read under cl100k_base's, which Hugging
+    Face's engine reads otherwise than tiktoken. Its ids are those Hugging Face tokenizers gives the file with
+    add_special_tokens false, a special token's spelling cut out where it is allowed, as tiktoken's calls cut it. A file
+    whose SHA-256 is a pinned tokenizer.json's takes the shipped report; any other has its pattern's report decided when
+    it is read.
+
+    Args:
+        path: The tokenizer.json's path.
+
+    Returns:
+        The encoding, not shared.
+
+    Raises:
+        ValueError: If matisse's loader refuses the file, with its message naming the member and what it holds, or no
+            pattern matisse describes is the one the pre-tokenizer runs.
+        RuntimeError: If the file cannot be read.
+    """
+    return core.Encoding._of_tokenizer_json(path)
+
+
+def encoding_of_tokenizer(tokenizer: str) -> tuple[str, Source]:
+    """Returns the encoding a pattern names, the first the registry lists under it.
+
+    Args:
+        tokenizer: The pattern's name in matisse, gpt2, cl100k, o200k or llama3.
+
+    Returns:
+        The encoding's name and its source.
+    """
+    return next((name, source) for name, source in SOURCES.items() if source.tokenizer == tokenizer)
 
 
 def list_encoding_names() -> list[str]:
