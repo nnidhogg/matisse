@@ -126,8 +126,8 @@ def source_of(name: str) -> Source:
     """
     if name not in SOURCES:
         raise ValueError(
-            f"Unknown encoding {name}. matisse_tokenizer encodes {', '.join(list_encoding_names())}; tiktoken's other "
-            f"encodings have no pattern description in matisse."
+            f"Unknown encoding {name}. matisse_tokenizer knows the encodings {', '.join(list_encoding_names())}; "
+            f"Encoding() builds another from its ranks under one of their patterns."
         )
     return SOURCES[name]
 

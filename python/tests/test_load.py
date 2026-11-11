@@ -12,6 +12,7 @@ from collections.abc import Iterator
 
 import pytest
 
+import matisse_tokenizer
 from matisse_tokenizer import load
 
 PAYLOAD = b"a rank file's bytes\n"
@@ -89,7 +90,7 @@ def test_a_request_carries_the_package_s_user_agent_and_nothing_of_the_caller_s(
     with load.fetched(server, DIGEST):
         pass
     headers = {name.lower(): value for name, value in Handler.requests[0].items()}
-    assert headers["user-agent"] == "matisse-tokenizer/0.1.0"
+    assert headers["user-agent"] == f"matisse-tokenizer/{matisse_tokenizer.__version__}"
     assert set(headers) <= {"user-agent", "host", "accept-encoding", "connection"}
 
 
@@ -126,3 +127,33 @@ def test_data_gym_s_directory_serves_when_tiktoken_s_is_not_named(server, monkey
     monkeypatch.setenv("DATA_GYM_CACHE_DIR", str(tmp_path / "gym"))
     with load.fetched(server, DIGEST) as path:
         assert os.path.dirname(path) == str(tmp_path / "gym")
+
+
+def test_load_tiktoken_bpe_reads_ranks_as_tiktoken_s_does(vocabulary, cache, server):
+    import tiktoken.load
+
+    path = str(vocabulary["cl100k_base"])
+    assert load.load_tiktoken_bpe(path) == tiktoken.load.load_tiktoken_bpe(path)
+    digest = hashlib.sha256(open(path, "rb").read()).hexdigest()
+    assert load.load_tiktoken_bpe(path, digest) == tiktoken.load.load_tiktoken_bpe(path, digest)
+    # As tiktoken does, a local file is cached too, under the SHA-1 of its path.
+    assert os.path.exists(os.path.join(cache, hashlib.sha1(path.encode()).hexdigest()))
+    with pytest.raises(ValueError, match="Hash mismatch"):
+        load.load_tiktoken_bpe(server, "0" * 64)
+    with pytest.raises(ValueError, match="Error parsing line"):
+        load.load_tiktoken_bpe(server)
+
+
+def test_meta_s_llama_3_tokenizer_builds_its_encoding_from_load_tiktoken_bpe(vocabulary, pairs):
+    if "llama3" not in pairs:
+        pytest.skip("the vocabulary does not hold llama3")
+    from conftest import LLAMA3_SPECIALS
+    from matisse_tokenizer.registry import LLAMA3_PATTERN
+
+    _, theirs = pairs["llama3"]
+    ranks = load.load_tiktoken_bpe(str(vocabulary["llama3"]))
+    specials = {spelling: len(ranks) + index for index, spelling in enumerate(LLAMA3_SPECIALS)}
+    ours = matisse_tokenizer.Encoding("llama3", pat_str=LLAMA3_PATTERN, mergeable_ranks=ranks, special_tokens=specials)
+    assert ours._report_shipped
+    text = "<|begin_of_text|><|start_header_id|>user<|end_header_id|>\n\nHello, Llama!<|eot_id|>"
+    assert ours.encode(text, allowed_special="all") == theirs.encode(text, allowed_special="all")

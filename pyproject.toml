@@ -8,7 +8,8 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "matisse-tokenizer"
-version = "0.1.0"
+# The version is read from python/matisse_tokenizer/__init__.py, its one source, by the regex provider below.
+dynamic = ["version"]
 description = "Exact BPE encoding for GPT-2, cl100k_base, o200k_base and Llama 3, behind tiktoken's interface"
 readme = "docs/python.md"
 requires-python = ">=3.12"
@@ -39,6 +40,8 @@ bench = ["tiktoken==0.14.0", "numpy==2.5.4"]
 
 [tool.scikit-build]
 minimum-version = "build-system.requires"
+metadata.version.provider = "scikit_build_core.metadata.regex"
+metadata.version.input = "python/matisse_tokenizer/__init__.py"
 build-dir = "build/python/{wheel_tag}"
 cmake.build-type = "Release"
 wheel.packages = ["python/matisse_tokenizer"]

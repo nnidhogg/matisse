@@ -1,4 +1,5 @@
-"""Fetching the pinned rank files into tiktoken's cache directory, each held to its SHA-256.
+"""Reading rank files through tiktoken's cache directory, as tiktoken's load module reads them: read_file(),
+read_file_cached() and load_tiktoken_bpe(), and fetched(), which gives matisse's loader a pinned file's path.
 
 The cache is tiktoken's own: the directory TIKTOKEN_CACHE_DIR names, else the one DATA_GYM_CACHE_DIR names, else
 data-gym-cache under the system's temporary directory, each file named by the SHA-1 of its URL, so that a file either
@@ -9,6 +10,7 @@ matisse-tokenizer/VERSION and nothing else of the caller's.
 
 from __future__ import annotations
 
+import base64
 import contextlib
 import hashlib
 import os
@@ -17,7 +19,9 @@ import urllib.request
 import uuid
 from collections.abc import Iterator
 
-USER_AGENT = "matisse-tokenizer/0.1.0"
+from matisse_tokenizer import __version__
+
+USER_AGENT = f"matisse-tokenizer/{__version__}"
 """The User-Agent every request carries: the package and its version, and nothing of the caller's."""
 
 TIMEOUT = 60
@@ -65,37 +69,104 @@ def sha256_of_file(path: str | os.PathLike[str]) -> str:
         return hashlib.file_digest(file, "sha256").hexdigest()
 
 
-def download(url: str, expected_hash: str) -> bytes:
-    """Fetches a URL's bytes and holds them to a SHA-256.
+def read_file(blobpath: str) -> bytes:
+    """Returns the bytes of a local file or of an http or https URL, as tiktoken's read_file() reads them.
 
     Args:
-        url: The URL.
-        expected_hash: The SHA-256 the bytes must have.
+        blobpath: The path or the URL.
 
     Returns:
         The bytes.
 
     Raises:
-        ValueError: If the bytes have another SHA-256.
-        urllib.error.URLError: If the request fails.
+        ValueError: If the URL is of another scheme, which tiktoken reads through blobfile and matisse_tokenizer does
+            not read.
+        OSError: If the file cannot be read or the request fails, urllib's errors among them.
     """
-    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+    if "://" not in blobpath:
+        with open(blobpath, "rb", buffering=0) as file:
+            return file.read()
+    if not blobpath.startswith(("http://", "https://")):
+        raise ValueError(f"matisse_tokenizer reads local files and http and https URLs, and not {blobpath}")
+    request = urllib.request.Request(blobpath, headers={"User-Agent": USER_AGENT})
     with urllib.request.urlopen(request, timeout=TIMEOUT) as response:
-        data = response.read()
-    if hashlib.sha256(data).hexdigest() != expected_hash:
+        return response.read()
+
+
+def read_file_cached(blobpath: str, expected_hash: str | None = None) -> bytes:
+    """Returns the bytes of a local file or a URL through the cache, held to a SHA-256 when one is given, as tiktoken's
+    read_file_cached() returns them.
+
+    A cached file is returned when it has the SHA-256 or none is given; one with another SHA-256 is removed and read
+    again. A file read is written to the cache, a local file as well as a URL's, as tiktoken writes it.
+
+    Args:
+        blobpath: The path or the URL.
+        expected_hash: The SHA-256 the bytes must have, or None.
+
+    Returns:
+        The bytes.
+
+    Raises:
+        ValueError: If the bytes have another SHA-256, with tiktoken's message.
+        OSError: If the file cannot be read, or a cache directory the environment names cannot be written.
+    """
+    cached = cache_path(blobpath)
+    if cached is None:
+        return read_file(blobpath)
+
+    if os.path.exists(cached):
+        with open(cached, "rb", buffering=0) as file:
+            data = file.read()
+        if expected_hash is None or hashlib.sha256(data).hexdigest() == expected_hash:
+            return data
+        with contextlib.suppress(OSError):
+            os.remove(cached)
+
+    data = read_file(blobpath)
+    if expected_hash and hashlib.sha256(data).hexdigest() != expected_hash:
         raise ValueError(
-            f"Hash mismatch for data downloaded from {url} (expected {expected_hash}). This may indicate a corrupted "
-            f"download. Please try again."
+            f"Hash mismatch for data downloaded from {blobpath} (expected {expected_hash}). This may indicate a "
+            f"corrupted download. Please try again."
         )
+    stored(cached, data)
     return data
+
+
+def load_tiktoken_bpe(tiktoken_bpe_file: str, expected_hash: str | None = None) -> dict[bytes, int]:
+    """Returns the ranks of a tiktoken rank file, each token's bytes with its rank, as tiktoken's load_tiktoken_bpe()
+    reads them, through the cache.
+
+    Args:
+        tiktoken_bpe_file: The rank file's path or URL.
+        expected_hash: The SHA-256 the file must have, or None.
+
+    Returns:
+        The ranks.
+
+    Raises:
+        ValueError: If the file has another SHA-256, or a line is not a base64 token and a rank, with tiktoken's
+            messages.
+    """
+    contents = read_file_cached(tiktoken_bpe_file, expected_hash)
+    ranks = {}
+    for line in contents.splitlines():
+        if not line:
+            continue
+        try:
+            token, rank = line.split()
+            ranks[base64.b64decode(token)] = int(rank)
+        except Exception as error:
+            raise ValueError(f"Error parsing line {line!r} in {tiktoken_bpe_file}") from error
+    return ranks
 
 
 @contextlib.contextmanager
 def fetched(url: str, expected_hash: str) -> Iterator[str]:
-    """Yields the path of a URL's file held to its SHA-256, from the cache when it holds the file and fetched otherwise.
+    """Yields the path of a URL's file held to its SHA-256, read through the cache by read_file_cached().
 
-    A fetched file is written to the cache; when caching is off, or the default cache directory cannot be written, it is
-    written to a temporary file that is removed once the caller is done with it.
+    The path is the cache's; when caching is off, or the default cache directory cannot be written, the file is written
+    to a temporary file that is removed once the caller is done with it.
 
     Args:
         url: The URL.
@@ -108,18 +179,10 @@ def fetched(url: str, expected_hash: str) -> Iterator[str]:
         ValueError: If the fetched bytes have another SHA-256.
         OSError: If the cache directory the environment names cannot be written.
     """
+    data = read_file_cached(url, expected_hash)
+
     cached = cache_path(url)
-
     if cached is not None and os.path.exists(cached):
-        if sha256_of_file(cached) == expected_hash:
-            yield cached
-            return
-        with contextlib.suppress(OSError):
-            os.remove(cached)
-
-    data = download(url, expected_hash)
-
-    if cached is not None and stored(cached, data):
         yield cached
         return
 
@@ -131,7 +194,7 @@ def fetched(url: str, expected_hash: str) -> Iterator[str]:
 
 
 def stored(cached: str, data: bytes) -> bool:
-    """Writes a fetched file to the cache, through a temporary file renamed into place, as tiktoken writes it.
+    """Writes a file to the cache, through a temporary file renamed into place, as tiktoken writes it.
 
     Args:
         cached: The file's path in the cache.

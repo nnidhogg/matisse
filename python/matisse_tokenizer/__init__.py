@@ -5,10 +5,12 @@ get_encoding() fetches and caches a pinned rank file as tiktoken does, and load_
 Llama 3's needs. docs/python.md in matisse's repository lists every call and where the package refuses or differs.
 """
 
-from matisse_tokenizer.core import Encoding
-from matisse_tokenizer.registry import get_encoding, list_encoding_names, load_encoding
-
+# The package's one version: pyproject.toml reads it for the package's metadata, and load.py for the User-Agent, so it
+# stands before the imports.
 __version__ = "0.1.0"
+
+from matisse_tokenizer.core import Encoding  # noqa: E402
+from matisse_tokenizer.registry import get_encoding, list_encoding_names, load_encoding  # noqa: E402
 
 __all__ = [
     "Encoding",
