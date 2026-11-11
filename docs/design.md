@@ -1101,18 +1101,19 @@ munch does not yet offer four things matisse could use. Each is general, so it w
 ## **Open questions**
 
 **Character-level merge tables.** SentencePiece BPE tokenizers without a pre-tokenizer, Llama 2 among them, merge
-Unicode characters, and munch's `token_automaton()` refuses a part that is not a byte or an earlier product. They also
-carry a normalizer and byte fallback. The lazy route covers byte-level merge tables, and character-level ones wait for a
-decision about munch's alphabet. A SentencePiece loader would give munch the self-split table: for every piece, the pair
-its own characters merge last under SentencePiece's loop, ranked by score, highest first. SentencePiece forms every
-piece by that split, so with distinct product scores the score-ranked self-split table reproduces its encoder, which is
-Yi's case. Equal scores are harder. Mistral's tied group of whitespace runs admits a split-and-rank compilation proved
-equivalent on every run, while the two equal-scored pieces ab and ba admit no rank order at all, so a loader would
-search each tie group for an output-equivalent table and refuse a model whose group admits none, naming the group.
-Whether a candidate table is equivalent is decidable by a finite test over canonical tokens and adjacent pairs, so what
-remains open is the cost of synthesis. Certification needs no table at all, since munch's lazy certification needs only
-the canonical tokens and the adjacency relation, which SentencePiece's own encoder supplies as a pair oracle, once munch
-takes that relation directly.
+Unicode characters, which munch 3.0.0's `token_automaton(merges, alphabet)` reads over an alphabet of characters,
+deciding windows at character boundaries. They also carry a normalizer and byte fallback, so the lazy route covers
+byte-level merge tables now and character-level ones once a loader supplies the alphabet and handles those two. A
+SentencePiece loader would give munch the self-split table: for every piece, the pair its own characters merge last
+under SentencePiece's loop, ranked by score, highest first. SentencePiece forms every piece by that split, so with
+distinct product scores the score-ranked self-split table reproduces its encoder, which is Yi's case. Equal scores are
+harder. Mistral's tied group of whitespace runs admits a split-and-rank compilation proved equivalent on every run,
+while the two equal-scored pieces ab and ba admit no rank order at all, so a loader would search each tie group for an
+output-equivalent table and refuse a model whose group admits none, naming the group. Whether a candidate table is
+equivalent is decidable by a finite test over canonical tokens and adjacent pairs, so what remains open is the cost of
+synthesis. Certification needs no table at all, since munch's lazy certification needs only the canonical tokens and the
+adjacency relation, which SentencePiece's own encoder supplies as a pair oracle, once munch takes that relation
+directly.
 
 **Further tokenizers.** After GPT-2, cl100k, o200k and Llama 3, the recommendation is WordPiece through munch's
 `trie_chain()` with bert-vocab.txt, which brings BERT's normalizer and so the first normalizer.

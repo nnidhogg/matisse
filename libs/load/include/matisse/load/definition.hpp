@@ -172,9 +172,9 @@ struct Definition
  * given before it in the file's order when that is no less, so a token whose id is another is refused. The definition
  * has the pair rule, which is Hugging Face's own, with the merges in the file's order, each a string of two parts
  * separated by a space or an array of two strings, and not every part of a merge need be formed before it, as
- * read_gpt2() requires of its files; the whole-piece lookup is the model's `ignore_merges`, false when it is absent. Its ids are
- * those Hugging Face's encode() gives with `add_special_tokens` false: the tokens a post-processor adds under
- * `add_special_tokens` are the caller's to add. The model's `unk_token` is not read, since the encoder refuses a
+ * read_gpt2() requires of its files; the whole-piece lookup is the model's `ignore_merges`, false when it is absent.
+ * Its ids are those Hugging Face's encode() gives with `add_special_tokens` false: the tokens a post-processor adds
+ * under `add_special_tokens` are the caller's to add. The model's `unk_token` is not read, since the encoder refuses a
  * definition in which a byte is no token, and under one in which every byte is a token no text holds an unknown
  * character.
  * @param path The path of tokenizer.json.
