@@ -58,11 +58,12 @@ parallel = encoding.encode_parallel(open("big.txt").read(), 16, disallowed_speci
 
 `get_encoding()` takes gpt2, r50k_base, cl100k_base, o200k_base and o200k_harmony, and `load_encoding(name, path)` reads
 a rank file from a path under one of the encodings' patterns and special tokens, Llama 3's among them.
-`list_encoding_names()` lists them all. r50k_base is gpt2's rank file, pattern and special token under the other name
-tiktoken gives them. o200k_harmony is o200k_base's rank file and pattern with tiktoken's 1,091 special tokens of it, two
-of which, `<|endofprompt|>` and `<|reserved_200018|>`, share the id 200018: each encodes to it, and it decodes as
-`<|endofprompt|>`, as tiktoken's decoder gives it. An `Encoding` offers tiktoken's calls with tiktoken's arguments and
-defaults:
+`list_encoding_names()` lists them all, and `encoding_name_for_model()` and `encoding_for_model()` find a model's
+encoding by tiktoken 0.14.0's table of models. r50k_base is gpt2's rank file, pattern and special token under the other
+name tiktoken gives them. o200k_harmony is o200k_base's rank file and pattern with tiktoken's 1,091 special tokens of
+it, two of which, `<|endofprompt|>` and `<|reserved_200018|>`, share the id 200018: each encodes to it, and it decodes
+as `<|endofprompt|>`, as tiktoken's decoder gives it. An `Encoding` offers tiktoken's calls with tiktoken's arguments
+and defaults:
 
 - `encode()`, `encode_ordinary()`, `encode_to_numpy()`, `encode_batch()` and `encode_ordinary_batch()`, with
   `allowed_special`, `disallowed_special` and `num_threads` as tiktoken reads them;
@@ -124,8 +125,10 @@ are the places where matisse-tokenizer does something else:
   `read_file()` with tiktoken's behavior, so that Meta's tokenizer.py reads Llama 3's ranks with it, but reads only
   local files and http and https URLs, refusing with `ValueError` the other schemes tiktoken reads through blobfile.
   tiktoken's `data_gym_to_mergeable_bpe_ranks()` and `dump_tiktoken_bpe()` do not exist.
-- **Model names.** `encoding_for_model()` and `encoding_name_for_model()` refuse with `NotImplementedError`, since the
-  package keeps no table of model names, which change with every model a vendor releases.
+- **Model names.** `encoding_name_for_model()` and `encoding_for_model()` follow tiktoken 0.14.0's table of models and
+  its prefixes, and refuse with `KeyError`, naming the encoding, a model tiktoken maps to p50k_base or p50k_edit, which
+  the package does not serve. A model a later tiktoken knows and 0.14.0 does not is refused with tiktoken's `KeyError`
+  until the package's table follows.
 - **`encode_with_unstable()`** refuses with `NotImplementedError`. matisse lists no completions of a text's last piece;
   its streaming encoder, `stream()` above, returns the ids that are final whatever follows instead.
 - **Private calls.** tiktoken's `_core_bpe`, `_encode_single_piece()`, `_encode_only_native_bpe()` and `_encode_bytes()`

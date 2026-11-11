@@ -246,10 +246,6 @@ def test_the_names_and_the_refusals_of_the_registry():
         matisse_tokenizer.get_encoding("p50k_base")
     with pytest.raises(ValueError, match="load_encoding"):
         matisse_tokenizer.get_encoding("llama3")
-    with pytest.raises(NotImplementedError):
-        matisse_tokenizer.encoding_for_model("gpt-4o")
-    with pytest.raises(NotImplementedError):
-        matisse_tokenizer.encoding_name_for_model("gpt-4o")
 
 
 def test_encode_with_unstable_is_refused(pair):
@@ -567,3 +563,34 @@ def test_r50k_base_is_gpt2_s_rank_file_pattern_and_special_token_under_tiktoken_
     for text in random_texts(300) + adversarial_texts()[:80]:
         assert ours.encode(text, allowed_special="all") == theirs.encode(text, allowed_special="all")
     assert pickle.loads(pickle.dumps(ours)).encode("pickled") == theirs.encode("pickled")
+
+
+def test_the_model_table_is_tiktoken_s_restricted_to_the_encodings_served(vocabulary):
+    import tiktoken.model
+
+    from matisse_tokenizer import model
+
+    served = set(matisse_tokenizer.list_encoding_names())
+    assert model.MODEL_TO_ENCODING == {
+        name: encoding for name, encoding in tiktoken.model.MODEL_TO_ENCODING.items() if encoding in served
+    }
+    assert list(model.MODEL_PREFIX_TO_ENCODING.items()) == [
+        (prefix, encoding) for prefix, encoding in tiktoken.model.MODEL_PREFIX_TO_ENCODING.items() if encoding in served
+    ]
+    names = list(tiktoken.model.MODEL_TO_ENCODING)
+    names += ["gpt-4o-2024-05-13", "gpt-4-0314", "gpt-oss-120b", "ft:gpt-4o:org", "o1-mini", "gpt-5-nano", "nope"]
+    for name in names:
+        try:
+            expected = tiktoken.encoding_name_for_model(name)
+        except KeyError:
+            assert raised(lambda: matisse_tokenizer.encoding_name_for_model(name)) == raised(
+                lambda: tiktoken.encoding_name_for_model(name)
+            )
+            continue
+        if expected in served:
+            assert matisse_tokenizer.encoding_name_for_model(name) == expected
+            continue
+        with pytest.raises(KeyError, match=expected):
+            matisse_tokenizer.encoding_name_for_model(name)
+    if "cl100k_base" in vocabulary:
+        assert matisse_tokenizer.encoding_for_model("gpt-4") is matisse_tokenizer.get_encoding("cl100k_base")
