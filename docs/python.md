@@ -76,18 +76,18 @@ and defaults:
 - pickling, by name for an encoding `get_encoding()` gives, by name and path for one `load_encoding()` read, and by its
   ranks and special tokens otherwise, as tiktoken pickles.
 
-Five calls are matisse's own, not tiktoken's: `load_tokenizer_json()`, below, and four of an `Encoding`.
-`encode_parallel(text, chunks)` and `encode_parallel_to_numpy(text, chunks)` encode one text in up to that many chunks
-on as many threads, cut only at matisse's certified cuts, with the ids `encode()` returns and the same special-token
-arguments. `encode_batch_to_numpy()` takes `encode_batch()`'s arguments and returns each text's ids as a NumPy array, so
-that a batch makes no Python integer per id. `stream()` returns matisse's streaming encoder over the encoding, whose
-`push(part)` reads the next part of a text, a string or bytes that may end inside a code point's UTF-8 sequence, and
-returns the ids that have become final, which no continuation of the text can change, and whose `finish()` returns the
-rest, after which the stream reads a new text. Every id a stream returns is one of `encode_ordinary()`'s of the whole
-text and all of them are, so every special token's spelling is read as text. How far the ids lag behind the parts is
-what [limits.md](limits.md) gives for matisse's `Stream_encoder`. A stream serves one thread at a time, its calls
-release the interpreter lock, and once it has refused a text, ill-formed UTF-8 or a text that ends inside a sequence,
-every further call is refused with `ValueError`.
+Six calls are matisse's own, not tiktoken's: `load_tokenizer_json()` and `validate_merges()`, below, and four of an
+`Encoding`. `encode_parallel(text, chunks)` and `encode_parallel_to_numpy(text, chunks)` encode one text in up to that
+many chunks on as many threads, cut only at matisse's certified cuts, with the ids `encode()` returns and the same
+special-token arguments. `encode_batch_to_numpy()` takes `encode_batch()`'s arguments and returns each text's ids as a
+NumPy array, so that a batch makes no Python integer per id. `stream()` returns matisse's streaming encoder over the
+encoding, whose `push(part)` reads the next part of a text, a string or bytes that may end inside a code point's UTF-8
+sequence, and returns the ids that have become final, which no continuation of the text can change, and whose `finish()`
+returns the rest, after which the stream reads a new text. Every id a stream returns is one of `encode_ordinary()`'s of
+the whole text and all of them are, so every special token's spelling is read as text. How far the ids lag behind the
+parts is what [limits.md](limits.md) gives for matisse's `Stream_encoder`. A stream serves one thread at a time, its
+calls release the interpreter lock, and once it has refused a text, ill-formed UTF-8 or a text that ends inside a
+sequence, every further call is refused with `ValueError`.
 
 The constructor `Encoding(name, pat_str=..., mergeable_ranks=..., special_tokens=...)` is tiktoken's, as Meta's
 tokenizer.py and tiktoken's README call it. It takes a pattern only when it is one of the four, spelled exactly as
@@ -122,6 +122,34 @@ where it is allowed, as Hugging Face cuts its added tokens, and read as text whe
 its pattern's shipped report, and any other file has the report decided when it is read. An encoding read so pickles by
 its path.
 
+## **Certifying a merge table without a pre-tokenizer**
+
+```python
+import collections
+
+import matisse_tokenizer
+
+text = open("corpus.txt", "rb").read()
+pairs = collections.Counter(text[at : at + 2] for at in range(len(text) - 1))
+candidates = [pair for pair, _ in pairs.most_common(1000)]
+
+for window in matisse_tokenizer.validate_merges("tokenizer.json", candidates):
+    if window.certified:
+        print(window.window, "is cut at", window.origin)
+```
+
+`validate_merges(path, candidates)` is matisse's `validate_merges()` over a Hugging Face tokenizer.json whose
+pre-tokenizer is a ByteLevel without its regex, which splits nothing, so that its merge table merges a whole text and
+has no pattern an `Encoding` could be built under; matisse's loader reads the file under the empty spelling. Each
+candidate is bytes, and each is returned as a `MergeWindow` of its `window`, its `origin`, where the window's own
+encoding begins the token covering its last byte, the only origin that can be certified, and its `refutation`. That is
+None when the window is certified, and `certified` is then true, and otherwise a `Refutation` of the `tokens` of a
+string, the merge's segmentation of it, and the `occurrence` of the window in it, at which the token covering the
+window's last byte begins elsewhere, so that the window certifies no cut at any origin. The verdicts are exact under the
+pair rule, Hugging Face's merge, and of the merge alone, on a text with no special token cut out. The file is read and
+the windows decided with the interpreter lock released and the table's token automaton built once for all of them, and
+on GPT-2's table a window of three bytes takes about half a millisecond on average, as [limits.md](limits.md) gives.
+
 ## **Where it refuses or differs**
 
 Every call above returns tiktoken's ids, its exceptions' types and, for a disallowed special token, its message. These
@@ -149,6 +177,11 @@ are the places where matisse-tokenizer does something else:
   [design.md](design.md) lists. A file it cannot read is refused with `RuntimeError`. Its special tokens are refused as
   the constructor's are, an empty one, one with an ordinary token's id and one whose spelling begins another's among
   them.
+- **Merge tables.** `validate_merges()` refuses with `ValueError`, with matisse's message, a file matisse's loader
+  refuses under the empty spelling, a pre-tokenizer that splits a text among them, a model whose `ignore_merges` is
+  true, which would look a whole text up, a table munch's token automaton refuses, with a merge whose part no earlier
+  merge makes or that makes a token again, and an empty candidate, naming its index. A candidate that is not bytes is
+  refused with `TypeError` and a file it cannot read with `RuntimeError`.
 - **Argument types.** The arguments are read as tiktoken 0.14.0 reads them, in its order, with its exceptions.
   `allowed_special` is `"all"` or a `set` or `frozenset` of strings, and anything else, a string or a list among them,
   is refused with `TypeError`. A text that is not a string is refused with `TypeError`, before `allowed_special` is
@@ -386,10 +419,17 @@ tests that read them skip without them.
   adversarial texts, special tokens allowed and as text, and the three corpora of the test strategy, there held to the
   vendors' digests as well; and the encoding's name, special tokens, report and pickling, a file of the bytes alone, and
   the refusals, each the loader's message.
+- **test_merges.py** holds `validate_merges()` to Hugging Face tokenizers: on six written tables over three letters at
+  every window of up to three bytes, each verdict to the covering tokens Hugging Face gives every string up to the
+  length past which no refutation is needed and each refutation to Hugging Face's tokens of it, and on GPT-2's pinned
+  tokenizer.json with its pre-tokenizer a ByteLevel without its regex at the candidates drawn from twitter.json as
+  `matisse-validate` draws them, every certified window's cut at every occurrence in Hugging Face's encoding of the
+  whole corpus and every refutation that is UTF-8 to Hugging Face's tokens of it; and its refusals and what a window
+  decided carries.
 - **test_load.py** holds the fetch and the cache against a server on the loopback interface: tiktoken's cache keys and
   directories, the digest, a cached file that is not the pinned one, the cache turned off, and the request's headers.
 - **test_reports.py** holds each shipped report to the report `validate()` decides at the registry's width, and its
   refusal under a pattern of other class symbols.
 
-With every input given, the suite is 224 tests, all passing, in about nine minutes on the machine above, most of them
-the Unicode tests; with no vocabulary, 17 pass and 207 skip.
+With every input given, the suite is 233 tests, all passing, in about nine minutes on the machine above, most of them
+the Unicode tests; with no vocabulary, 25 pass and 208 skip.

@@ -1120,5 +1120,6 @@ takes that relation directly.
 **Python bindings.** The PyPI name matisse is taken, and the package is matisse-tokenizer, imported as
 `matisse_tokenizer`, which [python.md](python.md) describes: tiktoken's interface over the encoder, built from the
 libraries by scikit-build-core and nanobind, with the reports of the pinned tokenizers shipped, and the streaming
-encoder beside it, with no special token allowed. The policy inventory and other widths are not reached from Python yet,
-and neither munch nor hopper has bindings.
+encoder beside it, with no special token allowed, and `validate_merges()` over a tokenizer.json whose pre-tokenizer
+splits nothing. The policy inventory and other widths are not reached from Python yet, and neither munch nor hopper has
+bindings.

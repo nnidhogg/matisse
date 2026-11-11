@@ -31,6 +31,7 @@
 #include "matisse/encode/stream_encoder.hpp"
 #include "matisse/load/definition.hpp"
 #include "matisse/lookup/tokenizers.hpp"
+#include "matisse/validate/merges.hpp"
 #include "matisse/validate/report.hpp"
 
 namespace nb = nanobind;
@@ -299,6 +300,82 @@ void check_text(const nb::handle text)
     const std::string_view view{text.c_str(), text.size()};
 
     return released([&] { return matisse::validate::deserialize(view, described.pattern); });
+}
+
+/**
+ * @brief Returns the tokens of a refutation's segmentation, its bytes cut after every byte a boundary follows.
+ * @param segmentation The segmentation.
+ * @return The tokens, a list of bytes objects.
+ */
+[[nodiscard]] nb::list tokens_of(const munch::verifier::Marked_string& segmentation)
+{
+    const auto& [bytes, boundaries]{segmentation};
+
+    nb::list tokens{};
+
+    std::size_t start{0};
+
+    for (std::size_t at{0}; at < bytes.size(); ++at)
+    {
+        // The string's end carries no boundary and ends the last token.
+        if (!boundaries[at] && at + 1 < bytes.size())
+        {
+            continue;
+        }
+
+        tokens.append(nb::bytes{bytes.data() + start, at + 1 - start});
+
+        start = at + 1;
+    }
+
+    return tokens;
+}
+
+/**
+ * @brief Decides each candidate window of the merge table of a tokenizer.json whose pre-tokenizer splits nothing, read
+ *        under the empty spelling, with the interpreter lock released while the file is read and the windows decided.
+ * @param path The file's path.
+ * @param candidates The candidate windows.
+ * @return Each window decided, in the order given: its bytes, its origin, and None or its refutation's tokens and
+ *         occurrence.
+ * @throws std::invalid_argument If read_tokenizer_json() refuses the file under the empty spelling, a pre-tokenizer
+ *         that splits a text among its refusals, or validate_merges() refuses the table or a candidate.
+ * @throws std::runtime_error If the file cannot be read.
+ */
+[[nodiscard]] nb::list validate_merges(const std::string& path, const std::vector<nb::bytes>& candidates)
+{
+    std::vector<std::string> windows{};
+
+    for (const auto& candidate : candidates)
+    {
+        windows.emplace_back(candidate.c_str(), candidate.size());
+    }
+
+    const auto decided{released([&] {
+        const auto definition{matisse::load::read_tokenizer_json(path, "")};
+
+        return matisse::validate::validate_merges(definition, windows);
+    })};
+
+    nb::list out{};
+
+    for (const auto& [window, origin, refutation] : decided)
+    {
+        const nb::bytes bytes{window.data(), window.size()};
+
+        if (!refutation)
+        {
+            out.append(nb::make_tuple(bytes, origin, nb::none()));
+
+            continue;
+        }
+
+        const auto& [segmentation, occurrence]{*refutation};
+
+        out.append(nb::make_tuple(bytes, origin, nb::make_tuple(tokens_of(segmentation), occurrence)));
+    }
+
+    return out;
 }
 
 /**
@@ -664,4 +741,7 @@ NB_MODULE(_core, module)
     module.def(
             "deserialize", &deserialize, nb::arg("tokenizer"), nb::arg("text"),
             "Reads back the report of a tokenizer's pattern from its serialized text.");
+    module.def(
+            "validate_merges", &validate_merges, nb::arg("path"), nb::arg("candidates"),
+            "Decides each candidate window of the merge table of a tokenizer.json whose pre-tokenizer splits nothing.");
 }
