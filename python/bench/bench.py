@@ -8,6 +8,10 @@ matisse's C++ encoder, its Python package and tiktoken, set side by side compare
     python -I bench.py threads VOCAB_DIR TOKENIZERS PASSES FILE [N...]  the prompts over a pool of Python threads
     python -I bench.py load VOCAB_DIR TOKENIZERS RUNS                   a fresh process building an encoding
     python -I bench.py short FILE OUTPUT BYTES                          the prompts cut to at most BYTES bytes each
+    python -I bench.py json-digests VOCAB_DIR TOKENIZERS FILE...       the ids of each tokenizer.json on each file
+    python -I bench.py json-single VOCAB_DIR TOKENIZERS PASSES FILE    one long text, one call, from tokenizer.json
+    python -I bench.py json-prompts VOCAB_DIR TOKENIZERS PASSES FILE   NUL-separated prompts, one call each
+    python -I bench.py json-batch VOCAB_DIR TOKENIZERS PASSES FILE N   NUL-separated documents on N threads
 
 TOKENIZERS is a comma-separated list of gpt2, cl100k, o200k and llama3, matisse_bench's names. VOCAB_DIR holds the
 pinned files as matisse's tests read them; they are served to both packages through one cache directory named by
@@ -19,7 +23,17 @@ SHA-256 of the ids as little-endian 32-bit words, which matisse_bench's ids line
 The rows of single separate three costs. "encode fresh" times encode() on a string Python has not yet been asked the
 UTF-8 of, so the call converts it, and "encode cached" the same string again, whose UTF-8 CPython keeps beside it; the
 two differ by the conversion, which an ASCII string does not need. "numpy cached" times encode_to_numpy(), which builds
-no Python integer per id, so "encode cached" less it is the cost of the list. Nothing here is sent anywhere.
+no Python integer per id, so "encode cached" less it is the cost of the list.
+
+The json modes set matisse-tokenizer beside Hugging Face tokenizers, both reading the same pinned tokenizer.json,
+NAME-tokenizer.json in VOCAB_DIR held to its digest: matisse-tokenizer through load_tokenizer_json() and Hugging Face
+through Tokenizer.from_file() with encode_special_tokens set, so that both read a special token's spelling as text.
+Under each tokenizer and input both packages' ids are compared first, document by document, and printed as ids lines;
+a pair whose ids differ prints a line saying so and is not timed. Hugging Face's rows time encode() and
+encode_batch_fast(), each with add_special_tokens false and its ids taken as a Python list inside the clock, as
+encode_ordinary() returns them. json-batch's Hugging Face rows run on the pool RAYON_NUM_THREADS sizes, which is read
+once a process, so it must equal N. FILE in json-digests is read as documents separated by NUL bytes, one call each,
+and a file without one is one document. Nothing here is sent anywhere.
 """
 
 from __future__ import annotations
@@ -53,6 +67,15 @@ LLAMA3_PATTERN = (
     r"""\s+(?!\S)|\s+"""
 )
 """Llama 3's pattern, as meta-llama/llama3's llama/tokenizer.py spells it."""
+
+JSON_FILES = {
+    "gpt2": "8414cab924d8b9b33013f0d221c5862f365ee9be39c5c2bfae8a5a9e970478a6",
+    "cl100k": "239eb2359f79c38497476671aaa835e01fb43d42743c612a8514a0dfa2ac93a2",
+    "o200k": "43a3ad4618a6a938f8c2614154ea10c31ad53a62d5683ae0b0e6133575cef07e",
+    "llama3": "e134af98b985517b4f068e3755ae90d4e9cd2d45d328325dc503f1c6b2d06cc7",
+}
+"""The SHA-256 of each pinned tokenizer.json, read as NAME-tokenizer.json by matisse_bench's name, as design.md pins
+them."""
 
 
 def serve(vocab: str) -> str:
@@ -444,14 +467,196 @@ def write_short(path: str, output: str, limit: int) -> None:
         file.write(b"\0".join(cut))
 
 
+def tokenizer_jsons(vocab: str, tokenizer: str) -> tuple[object, object]:
+    """Returns a pinned tokenizer.json read by matisse-tokenizer and by Hugging Face tokenizers, the latter reading a
+    special token's spelling as text, as encode_ordinary() does.
+
+    Args:
+        vocab: The directory of the pinned files.
+        tokenizer: matisse_bench's name of the tokenizer.
+
+    Returns:
+        matisse-tokenizer's encoding and Hugging Face's tokenizer.
+    """
+    import tokenizers
+
+    import matisse_tokenizer
+
+    path = os.path.join(vocab, f"{tokenizer}-tokenizer.json")
+    with open(path, "rb") as file:
+        assert hashlib.sha256(file.read()).hexdigest() == JSON_FILES[tokenizer], f"{path} is not the pinned file"
+    theirs = tokenizers.Tokenizer.from_file(path)
+    theirs.encode_special_tokens = True
+    return matisse_tokenizer.load_tokenizer_json(path), theirs
+
+
+def exact(tokenizer: str, name: str, ours: list[object], theirs: list[object]) -> bool:
+    """Prints both packages' ids lines of an input and says whether their ids are equal document by document,
+    printing a line naming the pair when they are not.
+
+    Args:
+        tokenizer: The tokenizer.
+        name: The input's name.
+        ours: matisse-tokenizer's ids of each document.
+        theirs: Hugging Face's ids of each document.
+
+    Returns:
+        Whether the ids are equal.
+    """
+    import numpy
+
+    ids_line("matisse-py", tokenizer, name, flat(ours))
+    ids_line("hf", tokenizer, name, flat(theirs))
+    same = len(ours) == len(theirs) and all(
+        numpy.array_equal(numpy.asarray(mine, dtype="<u4"), numpy.asarray(hers, dtype="<u4"))
+        for mine, hers in zip(ours, theirs)
+    )
+    if not same:
+        print(f"differs {tokenizer} {name}: not timed", flush=True)
+    return same
+
+
+def run_json_digests(vocab: str, tokenizers: list[str], paths: list[str]) -> None:
+    """Prints both packages' ids lines of each file under each tokenizer.json, and any pair whose ids differ.
+
+    Args:
+        vocab: The directory of the pinned files.
+        tokenizers: The tokenizers.
+        paths: The files.
+    """
+    for tokenizer in tokenizers:
+        ours, theirs = tokenizer_jsons(vocab, tokenizer)
+        for path in paths:
+            documents = read_documents(path)
+            exact(tokenizer, os.path.basename(path),
+                  [ours.encode_to_numpy(document, disallowed_special=()) for document in documents],
+                  [theirs.encode(document, add_special_tokens=False).ids for document in documents])
+
+
+def run_json_single(vocab: str, tokenizers: list[str], passes: int, path: str) -> None:
+    """Times one long text in one call under each tokenizer.json, once both packages' ids of it are equal.
+
+    Args:
+        vocab: The directory of the pinned files.
+        tokenizers: The tokenizers.
+        passes: The timed passes.
+        path: The text's file.
+    """
+    import numpy
+
+    text = open(path, "rb").read().decode("utf-8")
+    name = os.path.basename(path)
+    size = len(text.encode("utf-8"))
+    for tokenizer in tokenizers:
+        ours, theirs = tokenizer_jsons(vocab, tokenizer)
+        reference = ours.encode_to_numpy(text, disallowed_special=())
+        if not exact(tokenizer, name, [reference], [theirs.encode(text, add_special_tokens=False).ids]):
+            continue
+        calls = [
+            ("matisse-py", "json numpy", functools.partial(ours.encode_to_numpy, disallowed_special=())),
+            ("matisse-py", "json list", ours.encode_ordinary),
+            ("hf", "encode", lambda each: theirs.encode(each, add_special_tokens=False).ids),
+            ("hf", "encode fast", lambda each: theirs.encode_batch_fast([each], add_special_tokens=False)[0].ids),
+        ]
+        for vendor, label, call in calls:
+            ids, seconds = timed(passes, lambda: fresh(text), call)
+            assert numpy.array_equal(numpy.asarray(ids, dtype="<u4"), reference)
+            ids_line(vendor, tokenizer, name, ids)
+            row(vendor, tokenizer, label, name, size, seconds, len(ids))
+            del ids
+
+
+def run_json_prompts(vocab: str, tokenizers: list[str], passes: int, path: str) -> None:
+    """Times one call per prompt under each tokenizer.json, once both packages' ids of every prompt are equal,
+    reporting each pass's throughput and the mean latency of a call.
+
+    Args:
+        vocab: The directory of the pinned files.
+        tokenizers: The tokenizers.
+        passes: The timed passes.
+        path: The prompts' file.
+    """
+    import numpy
+
+    prompts = read_documents(path)
+    name = os.path.basename(path)
+    size = sum(len(prompt.encode("utf-8")) for prompt in prompts)
+    for tokenizer in tokenizers:
+        ours, theirs = tokenizer_jsons(vocab, tokenizer)
+        reference = [ours.encode_to_numpy(prompt, disallowed_special=()) for prompt in prompts]
+        if not exact(tokenizer, name, reference,
+                     [theirs.encode(prompt, add_special_tokens=False).ids for prompt in prompts]):
+            continue
+        reference = flat(reference)
+        calls = [
+            ("matisse-py", "json prompts", ours.encode_ordinary),
+            ("matisse-py", "json prompts numpy", lambda each: ours.encode_to_numpy(each, disallowed_special=())),
+            ("hf", "prompts", lambda each: theirs.encode(each, add_special_tokens=False).ids),
+            ("hf", "prompts fast", lambda each: theirs.encode_batch_fast([each], add_special_tokens=False)[0].ids),
+        ]
+        for vendor, label, call in calls:
+
+            def every(texts: list[str]) -> list[object]:
+                return [call(prompt) for prompt in texts]
+
+            ids, seconds = timed(passes, lambda: [fresh(prompt) for prompt in prompts], every, flat)
+            assert numpy.array_equal(ids, reference)
+            ids_line(vendor, tokenizer, name, ids)
+            row(vendor, tokenizer, label, name, size, seconds, len(ids))
+            mean = statistics.median(seconds) / len(prompts) * 1e6
+            print(f"{vendor:<10} {tokenizer:<7} {label + ' latency':<18} {name:<24} {len(prompts)} calls: "
+                  f"per call median pass mean {mean:.2f} us", flush=True)
+
+
+def run_json_batch(vocab: str, tokenizers: list[str], passes: int, path: str, count: int) -> None:
+    """Times the documents of a file as one batch on a number of threads under each tokenizer.json, once both
+    packages' batch calls give equal ids of every document.
+
+    Args:
+        vocab: The directory of the pinned files.
+        tokenizers: The tokenizers.
+        passes: The timed passes.
+        path: The documents' file.
+        count: The thread count, which RAYON_NUM_THREADS must equal.
+    """
+    import numpy
+
+    assert os.environ.get("RAYON_NUM_THREADS") == str(count), "RAYON_NUM_THREADS must be the thread count"
+    documents = read_documents(path)
+    name = os.path.basename(path)
+    size = sum(len(document.encode("utf-8")) for document in documents)
+    for tokenizer in tokenizers:
+        ours, theirs = tokenizer_jsons(vocab, tokenizer)
+        reference = ours.encode_ordinary_batch(documents, num_threads=count)
+        if not exact(tokenizer, name, reference,
+                     [encoding.ids for encoding in theirs.encode_batch(documents, add_special_tokens=False)]):
+            continue
+        reference = flat(reference)
+        calls = [
+            ("matisse-py", "json batch", lambda texts: ours.encode_ordinary_batch(texts, num_threads=count)),
+            ("matisse-py", "json batch numpy",
+             lambda texts: ours.encode_batch_to_numpy(texts, num_threads=count, disallowed_special=())),
+            ("hf", "batch",
+             lambda texts: [encoding.ids for encoding in theirs.encode_batch(texts, add_special_tokens=False)]),
+            ("hf", "batch fast",
+             lambda texts: [encoding.ids for encoding in theirs.encode_batch_fast(texts, add_special_tokens=False)]),
+        ]
+        for vendor, label, call in calls:
+            ids, seconds = timed(passes, lambda: [fresh(document) for document in documents], call, flat)
+            assert numpy.array_equal(ids, reference)
+            ids_line(vendor, tokenizer, name, ids)
+            row(vendor, tokenizer, f"{label} x{count}", name, size, seconds, len(ids))
+
+
 def provenance() -> None:
     """Prints the versions, the machine and the processors the process may run on."""
     from importlib.metadata import version
 
     print("matisse-py bench")
-    for package in ("matisse-tokenizer", "tiktoken", "numpy"):
+    for package in ("matisse-tokenizer", "tiktoken", "numpy", "tokenizers"):
         print(f"  {package:<18} {version(package)}")
     print(f"  python             {sys.version.split()[0]}")
+    print(f"  RAYON_NUM_THREADS  {os.environ.get('RAYON_NUM_THREADS', 'unset')}")
     print(f"  system             {' '.join(os.uname()[i] for i in (0, 2, 4))}")
     print(f"  processors         {os.cpu_count()} visible, {len(os.sched_getaffinity(0))} allowed")
     shown = [os.path.basename(argument) if os.sep in argument else argument for argument in sys.argv[1:]]
@@ -465,7 +670,21 @@ def main() -> None:
         write_short(sys.argv[2], sys.argv[3], int(sys.argv[4]))
         return
     provenance()
+    if mode == "json-digests":
+        run_json_digests(sys.argv[2], sys.argv[3].split(","), sys.argv[4:])
+        return
     vocab, tokenizers, number = sys.argv[2], sys.argv[3].split(","), int(sys.argv[4])
+    if mode.startswith("json-"):
+        path = sys.argv[5]
+        if mode == "json-single":
+            run_json_single(vocab, tokenizers, number, path)
+        elif mode == "json-prompts":
+            run_json_prompts(vocab, tokenizers, number, path)
+        elif mode == "json-batch":
+            run_json_batch(vocab, tokenizers, number, path, int(sys.argv[6]))
+        else:
+            raise SystemExit(f"the json modes are json-digests, json-single, json-prompts and json-batch, not {mode!r}")
+        return
     root = serve(vocab)
     if mode == "load":
         run_load(vocab, tokenizers, number, root)
