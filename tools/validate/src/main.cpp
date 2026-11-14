@@ -424,33 +424,6 @@ void write_refused(std::ostream& out, const Options& options, const std::string_
 }
 
 /**
- * @brief Measures the certified-anchor supply of both inventories of a report on the input.
- * @param report The report.
- * @param input The input's text.
- * @param path The input's path, as given.
- * @return The supply of each inventory.
- * @throws std::runtime_error If the input is not well-formed UTF-8, the message naming the input and the byte offset.
- */
-[[nodiscard]] Measured measured(
-        const matisse::validate::Report& report, const std::string_view input, const std::string_view path)
-{
-    using matisse::validate::Inventory;
-
-    try
-    {
-        auto factorization{matisse::validate::supply(report, Inventory::factorization, input)};
-
-        auto policy{matisse::validate::supply(report, Inventory::policy, input)};
-
-        return Measured{.factorization = std::move(factorization), .policy = std::move(policy)};
-    }
-    catch (const std::invalid_argument& error)
-    {
-        throw std::runtime_error{std::format("cannot read {}: {}", path, error.what())};
-    }
-}
-
-/**
  * @brief Returns a JSON object of several lines indented to where it sits as a member of the document, every line but
  *        the first taking the indent.
  * @param object The object.
@@ -465,78 +438,6 @@ void write_refused(std::ostream& out, const Options& options, const std::string_
     }
 
     return object;
-}
-
-/**
- * @brief Writes a report as the JSON document: the file's path, the tokenizer it was read as, its token counts, the
- *        report, and the supply when an input was measured.
- * @param out The stream.
- * @param options The command line.
- * @param read The definition read and its tokenizer.
- * @param report The report.
- * @param supplies The supply of each inventory on the input, none when none was given.
- */
-void write_json(
-        std::ostream& out, const Options& options, const Read& read, const matisse::validate::Report& report,
-        const std::optional<Measured>& supplies)
-{
-    using matisse::validate::json_string;
-
-    const auto& [tokenizer, definition]{read};
-
-    out << std::format(
-            "{{\n  \"path\": {},\n  \"tokenizer\": {},\n  \"refused\": null,\n  \"tokens\": {},\n"
-            "  \"special_tokens\": {},\n",
-            json_string(options.file), json_string(tokenizer->name), definition.spellings.size(),
-            definition.specials.size());
-
-    const auto document{indented(matisse::validate::json(report))};
-
-    out << R"(  "report": )" << document;
-
-    if (supplies)
-    {
-        const auto& [factorization, policy]{*supplies};
-
-        out << ",\n" << R"(  "supply": )" << matisse::validate::supply_json(factorization, policy, options.input);
-    }
-
-    out << "\n}\n";
-}
-
-/**
- * @brief Writes a report as text: the file's heading, the tokenizer it was read as with its token counts, the report,
- *        and the supply section when an input was measured.
- * @param out The stream.
- * @param options The command line.
- * @param read The definition read and its tokenizer.
- * @param report The report.
- * @param supplies The supply of each inventory on the input, none when none was given.
- */
-void write_text(
-        std::ostream& out, const Options& options, const Read& read, const matisse::validate::Report& report,
-        const std::optional<Measured>& supplies)
-{
-    using matisse::validate::plural;
-
-    const auto& [tokenizer, definition]{read};
-
-    const auto tokens{definition.spellings.size()};
-
-    const auto specials{definition.specials.size()};
-
-    out << std::format(
-            "== {}\n-- tokenizer {}: {} token{}, {} special token{}\n", options.file, tokenizer->name, tokens,
-            plural(tokens), specials, plural(specials));
-
-    out << matisse::validate::render(report);
-
-    if (supplies)
-    {
-        const auto& [factorization, policy]{*supplies};
-
-        out << matisse::validate::supply_section(factorization, policy, options.input);
-    }
 }
 
 /**
@@ -713,6 +614,105 @@ void write_merges_text(
     }
 
     return true;
+}
+
+/**
+ * @brief Measures the certified-anchor supply of both inventories of a report on the input.
+ * @param report The report.
+ * @param input The input's text.
+ * @param path The input's path, as given.
+ * @return The supply of each inventory.
+ * @throws std::runtime_error If the input is not well-formed UTF-8, the message naming the input and the byte offset.
+ */
+[[nodiscard]] Measured measured(
+        const matisse::validate::Report& report, const std::string_view input, const std::string_view path)
+{
+    using matisse::validate::Inventory;
+
+    try
+    {
+        auto factorization{matisse::validate::supply(report, Inventory::factorization, input)};
+
+        auto policy{matisse::validate::supply(report, Inventory::policy, input)};
+
+        return Measured{.factorization = std::move(factorization), .policy = std::move(policy)};
+    }
+    catch (const std::invalid_argument& error)
+    {
+        throw std::runtime_error{std::format("cannot read {}: {}", path, error.what())};
+    }
+}
+
+/**
+ * @brief Writes a report as the JSON document: the file's path, the tokenizer it was read as, its token counts, the
+ *        report, and the supply when an input was measured.
+ * @param out The stream.
+ * @param options The command line.
+ * @param read The definition read and its tokenizer.
+ * @param report The report.
+ * @param supplies The supply of each inventory on the input, none when none was given.
+ */
+void write_json(
+        std::ostream& out, const Options& options, const Read& read, const matisse::validate::Report& report,
+        const std::optional<Measured>& supplies)
+{
+    using matisse::validate::json_string;
+
+    const auto& [tokenizer, definition]{read};
+
+    out << std::format(
+            "{{\n  \"path\": {},\n  \"tokenizer\": {},\n  \"refused\": null,\n  \"tokens\": {},\n"
+            "  \"special_tokens\": {},\n",
+            json_string(options.file), json_string(tokenizer->name), definition.spellings.size(),
+            definition.specials.size());
+
+    const auto document{indented(matisse::validate::json(report))};
+
+    out << R"(  "report": )" << document;
+
+    if (supplies)
+    {
+        const auto& [factorization, policy]{*supplies};
+
+        out << ",\n" << R"(  "supply": )" << matisse::validate::supply_json(factorization, policy, options.input);
+    }
+
+    out << "\n}\n";
+}
+
+/**
+ * @brief Writes a report as text: the file's heading, the tokenizer it was read as with its token counts, the report,
+ *        and the supply section when an input was measured.
+ * @param out The stream.
+ * @param options The command line.
+ * @param read The definition read and its tokenizer.
+ * @param report The report.
+ * @param supplies The supply of each inventory on the input, none when none was given.
+ */
+void write_text(
+        std::ostream& out, const Options& options, const Read& read, const matisse::validate::Report& report,
+        const std::optional<Measured>& supplies)
+{
+    using matisse::validate::plural;
+
+    const auto& [tokenizer, definition]{read};
+
+    const auto tokens{definition.spellings.size()};
+
+    const auto specials{definition.specials.size()};
+
+    out << std::format(
+            "== {}\n-- tokenizer {}: {} token{}, {} special token{}\n", options.file, tokenizer->name, tokens,
+            plural(tokens), specials, plural(specials));
+
+    out << matisse::validate::render(report);
+
+    if (supplies)
+    {
+        const auto& [factorization, policy]{*supplies};
+
+        out << matisse::validate::supply_section(factorization, policy, options.input);
+    }
 }
 
 /**

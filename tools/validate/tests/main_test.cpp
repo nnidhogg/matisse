@@ -51,6 +51,41 @@ struct Run
 };
 
 /**
+ * @brief Llama 3's pattern as a JSON string spells it, each backslash doubled.
+ */
+constexpr std::string_view llama3_json_spelling{
+        R"((?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\\r\\n\\p{L}\\p{N}]?\\p{L}+|\\p{N}{1,3}| ?[^\\s\\p{L}\\p{N}]+[\\r\\n]*|)"
+        R"(\\s*[\\r\\n]+|\\s+(?!\\S)|\\s+)"};
+
+/**
+ * @brief A merge of a tokenizer.json the tests write, its two parts of printable ASCII, which GPT-2's byte map spells
+ *        as themselves.
+ */
+struct Written_merge
+{
+    /**
+     * @brief The left part.
+     */
+    std::string_view left{};
+
+    /**
+     * @brief The right part.
+     */
+    std::string_view right{};
+};
+
+/**
+ * @brief The pre-tokenizer of a merge table published without one, a ByteLevel without its regex, which splits nothing.
+ */
+constexpr std::string_view merge_table_pre_tokenizer{
+        R"({"type": "ByteLevel", "add_prefix_space": false, "use_regex": false})"};
+
+/**
+ * @brief A merge table whose second merge extends the first one's product, (a, b) then (ab, a).
+ */
+constexpr std::array<Written_merge, 2> extending_merges{{{.left = "a", .right = "b"}, {.left = "ab", .right = "a"}}};
+
+/**
  * @brief Returns the directory a test's runs write their streams and files into, one per test and process.
  * @return The directory, created.
  */
@@ -182,30 +217,6 @@ void expect_command_error(const Run& ran, const std::string_view diagnostic)
 }
 
 /**
- * @brief Llama 3's pattern as a JSON string spells it, each backslash doubled.
- */
-constexpr std::string_view llama3_json_spelling{
-        R"((?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\\r\\n\\p{L}\\p{N}]?\\p{L}+|\\p{N}{1,3}| ?[^\\s\\p{L}\\p{N}]+[\\r\\n]*|)"
-        R"(\\s*[\\r\\n]+|\\s+(?!\\S)|\\s+)"};
-
-/**
- * @brief A merge of a tokenizer.json the tests write, its two parts of printable ASCII, which GPT-2's byte map spells
- *        as themselves.
- */
-struct Written_merge
-{
-    /**
-     * @brief The left part.
-     */
-    std::string_view left{};
-
-    /**
-     * @brief The right part.
-     */
-    std::string_view right{};
-};
-
-/**
  * @brief Writes a tokenizer.json of the 256 single bytes, each spelled under GPT-2's byte map at its own id, then each
  *        merge's product at the ids after them, once however many merges make it, and `<|endoftext|>` as a special
  *        token after those: with no merge, the definition bytes.tiktoken is under gpt2.
@@ -262,17 +273,6 @@ void write_bytes_tokenizer_json(
                  "model": {{"type": "BPE", "vocab": {{{}}}, "merges": [{}]}}}})",
             normalizer, pre_tokenizer, special, vocab, pairs);
 }
-
-/**
- * @brief The pre-tokenizer of a merge table published without one, a ByteLevel without its regex, which splits nothing.
- */
-constexpr std::string_view merge_table_pre_tokenizer{
-        R"({"type": "ByteLevel", "add_prefix_space": false, "use_regex": false})"};
-
-/**
- * @brief A merge table whose second merge extends the first one's product, (a, b) then (ab, a).
- */
-constexpr std::array<Written_merge, 2> extending_merges{{{.left = "a", .right = "b"}, {.left = "ab", .right = "a"}}};
 
 /**
  * @brief Returns a command's text output after its first line, the heading that names the file.
