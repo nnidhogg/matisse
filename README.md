@@ -30,7 +30,7 @@ tables, and the runtime with its token ids, normalizers and special-token cuts.
 
 ## **Status**
 
-The version is 1.0.0, the first release, and matisse depends on munch 3.0.0, the release its submodule is pinned to. It
+The version is 1.0.0, the first release, and matisse depends on munch 3.1.0, the release its submodule is pinned to. It
 loads GPT-2's encoder.json and vocab.bpe, tiktoken rank files and Hugging Face tokenizer.json files, and it encodes text
 under GPT-2, cl100k_base, o200k_base and Llama 3 sequentially, in parallel at certified cuts and as a stream, with the
 vendors' special tokens cut out where they are allowed, and decodes ids back to bytes; validate decides each pattern's
@@ -285,7 +285,7 @@ is repaired or guessed, as [docs/limits.md](docs/limits.md) describes.
 **Platforms.** The promise is munch's: 64-bit Linux with GCC 13 or later and Clang 19 or later, source compatibility
 within a major version and no ABI promise. CI builds and tests on x86-64 and ARM64 and runs the address,
 undefined-behavior and thread sanitizers and the fuzz harnesses on x86-64. The munch submodule is pinned to a release,
-3.0.0 at this version, and so is the hopper submodule, 1.0.0, and a matisse release names the munch release it was built
+3.1.0 at this version, and so is the hopper submodule, 1.0.0, and a matisse release names the munch release it was built
 and tested against; the `Segmenter` runs a `munch::dfa::Simulator`, from the layer munch keeps outside its stable
 surface, so matisse's promise holds with the munch release it names.
 
