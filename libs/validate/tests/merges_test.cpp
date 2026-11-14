@@ -352,7 +352,7 @@ void expect_scanned(const std::vector<Merge>& merges)
     {
         const auto& seen{starts.at(window)};
 
-        const auto certified{seen == std::set<std::ptrdiff_t>{static_cast<std::ptrdiff_t>(origin)}};
+        const auto certified{seen == std::set{static_cast<std::ptrdiff_t>(origin)}};
 
         EXPECT_EQ(!refutation, certified) << window << " at " << origin;
 
@@ -539,7 +539,9 @@ TEST(Merges_test, The_text_reads_as_the_verdict_then_the_certified_and_the_refut
     // it, and an a after ab joins it into aba, one token, unless a b follows the a and takes it first.
     const std::vector<std::string> candidates{"ab", "b", "\n", "ba", "a", "x", "aa", "bb", "c"};
 
-    const auto text{render_merges(validate_merges(definition_of(written_tables[2]), candidates))};
+    const auto decided{validate_merges(definition_of(written_tables[2]), candidates)};
+
+    const auto text{render_merges(decided)};
 
     EXPECT_EQ(
             text,
@@ -560,8 +562,10 @@ TEST(Merges_test, The_text_reads_as_the_verdict_then_the_certified_and_the_refut
     // refutation of aaa is aaaa, cut between its two halves.
     const std::vector<std::string> runs{"aa", "a", "aaa"};
 
+    const auto runs_decided{validate_merges(definition_of(written_tables[3]), runs)};
+
     EXPECT_EQ(
-            render_merges(validate_merges(definition_of(written_tables[3]), runs)),
+            render_merges(runs_decided),
             "verdict                     no window of the 3 candidates certifies a cut\n"
             "certified windows           none\n"
             "refuted windows             3: 1 at width 1, 1 at width 2, 1 at width 3\n"
@@ -574,8 +578,10 @@ TEST(Merges_test, The_json_document_holds_each_window_in_the_order_decided_with_
 {
     const std::vector<std::string> candidates{"ab", "b", "\n"};
 
+    const auto decided{validate_merges(definition_of(written_tables[2]), candidates)};
+
     EXPECT_EQ(
-            merges_json(validate_merges(definition_of(written_tables[2]), candidates)),
+            merges_json(decided),
             R"({
   "verdict": "candidate windows certify a cut: 2 of 3",
   "windows": [{"window": "ab", "origin": 0, "refutation": null}, {"window": "b", "origin": 0, "refutation": {"segmentation": {"text": "ab", "boundaries": []}, "occurrence": 1}}, {"window": "\u000a", "origin": 0, "refutation": null}]

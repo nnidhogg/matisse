@@ -746,7 +746,10 @@ TEST(Report_test, Deserialize_refuses_a_text_not_as_serialize_writes_it_or_of_an
     refused(replaced("windows 2 -111", "windows 2 -11"), gated);
     refused(replaced("windows 2 -111", "windows 2 -112"), gated);
     refused(replaced("table policy", "table factorization"), gated);
-    refused(written.substr(0, written.size() - 1), gated);
+
+    const auto truncated{written.substr(0, written.size() - 1)};
+
+    refused(truncated, gated);
     refused(written + "windows 2 -111\n", gated);
 
     const Pattern other_symbols{

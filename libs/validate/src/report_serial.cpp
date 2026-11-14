@@ -47,184 +47,6 @@ constexpr std::string_view hex_digits{"0123456789abcdef"};
 using Ranks_t = std::array<std::size_t, 256>;
 
 /**
- * @brief Returns an inventory's name, as the text spells it.
- * @param inventory The inventory.
- * @return The name.
- */
-[[nodiscard]] std::string_view inventory_name(const Inventory inventory) noexcept
-{
-    switch (inventory)
-    {
-    case Inventory::factorization:
-        return "factorization";
-    case Inventory::policy:
-        break;
-    }
-
-    return "policy";
-}
-
-/**
- * @brief Returns the place of every class symbol in the alphabet's order, by byte.
- * @param symbols The class symbols, ascending.
- * @return The places, zero for a byte that is no symbol.
- */
-[[nodiscard]] Ranks_t ranks_of(const std::string_view symbols) noexcept
-{
-    Ranks_t ranks{};
-
-    for (std::size_t rank{0}; rank < symbols.size(); ++rank)
-    {
-        ranks[static_cast<unsigned char>(symbols[rank])] = rank;
-    }
-
-    return ranks;
-}
-
-/**
- * @brief Returns the number of windows of a width over a number of class symbols.
- * @param symbols The number of class symbols.
- * @param width The width.
- * @return The number, the symbols to the power of the width.
- */
-[[nodiscard]] std::size_t window_count(const std::size_t symbols, const std::size_t width) noexcept
-{
-    std::size_t count{1};
-
-    for (std::size_t symbol{0}; symbol < width; ++symbol)
-    {
-        count *= symbols;
-    }
-
-    return count;
-}
-
-/**
- * @brief Returns bytes written in hex, or `-` for none.
- * @param bytes The bytes.
- * @return The hex.
- */
-[[nodiscard]] std::string hex_of(const std::string_view bytes)
-{
-    if (bytes.empty())
-    {
-        return std::string{absent};
-    }
-
-    std::string hex{};
-
-    hex.reserve(2 * bytes.size());
-
-    for (const auto byte : bytes)
-    {
-        const auto value{static_cast<unsigned char>(byte)};
-
-        hex += hex_digits[value >> 4U];
-        hex += hex_digits[value & 0x0FU];
-    }
-
-    return hex;
-}
-
-/**
- * @brief Returns a marked string's two fields: its bytes in hex and its boundaries as `0` and `1`, each `-` when
- *        empty.
- * @param marked The marked string.
- * @return The two fields, a space between them.
- */
-[[nodiscard]] std::string marked_fields(const munch::verifier::Marked_string& marked)
-{
-    const auto& [bytes, boundaries]{marked};
-
-    std::string bits{};
-
-    for (const auto boundary : boundaries)
-    {
-        bits += boundary ? '1' : '0';
-    }
-
-    if (bits.empty())
-    {
-        bits += absent;
-    }
-
-    return std::format("{} {}", hex_of(bytes), bits);
-}
-
-/**
- * @brief Returns the gap's line: its bound, or `unbounded` with the stem, the loop and the suffix of its lasso.
- * @param gap The boundary gap.
- * @return The line, its newline included.
- */
-[[nodiscard]] std::string gap_line(const munch::verifier::Boundary_gap& gap)
-{
-    if (const auto* const bound{std::get_if<std::size_t>(&gap)})
-    {
-        return std::format("gap {}\n", *bound);
-    }
-
-    const auto& [stem, loop, suffix]{std::get<munch::verifier::Lasso>(gap)};
-
-    return std::format("gap unbounded {} {} {}\n", marked_fields(stem), marked_fields(loop), marked_fields(suffix));
-}
-
-/**
- * @brief Returns a window table's lines: the table's inventory, width and right context, a line for each failing
- *        truncation, and a line of the windows of each width from two to the table's.
- * @param table The window table.
- * @param symbols The class symbols, ascending.
- * @return The lines, a newline after every one.
- * @throws std::invalid_argument If the table is wider than nine symbols.
- */
-[[nodiscard]] std::string table_lines(const Window_table& table, const std::string_view symbols)
-{
-    const auto& [inventory, width, windows, right_context, failing]{table};
-
-    if (width > widest_table)
-    {
-        throw std::invalid_argument{std::format(
-                "serialize: the {} table is {} symbols wide, wider than the {} an origin's one digit holds",
-                inventory_name(inventory), width, widest_table)};
-    }
-
-    auto lines{std::format("table {} {} {}\n", inventory_name(inventory), width, right_context)};
-
-    for (const auto& [segmentation, occurrence, cut, context] : failing)
-    {
-        lines += std::format("failing {} {} {} {}\n", marked_fields(segmentation), occurrence, cut, context);
-    }
-
-    const auto ranks{ranks_of(symbols)};
-
-    // One line per width, every window of it a character in the order the class symbols give.
-    std::vector<std::string> widths{};
-
-    for (std::size_t window_width{2}; window_width <= width; ++window_width)
-    {
-        widths.emplace_back(window_count(symbols.size(), window_width), absent);
-    }
-
-    for (const auto& [window, origin] : windows)
-    {
-        std::size_t index{0};
-
-        for (const auto symbol : window)
-        {
-            index = index * symbols.size() + ranks[static_cast<unsigned char>(symbol)];
-        }
-
-        widths[window.size() - 2][index] = static_cast<char>('0' + origin);
-    }
-
-    for (std::size_t window_width{2}; window_width <= width; ++window_width)
-    {
-        lines += std::format("windows {} {}\n", window_width, widths[window_width - 2]);
-    }
-
-    return lines;
-}
-
-/**
  * @brief A reader of the text serialize() writes, line by line, each line's fields separated by one space.
  */
 class Serial_reader
@@ -235,26 +57,6 @@ public:
      * @param text The text.
      */
     explicit Serial_reader(const std::string_view text) noexcept : text_{text} {}
-
-    /**
-     * @brief Returns whether the next line begins with a keyword.
-     * @param keyword The keyword.
-     * @return True when a next line stands and its first field is the keyword.
-     */
-    [[nodiscard]] bool at(const std::string_view keyword) const noexcept
-    {
-        const auto end{std::min(text_.find('\n', start_), text_.size())};
-
-        const auto line{text_.substr(start_, end - start_)};
-
-        return start_ < text_.size() && line.substr(0, line.find(' ')) == keyword;
-    }
-
-    /**
-     * @brief Returns whether every line has been read.
-     * @return True at the text's end.
-     */
-    [[nodiscard]] bool done() const noexcept { return start_ >= text_.size(); }
 
     /**
      * @brief Reads the next line, which must end in a newline, and returns it whole.
@@ -277,6 +79,16 @@ public:
         start_ = end + 1;
 
         return read;
+    }
+
+    /**
+     * @brief Refuses the line last read.
+     * @param what What is wrong with it.
+     * @throws std::invalid_argument Always, naming the line's number.
+     */
+    [[noreturn]] void refuse(const std::string_view what) const
+    {
+        throw std::invalid_argument{std::format("deserialize: line {} {}", number_, what)};
     }
 
     /**
@@ -322,6 +134,18 @@ public:
     }
 
     /**
+     * @brief Returns a marked string read from its two fields, its bytes in hex and its boundaries as `0` and `1`.
+     * @param hex The bytes' field.
+     * @param bits The boundaries' field.
+     * @return The marked string.
+     * @throws std::invalid_argument If a field is not as marked_fields() writes it.
+     */
+    [[nodiscard]] munch::verifier::Marked_string marked(const std::string_view hex, const std::string_view bits) const
+    {
+        return {.bytes = bytes_of(hex), .boundaries = boundaries_of(bits)};
+    }
+
+    /**
      * @brief Returns a field read as a decimal number.
      * @param field The field.
      * @return The number.
@@ -344,26 +168,24 @@ public:
     }
 
     /**
-     * @brief Returns a marked string read from its two fields, its bytes in hex and its boundaries as `0` and `1`.
-     * @param hex The bytes' field.
-     * @param bits The boundaries' field.
-     * @return The marked string.
-     * @throws std::invalid_argument If a field is not as marked_fields() writes it.
+     * @brief Returns whether the next line begins with a keyword.
+     * @param keyword The keyword.
+     * @return True when a next line stands and its first field is the keyword.
      */
-    [[nodiscard]] munch::verifier::Marked_string marked(const std::string_view hex, const std::string_view bits) const
+    [[nodiscard]] bool at(const std::string_view keyword) const noexcept
     {
-        return {.bytes = bytes_of(hex), .boundaries = boundaries_of(bits)};
+        const auto end{std::min(text_.find('\n', start_), text_.size())};
+
+        const auto line{text_.substr(start_, end - start_)};
+
+        return start_ < text_.size() && line.substr(0, line.find(' ')) == keyword;
     }
 
     /**
-     * @brief Refuses the line last read.
-     * @param what What is wrong with it.
-     * @throws std::invalid_argument Always, naming the line's number.
+     * @brief Returns whether every line has been read.
+     * @return True at the text's end.
      */
-    [[noreturn]] void refuse(const std::string_view what) const
-    {
-        throw std::invalid_argument{std::format("deserialize: line {} {}", number_, what)};
-    }
+    [[nodiscard]] bool done() const noexcept { return start_ >= text_.size(); }
 
 private:
     /**
@@ -448,6 +270,186 @@ private:
 };
 
 /**
+ * @brief Returns bytes written in hex, or `-` for none.
+ * @param bytes The bytes.
+ * @return The hex.
+ */
+[[nodiscard]] std::string hex_of(const std::string_view bytes)
+{
+    if (bytes.empty())
+    {
+        return std::string{absent};
+    }
+
+    std::string hex{};
+
+    hex.reserve(2 * bytes.size());
+
+    for (const auto byte : bytes)
+    {
+        const auto value{static_cast<unsigned char>(byte)};
+
+        hex += hex_digits[value >> 4U];
+        hex += hex_digits[value & 0x0FU];
+    }
+
+    return hex;
+}
+
+/**
+ * @brief Returns a marked string's two fields: its bytes in hex and its boundaries as `0` and `1`, each `-` when
+ *        empty.
+ * @param marked The marked string.
+ * @return The two fields, a space between them.
+ */
+[[nodiscard]] std::string marked_fields(const munch::verifier::Marked_string& marked)
+{
+    const auto& [bytes, boundaries]{marked};
+
+    std::string bits{};
+
+    for (const auto boundary : boundaries)
+    {
+        bits += boundary ? '1' : '0';
+    }
+
+    if (bits.empty())
+    {
+        bits += absent;
+    }
+
+    return std::format("{} {}", hex_of(bytes), bits);
+}
+
+/**
+ * @brief Returns the gap's line: its bound, or `unbounded` with the stem, the loop and the suffix of its lasso.
+ * @param gap The boundary gap.
+ * @return The line, its newline included.
+ */
+[[nodiscard]] std::string gap_line(const munch::verifier::Boundary_gap& gap)
+{
+    if (const auto* const bound{std::get_if<std::size_t>(&gap)})
+    {
+        return std::format("gap {}\n", *bound);
+    }
+
+    const auto& [stem, loop, suffix]{std::get<munch::verifier::Lasso>(gap)};
+
+    return std::format("gap unbounded {} {} {}\n", marked_fields(stem), marked_fields(loop), marked_fields(suffix));
+}
+
+/**
+ * @brief Returns an inventory's name, as the text spells it.
+ * @param inventory The inventory.
+ * @return The name.
+ */
+[[nodiscard]] std::string_view inventory_name(const Inventory inventory) noexcept
+{
+    switch (inventory)
+    {
+    case Inventory::factorization:
+        return "factorization";
+    case Inventory::policy:
+        break;
+    }
+
+    return "policy";
+}
+
+/**
+ * @brief Returns the place of every class symbol in the alphabet's order, by byte.
+ * @param symbols The class symbols, ascending.
+ * @return The places, zero for a byte that is no symbol.
+ */
+[[nodiscard]] Ranks_t ranks_of(const std::string_view symbols) noexcept
+{
+    Ranks_t ranks{};
+
+    for (std::size_t rank{0}; rank < symbols.size(); ++rank)
+    {
+        ranks[static_cast<unsigned char>(symbols[rank])] = rank;
+    }
+
+    return ranks;
+}
+
+/**
+ * @brief Returns the number of windows of a width over a number of class symbols.
+ * @param symbols The number of class symbols.
+ * @param width The width.
+ * @return The number, the symbols to the power of the width.
+ */
+[[nodiscard]] std::size_t window_count(const std::size_t symbols, const std::size_t width) noexcept
+{
+    std::size_t count{1};
+
+    for (std::size_t symbol{0}; symbol < width; ++symbol)
+    {
+        count *= symbols;
+    }
+
+    return count;
+}
+
+/**
+ * @brief Returns a window table's lines: the table's inventory, width and right context, a line for each failing
+ *        truncation, and a line of the windows of each width from two to the table's.
+ * @param table The window table.
+ * @param symbols The class symbols, ascending.
+ * @return The lines, a newline after every one.
+ * @throws std::invalid_argument If the table is wider than nine symbols.
+ */
+[[nodiscard]] std::string table_lines(const Window_table& table, const std::string_view symbols)
+{
+    const auto& [inventory, width, windows, right_context, failing]{table};
+
+    if (width > widest_table)
+    {
+        throw std::invalid_argument{std::format(
+                "serialize: the {} table is {} symbols wide, wider than the {} an origin's one digit holds",
+                inventory_name(inventory), width, widest_table)};
+    }
+
+    auto lines{std::format("table {} {} {}\n", inventory_name(inventory), width, right_context)};
+
+    for (const auto& [segmentation, occurrence, cut, context] : failing)
+    {
+        lines += std::format("failing {} {} {} {}\n", marked_fields(segmentation), occurrence, cut, context);
+    }
+
+    const auto ranks{ranks_of(symbols)};
+
+    // One line per width, every window of it a character in the order the class symbols give.
+    std::vector<std::string> widths{};
+
+    for (std::size_t window_width{2}; window_width <= width; ++window_width)
+    {
+        const auto count{window_count(symbols.size(), window_width)};
+
+        widths.emplace_back(count, absent);
+    }
+
+    for (const auto& [window, origin] : windows)
+    {
+        std::size_t index{0};
+
+        for (const auto symbol : window)
+        {
+            index = index * symbols.size() + ranks[static_cast<unsigned char>(symbol)];
+        }
+
+        widths[window.size() - 2][index] = static_cast<char>('0' + origin);
+    }
+
+    for (std::size_t window_width{2}; window_width <= width; ++window_width)
+    {
+        lines += std::format("windows {} {}\n", window_width, widths[window_width - 2]);
+    }
+
+    return lines;
+}
+
+/**
  * @brief Reads the boundary gap's line.
  * @param reader The reader, before the line.
  * @return The gap.
@@ -488,9 +490,11 @@ private:
 {
     const auto head{reader.fields("table", 3)};
 
-    if (head[0] != inventory_name(inventory))
+    const auto name{inventory_name(inventory)};
+
+    if (head[0] != name)
     {
-        reader.refuse(std::format("is not the {} table's line", inventory_name(inventory)));
+        reader.refuse(std::format("is not the {} table's line", name));
     }
 
     const auto width{reader.number(head[1])};
@@ -590,9 +594,11 @@ Report deserialize(const std::string_view text, const pretok::Pattern& pattern)
 
     const auto alphabet{reader.fields("alphabet", 1)};
 
-    if (alphabet[0] != hex_of(symbols))
+    const auto symbols_hex{hex_of(symbols)};
+
+    if (alphabet[0] != symbols_hex)
     {
-        reader.refuse(std::format("names the class symbols {}, not the pattern's {}", alphabet[0], hex_of(symbols)));
+        reader.refuse(std::format("names the class symbols {}, not the pattern's {}", alphabet[0], symbols_hex));
     }
 
     auto gap{gap_of(reader)};
