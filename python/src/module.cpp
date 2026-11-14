@@ -49,21 +49,55 @@ using Ids_t = std::vector<matisse::load::Token_id_t>;
 using Id_array_t = nb::ndarray<nb::numpy, const matisse::load::Token_id_t, nb::ndim<1>>;
 
 /**
- * @brief Returns the tokenizer matisse describes under a name.
- * @param name The name, gpt2, cl100k, o200k or llama3.
- * @return The tokenizer.
- * @throws std::invalid_argument If no tokenizer has the name.
+ * @brief Returns a definition's special tokens, each its spelling and its id.
+ * @param definition The definition.
+ * @return The special tokens, in the definition's order.
  */
-[[nodiscard]] matisse::lookup::Tokenizer tokenizer_of(const std::string_view name)
+[[nodiscard]] std::vector<std::pair<std::string, matisse::load::Token_id_t>> specials_of(
+        const matisse::load::Definition& definition)
 {
-    auto tokenizer{matisse::lookup::tokenizer(name)};
+    std::vector<std::pair<std::string, matisse::load::Token_id_t>> specials{};
 
-    if (!tokenizer)
+    for (const auto& [spelling, id] : definition.specials)
     {
-        throw std::invalid_argument{std::format("matisse describes no tokenizer named '{}'", name)};
+        specials.emplace_back(spelling, id);
     }
 
-    return std::move(*tokenizer);
+    return specials;
+}
+
+/**
+ * @brief Returns the bytes of every ordinary token of a definition, by id.
+ * @param definition The definition.
+ * @return The bytes, a list of bytes objects.
+ */
+[[nodiscard]] nb::list spellings_of(const matisse::load::Definition& definition)
+{
+    nb::list spellings{};
+
+    for (const auto& spelling : definition.spellings)
+    {
+        spellings.append(nb::bytes{spelling.data(), spelling.size()});
+    }
+
+    return spellings;
+}
+
+/**
+ * @brief Constructs an encoder in place, with the interpreter lock released while it builds its tables.
+ * @param encoder Where the encoder is constructed.
+ * @param definition The definition, copied.
+ * @param report The report of the definition's pattern.
+ * @param allowed The spellings of the special tokens cut out of a text.
+ * @throws std::invalid_argument If the encoder refuses the definition or an allowed spelling.
+ */
+void construct_encoder(
+        matisse::encode::Encoder* encoder, const matisse::load::Definition& definition,
+        const matisse::validate::Report& report, const std::vector<std::string>& allowed)
+{
+    const nb::gil_scoped_release release{};
+
+    new (encoder) matisse::encode::Encoder{definition, report, matisse::validate::Inventory::factorization, allowed};
 }
 
 /**
@@ -78,9 +112,9 @@ using Id_array_t = nb::ndarray<nb::numpy, const matisse::load::Token_id_t, nb::n
 {
     if (!nb::isinstance<nb::str>(text))
     {
-        const auto described{
-                text.is_none() ? std::string{"'None'"} :
-                                 std::format("'{}' object", nb::type_name(text.type()).c_str())};
+        const auto type_name{nb::type_name(text.type())};
+
+        const auto described{text.is_none() ? std::string{"'None'"} : std::format("'{}' object", type_name.c_str())};
 
         const auto message{std::format("{} is not an instance of 'str'", described)};
 
@@ -114,6 +148,196 @@ template <typename Work>
 }
 
 /**
+ * @brief Returns the ids of a text, with a piece cache the calling thread keeps across its calls.
+ * @param encoder The encoder.
+ * @param text The text.
+ * @param cache The cache, made for this encoder.
+ * @return The ids.
+ * @throws std::invalid_argument If the cache was made for another encoder.
+ * @throws nb::builtin_exception A TypeError if the text is not a string.
+ * @throws nb::python_error If the text holds a lone surrogate.
+ */
+[[nodiscard]] Ids_t encode_ids(
+        const matisse::encode::Encoder& encoder, const nb::handle text, matisse::encode::Piece_cache& cache)
+{
+    const auto view{utf8_of(text)};
+
+    return released([&] { return encoder.encode(view, cache); });
+}
+
+/**
+ * @brief Returns ids as a NumPy array that owns them, with no copy.
+ * @param ids The ids.
+ * @return The array.
+ */
+[[nodiscard]] Id_array_t array_of(Ids_t ids)
+{
+    auto owned{std::make_unique<Ids_t>(std::move(ids))};
+
+    const auto data{owned->data()};
+
+    const auto size{owned->size()};
+
+    const nb::capsule owner{owned.release(), [](void* held) noexcept { delete static_cast<Ids_t*>(held); }};
+
+    return Id_array_t{data, {size}, owner};
+}
+
+/**
+ * @brief Returns the ids of a text as a NumPy array, with a piece cache the calling thread keeps across its calls.
+ * @param encoder The encoder.
+ * @param text The text.
+ * @param cache The cache, made for this encoder.
+ * @return The ids.
+ * @throws std::invalid_argument If the cache was made for another encoder.
+ * @throws nb::builtin_exception A TypeError if the text is not a string.
+ * @throws nb::python_error If the text holds a lone surrogate.
+ */
+[[nodiscard]] Id_array_t encode_array(
+        const matisse::encode::Encoder& encoder, const nb::handle text, matisse::encode::Piece_cache& cache)
+{
+    return array_of(encode_ids(encoder, text, cache));
+}
+
+/**
+ * @brief Returns the ids of a text encoded in concurrent chunks cut at certified cuts, which are encode()'s.
+ * @param encoder The encoder.
+ * @param text The text.
+ * @param chunks The number of chunks aimed for, one thread each.
+ * @return The ids.
+ * @throws nb::builtin_exception A TypeError if the text is not a string.
+ * @throws nb::python_error If the text holds a lone surrogate.
+ */
+[[nodiscard]] Ids_t encode_parallel_ids(
+        const matisse::encode::Encoder& encoder, const nb::handle text, const std::size_t chunks)
+{
+    const auto view{utf8_of(text)};
+
+    return released([&] { return encoder.encode_parallel(view, chunks); });
+}
+
+/**
+ * @brief Returns the ids of a text encoded in concurrent chunks as a NumPy array.
+ * @param encoder The encoder.
+ * @param text The text.
+ * @param chunks The number of chunks aimed for, one thread each.
+ * @return The ids.
+ * @throws nb::builtin_exception A TypeError if the text is not a string.
+ * @throws nb::python_error If the text holds a lone surrogate.
+ */
+[[nodiscard]] Id_array_t encode_parallel_array(
+        const matisse::encode::Encoder& encoder, const nb::handle text, const std::size_t chunks)
+{
+    return array_of(encode_parallel_ids(encoder, text, chunks));
+}
+
+/**
+ * @brief Returns the ids of every text of a batch, encode() called on each by a pool of threads that take the next text
+ *        from a shared counter, the calling thread one of them, each thread keeping one piece cache across the texts it
+ *        takes, as matisse's bench encodes a batch.
+ * @param encoder The encoder.
+ * @param texts The texts.
+ * @param threads The threads of the pool, at least one.
+ * @return The ids of each text, in the texts' order.
+ * @throws nb::builtin_exception A TypeError if an item is not a string, with the message tiktoken's core gives.
+ * @throws nb::python_error If an item holds a lone surrogate.
+ * @throws std::invalid_argument If a text is refused, the first refusal rethrown once every thread has joined.
+ */
+[[nodiscard]] std::vector<Ids_t> encode_batch(
+        const matisse::encode::Encoder& encoder, const nb::list& texts, const std::size_t threads)
+{
+    // The strings are held here, so that the bytes read survive a change to the list while the lock is released.
+    std::vector<nb::object> held{};
+
+    std::vector<std::string_view> views{};
+
+    for (const auto item : texts)
+    {
+        views.push_back(utf8_of(item));
+
+        held.push_back(nb::borrow(item));
+    }
+
+    // The lock stays released until the function returns or throws, and is taken again before the strings are let go.
+    const nb::gil_scoped_release release{};
+
+    std::vector<Ids_t> encoded(views.size());
+
+    std::atomic<std::size_t> next{0};
+
+    std::mutex failure_mutex{};
+
+    std::exception_ptr failure{};
+
+    const auto work{[&] {
+        try
+        {
+            matisse::encode::Piece_cache cache{encoder, matisse::encode::piece_cache_capacity};
+
+            for (auto index{next.fetch_add(1)}; index < views.size(); index = next.fetch_add(1))
+            {
+                encoded[index] = encoder.encode(views[index], cache);
+            }
+        }
+        catch (...)
+        {
+            const std::scoped_lock lock{failure_mutex};
+
+            if (!failure)
+            {
+                failure = std::current_exception();
+            }
+        }
+    }};
+
+    {
+        std::vector<std::jthread> workers{};
+
+        for (std::size_t worker{1}; worker < threads && worker < views.size(); ++worker)
+        {
+            workers.emplace_back(work);
+        }
+
+        work();
+    }
+
+    if (failure)
+    {
+        std::rethrow_exception(failure);
+    }
+
+    return encoded;
+}
+
+/**
+ * @brief Returns the ids of every text of a batch as NumPy arrays, encoded as encode_batch() encodes them, so that no
+ *        Python integer is made per id.
+ * @param encoder The encoder.
+ * @param texts The texts.
+ * @param threads The threads of the pool, at least one.
+ * @return An array of the ids of each text, in the texts' order.
+ * @throws nb::builtin_exception A TypeError if an item is not a string, with the message tiktoken's core gives.
+ * @throws nb::python_error If an item holds a lone surrogate.
+ * @throws std::invalid_argument If a text is refused.
+ */
+[[nodiscard]] nb::list encode_batch_arrays(
+        const matisse::encode::Encoder& encoder, const nb::list& texts, const std::size_t threads)
+{
+    auto encoded{encode_batch(encoder, texts, threads)};
+
+    nb::list arrays{};
+
+    for (auto& ids : encoded)
+    {
+        const auto array{array_of(std::move(ids))};
+
+        arrays.append(array);
+    }
+
+    return arrays;
+}
+
+/**
  * @brief Returns the ids of a sequence of Python integers, each read through its `__index__`, as tiktoken reads them.
  * @param tokens The sequence.
  * @return The ids.
@@ -130,8 +354,9 @@ template <typename Work>
 
     if (PySequence_Check(tokens.ptr()) == 0)
     {
-        const auto message{
-                std::format("'{}' object is not an instance of 'Sequence'", nb::type_name(tokens.type()).c_str())};
+        const auto type_name{nb::type_name(tokens.type())};
+
+        const auto message{std::format("'{}' object is not an instance of 'Sequence'", type_name.c_str())};
 
         throw nb::builtin_exception{nb::exception_type::type_error, message.c_str()};
     }
@@ -168,21 +393,85 @@ template <typename Work>
 }
 
 /**
- * @brief Returns ids as a NumPy array that owns them, with no copy.
- * @param ids The ids.
- * @return The array.
+ * @brief Returns the bytes a run of ids spells, raw.
+ * @param encoder The encoder.
+ * @param tokens The ids, a sequence of integers.
+ * @return The bytes.
+ * @throws nb::builtin_exception A TypeError if the ids are a string or not a sequence, as tiktoken refuses them.
+ * @throws nb::builtin_exception A KeyError if an id names no token, ordinary or special, as tiktoken raises it.
+ * @throws std::overflow_error If an id is negative or does not fit 32 bits.
  */
-[[nodiscard]] Id_array_t array_of(Ids_t ids)
+[[nodiscard]] nb::bytes decode_bytes(const matisse::encode::Encoder& encoder, const nb::handle tokens)
 {
-    auto owned{std::make_unique<Ids_t>(std::move(ids))};
+    const auto ids{ids_of(tokens)};
 
-    const auto data{owned->data()};
+    try
+    {
+        const auto bytes{released([&] { return encoder.decode(ids); })};
 
-    const auto size{owned->size()};
+        return nb::bytes{bytes.data(), bytes.size()};
+    }
+    catch (const std::out_of_range& error)
+    {
+        throw nb::builtin_exception{nb::exception_type::key_error, error.what()};
+    }
+}
 
-    const nb::capsule owner{owned.release(), [](void* held) noexcept { delete static_cast<Ids_t*>(held); }};
+/**
+ * @brief Constructs a piece cache in place for an encoder, holding as many pieces as the encoder's own caches.
+ * @param cache Where the cache is constructed.
+ * @param encoder The encoder, which the Python object keeps alive for as long as the cache.
+ */
+void construct_cache(matisse::encode::Piece_cache* cache, const matisse::encode::Encoder& encoder)
+{
+    new (cache) matisse::encode::Piece_cache{encoder, matisse::encode::piece_cache_capacity};
+}
 
-    return Id_array_t{data, {size}, owner};
+/**
+ * @brief Starts a stream in place over an encoder, which the Python object keeps alive for as long as the stream.
+ * @param stream Where the stream is constructed.
+ * @param encoder The encoder.
+ */
+void construct_stream(matisse::encode::Stream_encoder* stream, const matisse::encode::Encoder& encoder)
+{
+    new (stream) matisse::encode::Stream_encoder{encoder};
+}
+
+/**
+ * @brief Reads the next part of a streamed text and returns the ids that have become final, with the interpreter lock
+ *        released.
+ * @param stream The stream.
+ * @param part The part, a string read as its UTF-8, or bytes, which may end inside a code point's sequence.
+ * @return The ids.
+ * @throws nb::builtin_exception A TypeError if the part is neither a string nor bytes.
+ * @throws nb::python_error If a string part holds a lone surrogate.
+ * @throws std::invalid_argument If the bytes read are not well-formed UTF-8, as Stream_encoder::push() refuses them.
+ */
+[[nodiscard]] Ids_t stream_push(matisse::encode::Stream_encoder& stream, const nb::handle part)
+{
+    if (nb::isinstance<nb::bytes>(part))
+    {
+        const auto bytes{nb::borrow<nb::bytes>(part)};
+
+        const std::string_view view{bytes.c_str(), bytes.size()};
+
+        return released([&] { return stream.push(view); });
+    }
+
+    const auto view{utf8_of(part)};
+
+    return released([&] { return stream.push(view); });
+}
+
+/**
+ * @brief Ends a streamed text and returns the rest of its ids, with the interpreter lock released.
+ * @param stream The stream.
+ * @return The ids.
+ * @throws std::invalid_argument If the text ends inside a UTF-8 sequence, as Stream_encoder::finish() refuses it.
+ */
+[[nodiscard]] Ids_t stream_finish(matisse::encode::Stream_encoder& stream)
+{
+    return released([&] { return stream.finish(); });
 }
 
 /**
@@ -194,6 +483,24 @@ template <typename Work>
 void check_text(const nb::handle text)
 {
     std::ignore = utf8_of(text);
+}
+
+/**
+ * @brief Returns the tokenizer matisse describes under a name.
+ * @param name The name, gpt2, cl100k, o200k or llama3.
+ * @return The tokenizer.
+ * @throws std::invalid_argument If no tokenizer has the name.
+ */
+[[nodiscard]] matisse::lookup::Tokenizer tokenizer_of(const std::string_view name)
+{
+    auto tokenizer{matisse::lookup::tokenizer(name)};
+
+    if (!tokenizer)
+    {
+        throw std::invalid_argument{std::format("matisse describes no tokenizer named '{}'", name)};
+    }
+
+    return std::move(*tokenizer);
 }
 
 /**
@@ -372,313 +679,12 @@ void check_text(const nb::handle text)
 
         const auto& [segmentation, occurrence]{*refutation};
 
-        out.append(nb::make_tuple(bytes, origin, nb::make_tuple(tokens_of(segmentation), occurrence)));
+        const auto refuted{nb::make_tuple(tokens_of(segmentation), occurrence)};
+
+        out.append(nb::make_tuple(bytes, origin, refuted));
     }
 
     return out;
-}
-
-/**
- * @brief Returns a definition's special tokens, each its spelling and its id.
- * @param definition The definition.
- * @return The special tokens, in the definition's order.
- */
-[[nodiscard]] std::vector<std::pair<std::string, matisse::load::Token_id_t>> specials_of(
-        const matisse::load::Definition& definition)
-{
-    std::vector<std::pair<std::string, matisse::load::Token_id_t>> specials{};
-
-    for (const auto& [spelling, id] : definition.specials)
-    {
-        specials.emplace_back(spelling, id);
-    }
-
-    return specials;
-}
-
-/**
- * @brief Returns the bytes of every ordinary token of a definition, by id.
- * @param definition The definition.
- * @return The bytes, a list of bytes objects.
- */
-[[nodiscard]] nb::list spellings_of(const matisse::load::Definition& definition)
-{
-    nb::list spellings{};
-
-    for (const auto& spelling : definition.spellings)
-    {
-        spellings.append(nb::bytes{spelling.data(), spelling.size()});
-    }
-
-    return spellings;
-}
-
-/**
- * @brief Constructs an encoder in place, with the interpreter lock released while it builds its tables.
- * @param encoder Where the encoder is constructed.
- * @param definition The definition, copied.
- * @param report The report of the definition's pattern.
- * @param allowed The spellings of the special tokens cut out of a text.
- * @throws std::invalid_argument If the encoder refuses the definition or an allowed spelling.
- */
-void construct_encoder(
-        matisse::encode::Encoder* encoder, const matisse::load::Definition& definition,
-        const matisse::validate::Report& report, const std::vector<std::string>& allowed)
-{
-    const nb::gil_scoped_release release{};
-
-    new (encoder) matisse::encode::Encoder{definition, report, matisse::validate::Inventory::factorization, allowed};
-}
-
-/**
- * @brief Constructs a piece cache in place for an encoder, holding as many pieces as the encoder's own caches.
- * @param cache Where the cache is constructed.
- * @param encoder The encoder, which the Python object keeps alive for as long as the cache.
- */
-void construct_cache(matisse::encode::Piece_cache* cache, const matisse::encode::Encoder& encoder)
-{
-    new (cache) matisse::encode::Piece_cache{encoder, matisse::encode::piece_cache_capacity};
-}
-
-/**
- * @brief Returns the ids of a text, with a piece cache the calling thread keeps across its calls.
- * @param encoder The encoder.
- * @param text The text.
- * @param cache The cache, made for this encoder.
- * @return The ids.
- * @throws std::invalid_argument If the cache was made for another encoder.
- * @throws nb::builtin_exception A TypeError if the text is not a string.
- * @throws nb::python_error If the text holds a lone surrogate.
- */
-[[nodiscard]] Ids_t encode_ids(
-        const matisse::encode::Encoder& encoder, const nb::handle text, matisse::encode::Piece_cache& cache)
-{
-    const auto view{utf8_of(text)};
-
-    return released([&] { return encoder.encode(view, cache); });
-}
-
-/**
- * @brief Returns the ids of a text as a NumPy array, with a piece cache the calling thread keeps across its calls.
- * @param encoder The encoder.
- * @param text The text.
- * @param cache The cache, made for this encoder.
- * @return The ids.
- * @throws std::invalid_argument If the cache was made for another encoder.
- * @throws nb::builtin_exception A TypeError if the text is not a string.
- * @throws nb::python_error If the text holds a lone surrogate.
- */
-[[nodiscard]] Id_array_t encode_array(
-        const matisse::encode::Encoder& encoder, const nb::handle text, matisse::encode::Piece_cache& cache)
-{
-    return array_of(encode_ids(encoder, text, cache));
-}
-
-/**
- * @brief Returns the ids of a text encoded in concurrent chunks cut at certified cuts, which are encode()'s.
- * @param encoder The encoder.
- * @param text The text.
- * @param chunks The number of chunks aimed for, one thread each.
- * @return The ids.
- * @throws nb::builtin_exception A TypeError if the text is not a string.
- * @throws nb::python_error If the text holds a lone surrogate.
- */
-[[nodiscard]] Ids_t encode_parallel_ids(
-        const matisse::encode::Encoder& encoder, const nb::handle text, const std::size_t chunks)
-{
-    const auto view{utf8_of(text)};
-
-    return released([&] { return encoder.encode_parallel(view, chunks); });
-}
-
-/**
- * @brief Returns the ids of a text encoded in concurrent chunks as a NumPy array.
- * @param encoder The encoder.
- * @param text The text.
- * @param chunks The number of chunks aimed for, one thread each.
- * @return The ids.
- * @throws nb::builtin_exception A TypeError if the text is not a string.
- * @throws nb::python_error If the text holds a lone surrogate.
- */
-[[nodiscard]] Id_array_t encode_parallel_array(
-        const matisse::encode::Encoder& encoder, const nb::handle text, const std::size_t chunks)
-{
-    return array_of(encode_parallel_ids(encoder, text, chunks));
-}
-
-/**
- * @brief Returns the ids of every text of a batch, encode() called on each by a pool of threads that take the next text
- *        from a shared counter, the calling thread one of them, each thread keeping one piece cache across the texts it
- *        takes, as matisse's bench encodes a batch.
- * @param encoder The encoder.
- * @param texts The texts.
- * @param threads The threads of the pool, at least one.
- * @return The ids of each text, in the texts' order.
- * @throws nb::builtin_exception A TypeError if an item is not a string, with the message tiktoken's core gives.
- * @throws nb::python_error If an item holds a lone surrogate.
- * @throws std::invalid_argument If a text is refused, the first refusal rethrown once every thread has joined.
- */
-[[nodiscard]] std::vector<Ids_t> encode_batch(
-        const matisse::encode::Encoder& encoder, const nb::list& texts, const std::size_t threads)
-{
-    // The strings are held here, so that the bytes read survive a change to the list while the lock is released.
-    std::vector<nb::object> held{};
-
-    std::vector<std::string_view> views{};
-
-    for (const auto item : texts)
-    {
-        views.push_back(utf8_of(item));
-
-        held.push_back(nb::borrow(item));
-    }
-
-    return released([&] {
-        std::vector<Ids_t> encoded(views.size());
-
-        std::atomic<std::size_t> next{0};
-
-        std::mutex failure_mutex{};
-
-        std::exception_ptr failure{};
-
-        const auto work{[&] {
-            try
-            {
-                matisse::encode::Piece_cache cache{encoder, matisse::encode::piece_cache_capacity};
-
-                for (auto index{next.fetch_add(1)}; index < views.size(); index = next.fetch_add(1))
-                {
-                    encoded[index] = encoder.encode(views[index], cache);
-                }
-            }
-            catch (...)
-            {
-                const std::scoped_lock lock{failure_mutex};
-
-                if (!failure)
-                {
-                    failure = std::current_exception();
-                }
-            }
-        }};
-
-        {
-            std::vector<std::jthread> workers{};
-
-            for (std::size_t worker{1}; worker < threads && worker < views.size(); ++worker)
-            {
-                workers.emplace_back(work);
-            }
-
-            work();
-        }
-
-        if (failure)
-        {
-            std::rethrow_exception(failure);
-        }
-
-        return encoded;
-    });
-}
-
-/**
- * @brief Returns the ids of every text of a batch as NumPy arrays, encoded as encode_batch() encodes them, so that no
- *        Python integer is made per id.
- * @param encoder The encoder.
- * @param texts The texts.
- * @param threads The threads of the pool, at least one.
- * @return An array of the ids of each text, in the texts' order.
- * @throws nb::builtin_exception A TypeError if an item is not a string, with the message tiktoken's core gives.
- * @throws nb::python_error If an item holds a lone surrogate.
- * @throws std::invalid_argument If a text is refused.
- */
-[[nodiscard]] nb::list encode_batch_arrays(
-        const matisse::encode::Encoder& encoder, const nb::list& texts, const std::size_t threads)
-{
-    auto encoded{encode_batch(encoder, texts, threads)};
-
-    nb::list arrays{};
-
-    for (auto& ids : encoded)
-    {
-        arrays.append(array_of(std::move(ids)));
-    }
-
-    return arrays;
-}
-
-/**
- * @brief Returns the bytes a run of ids spells, raw.
- * @param encoder The encoder.
- * @param tokens The ids, a sequence of integers.
- * @return The bytes.
- * @throws nb::builtin_exception A TypeError if the ids are a string or not a sequence, as tiktoken refuses them.
- * @throws nb::builtin_exception A KeyError if an id names no token, ordinary or special, as tiktoken raises it.
- * @throws std::overflow_error If an id is negative or does not fit 32 bits.
- */
-[[nodiscard]] nb::bytes decode_bytes(const matisse::encode::Encoder& encoder, const nb::handle tokens)
-{
-    const auto ids{ids_of(tokens)};
-
-    try
-    {
-        const auto bytes{released([&] { return encoder.decode(ids); })};
-
-        return nb::bytes{bytes.data(), bytes.size()};
-    }
-    catch (const std::out_of_range& error)
-    {
-        throw nb::builtin_exception{nb::exception_type::key_error, error.what()};
-    }
-}
-
-/**
- * @brief Starts a stream in place over an encoder, which the Python object keeps alive for as long as the stream.
- * @param stream Where the stream is constructed.
- * @param encoder The encoder.
- */
-void construct_stream(matisse::encode::Stream_encoder* stream, const matisse::encode::Encoder& encoder)
-{
-    new (stream) matisse::encode::Stream_encoder{encoder};
-}
-
-/**
- * @brief Reads the next part of a streamed text and returns the ids that have become final, with the interpreter lock
- *        released.
- * @param stream The stream.
- * @param part The part, a string read as its UTF-8, or bytes, which may end inside a code point's sequence.
- * @return The ids.
- * @throws nb::builtin_exception A TypeError if the part is neither a string nor bytes.
- * @throws nb::python_error If a string part holds a lone surrogate.
- * @throws std::invalid_argument If the bytes read are not well-formed UTF-8, as Stream_encoder::push() refuses them.
- */
-[[nodiscard]] Ids_t stream_push(matisse::encode::Stream_encoder& stream, const nb::handle part)
-{
-    if (nb::isinstance<nb::bytes>(part))
-    {
-        const auto bytes{nb::borrow<nb::bytes>(part)};
-
-        const std::string_view view{bytes.c_str(), bytes.size()};
-
-        return released([&] { return stream.push(view); });
-    }
-
-    const auto view{utf8_of(part)};
-
-    return released([&] { return stream.push(view); });
-}
-
-/**
- * @brief Ends a streamed text and returns the rest of its ids, with the interpreter lock released.
- * @param stream The stream.
- * @return The ids.
- * @throws std::invalid_argument If the text ends inside a UTF-8 sequence, as Stream_encoder::finish() refuses it.
- */
-[[nodiscard]] Ids_t stream_finish(matisse::encode::Stream_encoder& stream)
-{
-    return released([&] { return stream.finish(); });
 }
 
 } // namespace

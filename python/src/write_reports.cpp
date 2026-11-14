@@ -100,6 +100,12 @@ void write_report(const std::filesystem::path& directory, const std::string_view
 
 } // namespace
 
+/**
+ * @brief Writes the report of each tokenizer named to the directory, or the error to the standard error.
+ * @param argc The argument count.
+ * @param argv The arguments: the directory, then one `NAME=WIDTH` for each tokenizer, as the usage line gives them.
+ * @return EXIT_SUCCESS when every report was written, EXIT_FAILURE otherwise.
+ */
 int main(const int argc, char** argv)
 {
     const std::vector<std::string_view> arguments{argv + 1, argv + argc};
