@@ -2205,10 +2205,10 @@ $ ./build/tools/probes/matisse_bench batch VOCAB gpt2,cl100k 3 LARGE/enwik9-page
 The other encoders' rows come from the harnesses, `vendors.py MODE TOKENIZERS PASSES FILE [THREADS]` for tiktoken and
 Hugging Face, with `RAYON_NUM_THREADS` set to the thread count and `VENDORS` naming which of the two run, and
 `vendor_bench MODE TOKENIZERS PASSES FILE [THREADS]` for the bpe crate and, in the fairness section, tiktoken's core,
-tiktoken-rs and Hugging Face's crate, each reading the vocabulary files from the paths it names; their
-`digests TOKENIZERS FILE...` mode prints the ids lines alone, and the whole collection is one script, `campaign.sh`,
-which records the machine first as munch's `collect.sh` does. The runs of iteration 1 are `iteration1.sh`, which times
-one build, and `final1.sh`, the closing collection with tiktoken and the bpe crate, both kept beside `campaign.sh`, and
+tiktoken-rs and Hugging Face's crate, each reading the vocabulary files from the paths it names; their `digests
+TOKENIZERS FILE...` mode prints the ids lines alone, and the whole collection is one script, `campaign.sh`, which
+records the machine first as munch's `collect.sh` does. The runs of iteration 1 are `iteration1.sh`, which times one
+build, and `final1.sh`, the closing collection with tiktoken and the bpe crate, both kept beside `campaign.sh`, and
 `doc_iteration1.py` and `final1_tables.py` write their tables. Iteration 2's are `iteration2.sh` and `final2.sh` beside
 them, with `tune2.sh`, which alternated the builds of the scan's thresholds, and `gxx-O3.sh`, the compiler the `-O3`
 build was configured with, and `doc_iteration2.py`, `final2_tables.py` and `profile_table2.py` write its tables; the

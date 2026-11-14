@@ -255,11 +255,11 @@ A stream keeps the stretch's bytes that the ids it has returned do not yet spell
 larger of their number and 64, since it erases those in bulk once they are as many as the rest and at least 64. Beside
 them it keeps the live runs' tree, a layer per code point since the last stable one, at or after the end of the last
 closed piece, which the ids returned do not move. Each layer takes 40 bytes and up to one node of 40 bytes per state of
-the verifier, and the layers and nodes dropped from the front are kept until they are as many as the rest and at least
-64. The tree is the larger part when the runs stay apart: on a newline followed by tabs under cl100k's pattern and ranks
-the ids lag a few bytes while the tree keeps a layer for every tab since the newline, about 250 bytes per code point as
-measured on that case. None of these containers gives its capacity back, so a stream holds the most it has needed for
-any stretch until it is destroyed.
+the verifier, and the layers and nodes dropped from the front are kept, as the bytes are, until they are as many as the
+rest and at least 64. The tree is the larger part when the runs stay apart: on a newline followed by tabs under cl100k's
+pattern and ranks the ids lag a few bytes while the tree keeps a layer for every tab since the newline, about 250 bytes
+per code point as measured on that case. None of these containers gives its capacity back, so a stream holds the most it
+has needed for any stretch until it is destroyed.
 
 Each code point costs a class lookup and at most two steps of the verifier's table per live run, at most one run per
 state of the verifier. Each piece closed costs at most its merge, as `encode()` merges it, with a piece cache of its

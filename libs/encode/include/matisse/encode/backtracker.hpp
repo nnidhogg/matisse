@@ -29,18 +29,17 @@
  * until a join crosses between them, and the pair test reads that run back from the two tokens through their splits.
  * Two tokens are compatible when the merge of their spellings ends with them, and a sequence of tokens that encode to
  * themselves, every adjacent pair compatible, is the merge of its spellings, for the rank rule and for the pair rule,
- * with no condition on the table. The search lays the longest token that begins the rest of the piece and tries
- * shorter ones in turn, and takes the last token back when none fits, marking the position it went back from: the
- * tokens laid before a position are the merge of the bytes before it, one sequence however the search reaches it, so a
- * position from which no token fits once fits never. Where the pair test would be asked about a token whose own merge
- * does not join in order the search gives way, and until then every answer it acted on is the two tokens'
- * compatibility, so a search that does not give way ends where a search with an exact test ends, with the merge. The
- * method is GitHub's bpe crate's, the Corollaries III and IIIa of its README and its backtracking encoder; deciding for
- * each token whether its merge joins in order, which the crate's README assumes of every token of every table and its
- * constructor does not check, giving way where it does not, and reading every split from the token's own merge are
- * matisse's. Backtracker is the merge's own and is not part of matisse's stable surface. The header is installed only
- * because every header of the library lives under include, as munch keeps none under src, and it may change in minor
- * releases.
+ * with no condition on the table. The search lays the longest token that begins the rest of the piece and tries shorter
+ * ones in turn, and takes the last token back when none fits, marking the position it went back from: the tokens laid
+ * before a position are the merge of the bytes before it, one sequence however the search reaches it, so a position
+ * from which no token fits once fits never. Where the pair test would be asked about a token whose own merge does not
+ * join in order the search gives way, and until then every answer it acted on is the two tokens' compatibility, so a
+ * search that does not give way ends where a search with an exact test ends, with the merge. The method is GitHub's bpe
+ * crate's, the Corollaries III and IIIa of its README and its backtracking encoder; deciding for each token whether its
+ * merge joins in order, which the crate's README assumes of every token of every table and its constructor does not
+ * check, giving way where it does not, and reading every split from the token's own merge are matisse's. Backtracker is
+ * the merge's own and is not part of matisse's stable surface. The header is installed only because every header of the
+ * library lives under include, as munch keeps none under src, and it may change in minor releases.
  */
 namespace matisse::encode
 {
@@ -159,8 +158,8 @@ private:
      * join of that pair crosses the boundary when its rank is below the undone join's on the left, which precedes it on
      * a tie, or at most the undone join's on the right, which it precedes. The pair of the two tokens themselves
      * crosses when it has any join. Only a split's pair can cross, since a join a run makes is the split of the token
-     * it makes, and a pair is looked up only when each part records the other as a partner. On a token whose merge
-     * does not join in order the later join is not always the one of higher order, and the answer can be wrong.
+     * it makes, and a pair is looked up only when each part records the other as a partner. On a token whose merge does
+     * not join in order the later join is not always the one of higher order, and the answer can be wrong.
      * @param left The left token's id.
      * @param right The right token's id.
      * @return True when no join crosses between them.

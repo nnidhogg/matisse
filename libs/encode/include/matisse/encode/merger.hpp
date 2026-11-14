@@ -31,8 +31,8 @@
  * parts held in an array on the stack, each with the join it makes with the next, which makes the same joins in the
  * same order: the least rank present, the leftmost on a tie, and after each join the two pairs it makes looked up.
  * Every part is a byte to begin with, so both read the first pairs from a table of the joins of all 65,536 pairs of
- * bytes, filled from the join table at construction, and look later pairs up in the join table. A piece longer than
- * 128 bytes, or one of whose bytes at least half lie outside ASCII, is merged by backtracking instead, a Backtracker in
+ * bytes, filled from the join table at construction, and look later pairs up in the join table. A piece longer than 128
+ * bytes, or one of whose bytes at least half lie outside ASCII, is merged by backtracking instead, a Backtracker in
  * backtracker.hpp, which gives the same ids or gives way, where its pair test would be asked about a token whose own
  * merge does not join in order of rank, to the scan or the heap. Merger is the encoder's own and is not part of
  * matisse's stable surface. The header is installed only because every header of the library lives under include, as

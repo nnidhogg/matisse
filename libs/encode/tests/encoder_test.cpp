@@ -724,8 +724,8 @@ TEST(Encoder_test, An_allowed_special_token_whose_id_is_an_ordinary_token_s_is_r
 
 TEST(Encoder_test, Two_special_tokens_that_share_an_id_each_encode_to_it_and_decode_gives_the_first_listed)
 {
-    // o200k_harmony's <|endofprompt|> and <|reserved_200018|> share the id 200018 in tiktoken's table, which decodes
-    // it as the first.
+    // o200k_harmony's <|endofprompt|> and <|reserved_200018|> share the id 200018 in tiktoken's table, which decodes it
+    // as the first.
     auto definition{test_definition()};
 
     const auto end{definition.specials.front().id};
