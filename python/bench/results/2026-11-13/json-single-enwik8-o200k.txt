@@ -1,0 +1,20 @@
+matisse-py bench
+  matisse-tokenizer  0.1.0
+  tiktoken           0.14.0
+  numpy              2.5.4
+  tokenizers         0.23.3
+  python             3.12.3
+  RAYON_NUM_THREADS  1
+  system             Linux 6.18.58.1-microsoft-standard-WSL2 x86_64
+  processors         24 visible, 1 allowed
+  invocation         bench.py json-single llm-vocabs o200k 3 enwik8
+ids matisse-py o200k enwik8 25426300 7de481826895d0084a3bca6376494a2f70f6ff71224e7fb2bcdbee5439631ae1
+ids hf o200k enwik8 25426300 7de481826895d0084a3bca6376494a2f70f6ff71224e7fb2bcdbee5439631ae1
+ids matisse-py o200k enwik8 25426300 7de481826895d0084a3bca6376494a2f70f6ff71224e7fb2bcdbee5439631ae1
+matisse-py o200k   json numpy         enwik8                      95.4 MiB,   25426300 tokens, 3 passes: best    53.0, median    51.0, worst    49.1 MiB/s; best  14.14, median  13.59 M tokens/s
+ids matisse-py o200k enwik8 25426300 7de481826895d0084a3bca6376494a2f70f6ff71224e7fb2bcdbee5439631ae1
+matisse-py o200k   json list          enwik8                      95.4 MiB,   25426300 tokens, 3 passes: best    45.8, median    45.5, worst    45.1 MiB/s; best  12.22, median  12.12 M tokens/s
+ids hf o200k enwik8 25426300 7de481826895d0084a3bca6376494a2f70f6ff71224e7fb2bcdbee5439631ae1
+hf         o200k   encode             enwik8                      95.4 MiB,   25426300 tokens, 3 passes: best     2.3, median     2.3, worst     2.3 MiB/s; best   0.61, median   0.60 M tokens/s
+ids hf o200k enwik8 25426300 7de481826895d0084a3bca6376494a2f70f6ff71224e7fb2bcdbee5439631ae1
+hf         o200k   encode fast        enwik8                      95.4 MiB,   25426300 tokens, 3 passes: best     3.7, median     3.7, worst     3.7 MiB/s; best   1.00, median   0.98 M tokens/s

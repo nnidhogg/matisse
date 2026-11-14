@@ -1,0 +1,20 @@
+matisse-py bench
+  matisse-tokenizer  0.1.0
+  tiktoken           0.14.0
+  numpy              2.5.4
+  tokenizers         0.23.3
+  python             3.12.3
+  RAYON_NUM_THREADS  24
+  system             Linux 6.18.58.1-microsoft-standard-WSL2 x86_64
+  processors         24 visible, 24 allowed
+  invocation         bench.py json-batch llm-vocabs llama3 3 prompts.txt 24
+ids matisse-py llama3 prompts.txt 5142480 2fc5ecf962ed0d2cc229aa7948c14a58427e270505fe018561ffc43f7872352c
+ids hf llama3 prompts.txt 5142480 2fc5ecf962ed0d2cc229aa7948c14a58427e270505fe018561ffc43f7872352c
+ids matisse-py llama3 prompts.txt 5142480 2fc5ecf962ed0d2cc229aa7948c14a58427e270505fe018561ffc43f7872352c
+matisse-py llama3  json batch x24     prompts.txt                 20.0 MiB,    5142480 tokens, 3 passes: best   140.9, median   138.7, worst   138.7 MiB/s; best  36.23, median  35.66 M tokens/s
+ids matisse-py llama3 prompts.txt 5142480 2fc5ecf962ed0d2cc229aa7948c14a58427e270505fe018561ffc43f7872352c
+matisse-py llama3  json batch numpy x24 prompts.txt                 20.0 MiB,    5142480 tokens, 3 passes: best   318.7, median   316.5, worst   296.8 MiB/s; best  81.94, median  81.36 M tokens/s
+ids hf llama3 prompts.txt 5142480 2fc5ecf962ed0d2cc229aa7948c14a58427e270505fe018561ffc43f7872352c
+hf         llama3  batch x24          prompts.txt                 20.0 MiB,    5142480 tokens, 3 passes: best    32.7, median    31.6, worst    31.2 MiB/s; best   8.42, median   8.11 M tokens/s
+ids hf llama3 prompts.txt 5142480 2fc5ecf962ed0d2cc229aa7948c14a58427e270505fe018561ffc43f7872352c
+hf         llama3  batch fast x24     prompts.txt                 20.0 MiB,    5142480 tokens, 3 passes: best    35.7, median    35.5, worst    34.6 MiB/s; best   9.17, median   9.14 M tokens/s

@@ -1,0 +1,24 @@
+matisse-py bench
+  matisse-tokenizer  0.1.0
+  tiktoken           0.14.0
+  numpy              2.5.4
+  tokenizers         0.23.3
+  python             3.12.3
+  RAYON_NUM_THREADS  1
+  system             Linux 6.18.58.1-microsoft-standard-WSL2 x86_64
+  processors         24 visible, 1 allowed
+  invocation         bench.py json-prompts llm-vocabs o200k 5 prompts.txt
+ids matisse-py o200k prompts.txt 4566270 cba41e7a3fa25f4d46a664cd4c607d5921129872b108177725fdac0ce8e368c7
+ids hf o200k prompts.txt 4566270 cba41e7a3fa25f4d46a664cd4c607d5921129872b108177725fdac0ce8e368c7
+ids matisse-py o200k prompts.txt 4566270 cba41e7a3fa25f4d46a664cd4c607d5921129872b108177725fdac0ce8e368c7
+matisse-py o200k   json prompts       prompts.txt                 20.0 MiB,    4566270 tokens, 5 passes: best    29.2, median    28.6, worst    28.1 MiB/s; best   6.67, median   6.54 M tokens/s
+matisse-py o200k   json prompts latency prompts.txt              20000 calls: per call median pass mean 34.91 us
+ids matisse-py o200k prompts.txt 4566270 cba41e7a3fa25f4d46a664cd4c607d5921129872b108177725fdac0ce8e368c7
+matisse-py o200k   json prompts numpy prompts.txt                 20.0 MiB,    4566270 tokens, 5 passes: best    33.3, median    33.0, worst    32.4 MiB/s; best   7.59, median   7.53 M tokens/s
+matisse-py o200k   json prompts numpy latency prompts.txt              20000 calls: per call median pass mean 30.30 us
+ids hf o200k prompts.txt 4566270 cba41e7a3fa25f4d46a664cd4c607d5921129872b108177725fdac0ce8e368c7
+hf         o200k   prompts            prompts.txt                 20.0 MiB,    4566270 tokens, 5 passes: best     3.4, median     3.1, worst     3.1 MiB/s; best   0.78, median   0.72 M tokens/s
+hf         o200k   prompts latency    prompts.txt              20000 calls: per call median pass mean 317.99 us
+ids hf o200k prompts.txt 4566270 cba41e7a3fa25f4d46a664cd4c607d5921129872b108177725fdac0ce8e368c7
+hf         o200k   prompts fast       prompts.txt                 20.0 MiB,    4566270 tokens, 5 passes: best     3.7, median     3.5, worst     3.5 MiB/s; best   0.85, median   0.80 M tokens/s
+hf         o200k   prompts fast latency prompts.txt              20000 calls: per call median pass mean 286.07 us

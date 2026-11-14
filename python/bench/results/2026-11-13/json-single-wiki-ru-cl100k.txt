@@ -1,0 +1,20 @@
+matisse-py bench
+  matisse-tokenizer  0.1.0
+  tiktoken           0.14.0
+  numpy              2.5.4
+  tokenizers         0.23.3
+  python             3.12.3
+  RAYON_NUM_THREADS  1
+  system             Linux 6.18.58.1-microsoft-standard-WSL2 x86_64
+  processors         24 visible, 1 allowed
+  invocation         bench.py json-single llm-vocabs cl100k 5 wiki-ru.txt
+ids matisse-py cl100k wiki-ru.txt 1162181 9bebf2079fdff13a446ee5d02d723ebe16930e48af5a4c0b4e3e5f72ddd10be1
+ids hf cl100k wiki-ru.txt 1162181 9bebf2079fdff13a446ee5d02d723ebe16930e48af5a4c0b4e3e5f72ddd10be1
+ids matisse-py cl100k wiki-ru.txt 1162181 9bebf2079fdff13a446ee5d02d723ebe16930e48af5a4c0b4e3e5f72ddd10be1
+matisse-py cl100k  json numpy         wiki-ru.txt                  4.0 MiB,    1162181 tokens, 5 passes: best    66.8, median    64.6, worst    62.8 MiB/s; best  19.21, median  18.57 M tokens/s
+ids matisse-py cl100k wiki-ru.txt 1162181 9bebf2079fdff13a446ee5d02d723ebe16930e48af5a4c0b4e3e5f72ddd10be1
+matisse-py cl100k  json list          wiki-ru.txt                  4.0 MiB,    1162181 tokens, 5 passes: best    54.3, median    53.2, worst    52.8 MiB/s; best  15.61, median  15.30 M tokens/s
+ids hf cl100k wiki-ru.txt 1162181 9bebf2079fdff13a446ee5d02d723ebe16930e48af5a4c0b4e3e5f72ddd10be1
+hf         cl100k  encode             wiki-ru.txt                  4.0 MiB,    1162181 tokens, 5 passes: best     3.2, median     3.2, worst     3.1 MiB/s; best   0.91, median   0.91 M tokens/s
+ids hf cl100k wiki-ru.txt 1162181 9bebf2079fdff13a446ee5d02d723ebe16930e48af5a4c0b4e3e5f72ddd10be1
+hf         cl100k  encode fast        wiki-ru.txt                  4.0 MiB,    1162181 tokens, 5 passes: best     4.9, median     4.8, worst     4.8 MiB/s; best   1.42, median   1.37 M tokens/s

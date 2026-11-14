@@ -1,0 +1,20 @@
+matisse-py bench
+  matisse-tokenizer  0.1.0
+  tiktoken           0.14.0
+  numpy              2.5.4
+  tokenizers         0.23.3
+  python             3.12.3
+  RAYON_NUM_THREADS  24
+  system             Linux 6.18.58.1-microsoft-standard-WSL2 x86_64
+  processors         24 visible, 24 allowed
+  invocation         bench.py json-batch llm-vocabs cl100k 3 prompts.txt 24
+ids matisse-py cl100k prompts.txt 7202788 88674a5751d4bea4470490c4561cf9ade97e13839097ca542196bcefb7400bca
+ids hf cl100k prompts.txt 7202788 88674a5751d4bea4470490c4561cf9ade97e13839097ca542196bcefb7400bca
+ids matisse-py cl100k prompts.txt 7202788 88674a5751d4bea4470490c4561cf9ade97e13839097ca542196bcefb7400bca
+matisse-py cl100k  json batch x24     prompts.txt                 20.0 MiB,    7202788 tokens, 3 passes: best   122.3, median   121.9, worst   120.1 MiB/s; best  44.05, median  43.88 M tokens/s
+ids matisse-py cl100k prompts.txt 7202788 88674a5751d4bea4470490c4561cf9ade97e13839097ca542196bcefb7400bca
+matisse-py cl100k  json batch numpy x24 prompts.txt                 20.0 MiB,    7202788 tokens, 3 passes: best   347.7, median   344.2, worst   324.1 MiB/s; best 125.22, median 123.95 M tokens/s
+ids hf cl100k prompts.txt 7202788 88674a5751d4bea4470490c4561cf9ade97e13839097ca542196bcefb7400bca
+hf         cl100k  batch x24          prompts.txt                 20.0 MiB,    7202788 tokens, 3 passes: best    27.0, median    26.7, worst    26.4 MiB/s; best   9.72, median   9.61 M tokens/s
+ids hf cl100k prompts.txt 7202788 88674a5751d4bea4470490c4561cf9ade97e13839097ca542196bcefb7400bca
+hf         cl100k  batch fast x24     prompts.txt                 20.0 MiB,    7202788 tokens, 3 passes: best    30.7, median    30.1, worst    29.5 MiB/s; best  11.05, median  10.85 M tokens/s

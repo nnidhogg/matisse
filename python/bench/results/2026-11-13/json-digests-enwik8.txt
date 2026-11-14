@@ -1,0 +1,18 @@
+matisse-py bench
+  matisse-tokenizer  0.1.0
+  tiktoken           0.14.0
+  numpy              2.5.4
+  tokenizers         0.23.3
+  python             3.12.3
+  RAYON_NUM_THREADS  unset
+  system             Linux 6.18.58.1-microsoft-standard-WSL2 x86_64
+  processors         24 visible, 24 allowed
+  invocation         bench.py json-digests llm-vocabs gpt2,cl100k,o200k,llama3 enwik8
+ids matisse-py gpt2 enwik8 29013572 a7e18c6d9ab250b10190b6e80c13942596b024e49552c63e699f056b38b9d53d
+ids hf gpt2 enwik8 29013572 a7e18c6d9ab250b10190b6e80c13942596b024e49552c63e699f056b38b9d53d
+ids matisse-py cl100k enwik8 25793085 fc905793ea8efed63d03122c453f1a0f48e062490201b416cb3eacacc1302311
+ids hf cl100k enwik8 25793085 fc905793ea8efed63d03122c453f1a0f48e062490201b416cb3eacacc1302311
+ids matisse-py o200k enwik8 25426300 7de481826895d0084a3bca6376494a2f70f6ff71224e7fb2bcdbee5439631ae1
+ids hf o200k enwik8 25426300 7de481826895d0084a3bca6376494a2f70f6ff71224e7fb2bcdbee5439631ae1
+ids matisse-py llama3 enwik8 25706310 3fc3bd5e699caaf8956c53b1e3dde1e1bfa9cea39d75454feb1e6c409c073a36
+ids hf llama3 enwik8 25706310 3fc3bd5e699caaf8956c53b1e3dde1e1bfa9cea39d75454feb1e6c409c073a36

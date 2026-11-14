@@ -1,0 +1,20 @@
+matisse-py bench
+  matisse-tokenizer  0.1.0
+  tiktoken           0.14.0
+  numpy              2.5.4
+  tokenizers         0.23.3
+  python             3.12.3
+  RAYON_NUM_THREADS  1
+  system             Linux 6.18.58.1-microsoft-standard-WSL2 x86_64
+  processors         24 visible, 1 allowed
+  invocation         bench.py json-single llm-vocabs llama3 5 wiki-zh.txt
+ids matisse-py llama3 wiki-zh.txt 1298383 9b3f7244ef292fb222cac56c62a7b68a86abbc95f2e8d7d7ce1d7a2fed7cf605
+ids hf llama3 wiki-zh.txt 1298383 9b3f7244ef292fb222cac56c62a7b68a86abbc95f2e8d7d7ce1d7a2fed7cf605
+ids matisse-py llama3 wiki-zh.txt 1298383 9b3f7244ef292fb222cac56c62a7b68a86abbc95f2e8d7d7ce1d7a2fed7cf605
+matisse-py llama3  json numpy         wiki-zh.txt                  4.0 MiB,    1298383 tokens, 5 passes: best    60.9, median    59.8, worst    58.5 MiB/s; best  19.70, median  19.35 M tokens/s
+ids matisse-py llama3 wiki-zh.txt 1298383 9b3f7244ef292fb222cac56c62a7b68a86abbc95f2e8d7d7ce1d7a2fed7cf605
+matisse-py llama3  json list          wiki-zh.txt                  4.0 MiB,    1298383 tokens, 5 passes: best    49.2, median    48.8, worst    46.9 MiB/s; best  15.92, median  15.80 M tokens/s
+ids hf llama3 wiki-zh.txt 1298383 9b3f7244ef292fb222cac56c62a7b68a86abbc95f2e8d7d7ce1d7a2fed7cf605
+hf         llama3  encode             wiki-zh.txt                  4.0 MiB,    1298383 tokens, 5 passes: best     3.3, median     3.3, worst     3.3 MiB/s; best   1.08, median   1.07 M tokens/s
+ids hf llama3 wiki-zh.txt 1298383 9b3f7244ef292fb222cac56c62a7b68a86abbc95f2e8d7d7ce1d7a2fed7cf605
+hf         llama3  encode fast        wiki-zh.txt                  4.0 MiB,    1298383 tokens, 5 passes: best     6.0, median     5.9, worst     5.9 MiB/s; best   1.94, median   1.92 M tokens/s

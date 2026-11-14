@@ -1,0 +1,20 @@
+matisse-py bench
+  matisse-tokenizer  0.1.0
+  tiktoken           0.14.0
+  numpy              2.5.4
+  tokenizers         0.23.3
+  python             3.12.3
+  RAYON_NUM_THREADS  1
+  system             Linux 6.18.58.1-microsoft-standard-WSL2 x86_64
+  processors         24 visible, 1 allowed
+  invocation         bench.py json-single llm-vocabs llama3 5 gutenberg.txt
+ids matisse-py llama3 gutenberg.txt 1706691 96bf65b9a9a7e608664af5a1730be923e7350d71e4bcbfa8a26f92a051769183
+ids hf llama3 gutenberg.txt 1706691 96bf65b9a9a7e608664af5a1730be923e7350d71e4bcbfa8a26f92a051769183
+ids matisse-py llama3 gutenberg.txt 1706691 96bf65b9a9a7e608664af5a1730be923e7350d71e4bcbfa8a26f92a051769183
+matisse-py llama3  json numpy         gutenberg.txt                6.9 MiB,    1706691 tokens, 5 passes: best    77.7, median    76.7, worst    75.6 MiB/s; best  19.13, median  18.87 M tokens/s
+ids matisse-py llama3 gutenberg.txt 1706691 96bf65b9a9a7e608664af5a1730be923e7350d71e4bcbfa8a26f92a051769183
+matisse-py llama3  json list          gutenberg.txt                6.9 MiB,    1706691 tokens, 5 passes: best    63.5, median    62.8, worst    62.6 MiB/s; best  15.62, median  15.46 M tokens/s
+ids hf llama3 gutenberg.txt 1706691 96bf65b9a9a7e608664af5a1730be923e7350d71e4bcbfa8a26f92a051769183
+hf         llama3  encode             gutenberg.txt                6.9 MiB,    1706691 tokens, 5 passes: best     2.9, median     2.9, worst     2.9 MiB/s; best   0.71, median   0.70 M tokens/s
+ids hf llama3 gutenberg.txt 1706691 96bf65b9a9a7e608664af5a1730be923e7350d71e4bcbfa8a26f92a051769183
+hf         llama3  encode fast        gutenberg.txt                6.9 MiB,    1706691 tokens, 5 passes: best     4.2, median     4.1, worst     4.1 MiB/s; best   1.02, median   1.01 M tokens/s

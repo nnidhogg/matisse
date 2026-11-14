@@ -247,7 +247,10 @@ encoded in C++ by a pool of `num_threads` threads, the calling thread one of the
 counter, each with a cache of its own, as matisse's bench encodes a batch; `encode_parallel()` starts a thread per chunk
 beyond the last, as matisse's `encode_parallel()` does. The text's UTF-8 is read from the Python string, which CPython
 computes once and keeps beside the string, and an ASCII string needs no conversion. The ids are returned as a list of
-Python integers, or as a NumPy array that owns matisse's buffer with no copy.
+Python integers, or as a NumPy array that owns matisse's buffer with no copy. On many threads the arrays are the calls
+to choose: a list holds one Python integer per id, made on the calling thread once the encoding is done, so a batch of
+lists scales with its threads only as far as that one thread can build them, while an array, which owns matisse's
+buffer, scales with the encoding itself, as the batch tables under Performance show.
 
 ## **Performance**
 
@@ -375,6 +378,156 @@ encoder, whose tables [limits.md](limits.md) gives the cost of:
 | cl100k    |             0.384 |             2.158 |       0.075 |
 | o200k     |             0.545 |             1.853 |       0.140 |
 | llama3    |             0.524 |             2.236 |           - |
+
+## **Performance beside Hugging Face tokenizers**
+
+The figures below set the package beside Hugging Face's tokenizers package, the two reading the same tokenizer.json
+files. They are medians of the passes of one collection, begun on 2026-11-13 and timed on 2026-11-14 at commit 79126be
+by `python/bench/run_tokenizer_json.sh` on the machine above, with Python 3.12.3, tokenizers 0.23.3, tiktoken 0.14.0 and
+NumPy 2.5.4 installed from PyPI in a virtual environment of their own and matisse-tokenizer built from that commit;
+`machine.txt` among the outputs lists every package of the environment and the SHA-256 of each file read. The outputs
+are kept in `python/bench/results/2026-11-13/`, and `python/bench/tables.py` writes these tables from them. Both
+packages read the four pinned tokenizer.json files of [design.md](design.md), each held to its SHA-256 before it is
+read: GPT-2's from openai-community/gpt2 at commit 607a30d783dfa663caf39e06633721c8d4cfcd7e, Xenova's conversions of
+cl100k and o200k from Xenova/gpt-4 at 1d9f1f1b1fae88c0e4df1dab0a397f8de6229075 and Xenova/gpt-4o at
+7956d98f2a83b2751a98ea7136fdf7fe6cf54e69, and Llama 3's, held beside its rank file. The tables name each file by its
+tokenizer, and Xenova/gpt-4's, the cl100k rows, reads under Llama 3's pattern, as the section on reading a
+tokenizer.json says. The package reads each file with `load_tokenizer_json()` and Hugging Face with
+`Tokenizer.from_file()` with `encode_special_tokens` set, so that both read a special token's spelling as text, and
+every Hugging Face call passes `add_special_tokens=False`. The single-thread rows ran under `taskset -c 2` with
+`RAYON_NUM_THREADS=1`, and the batch rows unpinned with `RAYON_NUM_THREADS` set to their thread count, the size of the
+pool Hugging Face's batch calls run on. Each timed run is one tokenizer's, the machine otherwise idle through each, and
+a run during which other work used a processor was repeated. Every process ran with its address space limited to
+12,000,000 KiB, but those on enwik8, where the limit was raised to 40,000,000 KiB, since Hugging Face's `Encoding` of
+enwik8 takes about 14 GiB resident and its process aborts under the lower limit.
+
+Before any of it was timed, both packages' ids were compared document by document on every input, the ten corpora of
+[benchmarks.md](benchmarks.md) below a gigabyte, the 20,000 prompts of `prompts` and the same prompts cut to their first
+48 bytes at a code point, and each timed mode compares them again before its rows and holds every timed row's ids to
+them; a tokenizer and an input whose ids differed would have been reported and left untimed. None differs. Every digest
+below is also the one [benchmarks.md](benchmarks.md)'s exactness table gives for the corpus where it lists it, so that
+under Xenova/gpt-4's file both packages give tiktoken's cl100k_base ids on every corpus that table lists:
+
+| Corpus                      | tokenizer.json |        Ids | SHA-256 of the ids                                                 | Equal |
+|-----------------------------|----------------|-----------:|--------------------------------------------------------------------|-------|
+| `twitter.json`              | gpt2           |    332,556 | `44eabd1f3c08a75ea2181d5dc357ac3fb05d2c525b5fecf670f114990201cd67` | yes   |
+| `twitter.json`              | cl100k         |    173,645 | `ea966e05d3246f335e1f360efeec236ea89682f8f7cb5c4a61c07340f0760c37` | yes   |
+| `twitter.json`              | o200k          |    163,117 | `53f263ccd2c55d48da0ee7071860bea4769244e2cae750aac1429ad09d0980cc` | yes   |
+| `twitter.json`              | llama3         |    160,933 | `097bdc5645cbdeca5822488fc84307633cad18d0b70290f0ba6c03e809f9d6d5` | yes   |
+| `munch-python@15b2863c`     | gpt2           |    184,012 | `6eb94834cdca2d97450eb86d883cf3ddc447569944f5a44da0cc2b70216549b2` | yes   |
+| `munch-python@15b2863c`     | cl100k         |    109,965 | `1453748b540ca6ffad8310025d7fc886182b2c05bbdc18c519eb5b2d9ee9fe4b` | yes   |
+| `munch-python@15b2863c`     | o200k          |    110,390 | `be2c2699af3efa4f9f9a98cd78485682700e0b3a95c72d9e796fcd3d25e0c0f6` | yes   |
+| `munch-python@15b2863c`     | llama3         |    109,965 | `1453748b540ca6ffad8310025d7fc886182b2c05bbdc18c519eb5b2d9ee9fe4b` | yes   |
+| `munch-cpp@15b2863c`        | gpt2           |  1,639,282 | `8f34429ef998914438e243d129ae1ccdb0c26d97f29094f9a9cb1d93b18022fe` | yes   |
+| `munch-cpp@15b2863c`        | cl100k         |  1,060,572 | `97ee02f4cb13d88775f8fe807d895b0810fecb718e4e53d2953017399e0da201` | yes   |
+| `munch-cpp@15b2863c`        | o200k          |  1,063,148 | `bd829cb1281381b51aa3836f0e22ef90b3d60f9d891ed6939e3e4e8428ba5401` | yes   |
+| `munch-cpp@15b2863c`        | llama3         |  1,060,516 | `c23dec7f0914366b8332666fc7bc098440c11b0e94de14379d9319a50830dfa3` | yes   |
+| `gutenberg`                 | gpt2           |  2,002,145 | `f8c1359e9260f01b1a1bde0580480b4cac01d8f7c9ca20a8c2443718ed000434` | yes   |
+| `gutenberg`                 | cl100k         |  1,708,273 | `9c925a5984d22eb7dbb8408b897f612f0a345931605a822aab52c480382c21ea` | yes   |
+| `gutenberg`                 | o200k          |  1,695,829 | `f561e9d7ea3cf117591bc9b806e39bb094e378068728065e3c512eb992816e08` | yes   |
+| `gutenberg`                 | llama3         |  1,706,691 | `96bf65b9a9a7e608664af5a1730be923e7350d71e4bcbfa8a26f92a051769183` | yes   |
+| `wiki-zh`                   | gpt2           |  2,984,479 | `9e1315d4c8f265369c3891e10d08a5358c663db4368c6a8050f6e75759384017` | yes   |
+| `wiki-zh`                   | cl100k         |  1,939,825 | `7a0ec4e167b68b621e6562e2191bdcc43b4d73a31dd8b20d7e1b5aac67b986fc` | yes   |
+| `wiki-zh`                   | o200k          |  1,299,269 | `f3b08b0ba50957619314917ebc98cc3b26c9e82f4a09fab530aba5976d56d56e` | yes   |
+| `wiki-zh`                   | llama3         |  1,298,383 | `9b3f7244ef292fb222cac56c62a7b68a86abbc95f2e8d7d7ce1d7a2fed7cf605` | yes   |
+| `wiki-ar`                   | gpt2           |  2,385,003 | `b45551f291d84403bc9cbb0f3bb37ed0678e63788fba17560958570d0e11b17a` | yes   |
+| `wiki-ar`                   | cl100k         |  1,663,728 | `ae59537c4ab51ccf984b5ac2e212f0cd1072612e00bce2711f2bca027fb9d109` | yes   |
+| `wiki-ar`                   | o200k          |    806,639 | `8117c3677d2a42c469e8b94dd894bdf60351cee48e01e9b90b5ce6e7cc114be6` | yes   |
+| `wiki-ar`                   | llama3         |    932,883 | `01c49be3bab1a0eb5d0406047d77e0b0ce0f9481dbc50d4b20e211aa731d365c` | yes   |
+| `wiki-ru`                   | gpt2           |  2,470,902 | `1cff652bf33ba07b6e4899c9d997cc50495d115dda68bf252355a82397080b94` | yes   |
+| `wiki-ru`                   | cl100k         |  1,162,181 | `9bebf2079fdff13a446ee5d02d723ebe16930e48af5a4c0b4e3e5f72ddd10be1` | yes   |
+| `wiki-ru`                   | o200k          |    709,178 | `9b243bc017b9b6f62449eee4bde696ecb6d32ec2db90114b6ca4a0cd4d684713` | yes   |
+| `wiki-ru`                   | llama3         |    791,648 | `87e884e6ac480da3f0cc024007f14ae2e69ec94fb847030c4d415f61bd779ee4` | yes   |
+| `wiki-hi`                   | gpt2           |  2,502,380 | `019b5b9db2db6e35c198fa34d10e794952e4751976cd906bb26752edf123d38f` | yes   |
+| `wiki-hi`                   | cl100k         |  1,606,330 | `a03e85f6eba4fb48e4deb13a881c1af981435a8dd514eb86ef0b47f38e1ebf82` | yes   |
+| `wiki-hi`                   | o200k          |    549,062 | `7bfa0edf1d93ce07773a09f6169d930fc4fbe7120e05a74531e49f9fbb2b45ab` | yes   |
+| `wiki-hi`                   | llama3         |    861,673 | `25012d454b9eded8553cb113d936ec27c2c3e03b4aa1fb8b4629ddb6a56974de` | yes   |
+| `wiki-sv`                   | gpt2           |  1,585,688 | `c269cdbcf4f89d8cd35b2a4db25a5547609eee8b45c09ff041cbb7b79cdab544` | yes   |
+| `wiki-sv`                   | cl100k         |  1,325,036 | `b3333acbec23d85191832bbcd87dd3947afc2762065414a54055187ef7cff56d` | yes   |
+| `wiki-sv`                   | o200k          |  1,134,708 | `76bb07ee0c90962dabbbe607d7df4ae9226390ade251ad2297df7ec8d986dbf4` | yes   |
+| `wiki-sv`                   | llama3         |  1,314,144 | `ab12bed671b83fd0991d19287fe99fd9e497cf77d61c03d2f9b10d3c295a3664` | yes   |
+| `enwik8`                    | gpt2           | 29,013,572 | `a7e18c6d9ab250b10190b6e80c13942596b024e49552c63e699f056b38b9d53d` | yes   |
+| `enwik8`                    | cl100k         | 25,793,085 | `fc905793ea8efed63d03122c453f1a0f48e062490201b416cb3eacacc1302311` | yes   |
+| `enwik8`                    | o200k          | 25,426,300 | `7de481826895d0084a3bca6376494a2f70f6ff71224e7fb2bcdbee5439631ae1` | yes   |
+| `enwik8`                    | llama3         | 25,706,310 | `3fc3bd5e699caaf8956c53b1e3dde1e1bfa9cea39d75454feb1e6c409c073a36` | yes   |
+| `prompts`                   | gpt2           | 10,832,297 | `2e52723085d05b2a2e01e4e6356619f1d8d18870e9f80eb13f786f9548580bf1` | yes   |
+| `prompts`                   | cl100k         |  7,202,788 | `88674a5751d4bea4470490c4561cf9ade97e13839097ca542196bcefb7400bca` | yes   |
+| `prompts`                   | o200k          |  4,566,270 | `cba41e7a3fa25f4d46a664cd4c607d5921129872b108177725fdac0ce8e368c7` | yes   |
+| `prompts`                   | llama3         |  5,142,480 | `2fc5ecf962ed0d2cc229aa7948c14a58427e270505fe018561ffc43f7872352c` | yes   |
+| `prompts`, 48 bytes at most | gpt2           |    497,728 | `9a9f2f1bf62a9a98585d4a0f150d31bf40dabb6897d145876e69454208a16ef7` | yes   |
+| `prompts`, 48 bytes at most | cl100k         |    335,374 | `775da66306b6e76ef048bbf2221813152dfe87213e79d9db2f22eae24f5b7d1b` | yes   |
+| `prompts`, 48 bytes at most | o200k          |    221,969 | `0c4b79f1dd864df83a374f438d5202e18bd2cdb7adf60a44f7d00fa07bee75c5` | yes   |
+| `prompts`, 48 bytes at most | llama3         |    245,906 | `a60be721afcc6606190f853c685a238d3cf17c9dcc966734ce5e487c2ac368a7` | yes   |
+
+One long text in one call on one thread, in MiB/s, the text a Python string made before the clock starts and never asked
+for its UTF-8. "Python array" is `encode_to_numpy()` and "Python list" `encode_ordinary()`, and Hugging Face's columns
+are `encode(text).ids` and `encode_batch_fast([text])[0].ids`, the second of which computes no offsets, each with its
+list of ids taken inside the clock, as `encode_ordinary()` returns one. The last column is the package's list over the
+faster of Hugging Face's two:
+
+| tokenizer.json | Corpus      | Python array | Python list | `encode()` | `encode_batch_fast()` | List over the faster |
+|----------------|-------------|-------------:|------------:|-----------:|----------------------:|---------------------:|
+| gpt2           | `gutenberg` |         68.7 |        55.9 |        2.7 |                   3.9 |                14.3x |
+| cl100k         | `gutenberg` |         69.8 |        57.4 |        2.8 |                   3.7 |                15.5x |
+| o200k          | `gutenberg` |         67.7 |        56.7 |        2.8 |                   3.7 |                15.3x |
+| llama3         | `gutenberg` |         76.7 |        62.8 |        2.9 |                   4.1 |                15.3x |
+| gpt2           | `wiki-ru`   |         81.3 |        51.8 |        2.7 |                   4.4 |                11.8x |
+| cl100k         | `wiki-ru`   |         64.6 |        53.2 |        3.2 |                   4.8 |                11.1x |
+| o200k          | `wiki-ru`   |         54.7 |        49.0 |        3.3 |                   4.7 |                10.4x |
+| llama3         | `wiki-ru`   |         50.6 |        45.2 |        3.4 |                   5.5 |                 8.2x |
+| gpt2           | `wiki-zh`   |         77.7 |        53.6 |        2.8 |                   4.4 |                12.2x |
+| cl100k         | `wiki-zh`   |         71.6 |        50.5 |        3.0 |                   4.8 |                10.5x |
+| o200k          | `wiki-zh`   |         62.1 |        49.9 |        3.1 |                   4.8 |                10.4x |
+| llama3         | `wiki-zh`   |         59.8 |        48.8 |        3.3 |                   5.9 |                 8.3x |
+| gpt2           | `enwik8`    |         57.1 |        47.4 |        2.3 |                   4.0 |                11.8x |
+| cl100k         | `enwik8`    |         55.4 |        47.4 |        2.3 |                   3.8 |                12.5x |
+| o200k          | `enwik8`    |         51.0 |        45.5 |        2.3 |                   3.7 |                12.3x |
+| llama3         | `enwik8`    |         57.5 |        52.6 |        2.3 |                   4.2 |                12.5x |
+
+One call per prompt on one thread, the mean microseconds of a call, over the 20,000 prompts of `prompts` and over the
+same prompts cut to their first 48 bytes, through the same calls; the last column is the latency of Hugging Face's
+faster call over the package's list:
+
+| tokenizer.json | Prompts            | Python list | Python array | `encode()` | `encode_batch_fast()` | List over the faster |
+|----------------|--------------------|------------:|-------------:|-----------:|----------------------:|---------------------:|
+| gpt2           | 48 bytes at most   |        2.01 |         2.23 |      14.45 |                 13.77 |                 6.9x |
+| cl100k         | 48 bytes at most   |        2.03 |         2.29 |      13.94 |                 12.85 |                 6.3x |
+| o200k          | 48 bytes at most   |        2.32 |         2.72 |      14.15 |                 13.55 |                 5.8x |
+| llama3         | 48 bytes at most   |        2.11 |         3.53 |      12.80 |                 11.87 |                 5.6x |
+| gpt2           | 100 to 2,000 bytes |       30.03 |        21.42 |     370.31 |                330.60 |                11.0x |
+| cl100k         | 100 to 2,000 bytes |       32.03 |        24.54 |     332.44 |                300.87 |                 9.4x |
+| o200k          | 100 to 2,000 bytes |       34.91 |        30.30 |     317.99 |                286.07 |                 8.2x |
+| llama3         | 100 to 2,000 bytes |       35.07 |        30.04 |     302.86 |                257.39 |                 7.3x |
+
+The documents of `prompts` as one batch at one and at 24 threads, in MiB/s: the package's `encode_ordinary_batch()` as
+the list and `encode_batch_to_numpy()` as the array, and Hugging Face's `encode_batch()` and `encode_batch_fast()`, each
+with the lists of ids of every document taken inside the clock. The last column is the package's list over the faster of
+Hugging Face's two:
+
+| tokenizer.json | Threads | Python list | Python array | `encode_batch()` | `encode_batch_fast()` | List over the faster |
+|----------------|--------:|------------:|-------------:|-----------------:|----------------------:|---------------------:|
+| gpt2           |       1 |        37.3 |         50.6 |              3.9 |                   3.8 |                 9.6x |
+| cl100k         |       1 |        36.6 |         46.1 |              4.0 |                   4.0 |                 9.2x |
+| o200k          |       1 |        31.3 |         35.3 |              4.1 |                   4.0 |                 7.6x |
+| llama3         |       1 |        32.6 |         37.8 |              4.4 |                   4.7 |                 6.9x |
+| gpt2           |      24 |       103.4 |        362.1 |             23.3 |                  27.7 |                 3.7x |
+| cl100k         |      24 |       121.9 |        344.2 |             26.7 |                  30.1 |                 4.0x |
+| o200k          |      24 |       139.4 |        295.9 |             30.2 |                  33.4 |                 4.2x |
+| llama3         |      24 |       138.7 |        316.5 |             31.6 |                  35.5 |                 3.9x |
+
+On this machine and these files, the package's list of ids comes 8.2 to 15.5 times as fast as Hugging Face's faster call
+on one long text, at 45.2 to 62.8 MiB/s against 3.7 to 5.9, and a prompt of 100 to 2,000 bytes costs it 30.03 to 35.07
+microseconds against Hugging Face's 257.39 to 330.60, 7.3 to 11.0 times less; on the prompts cut to 48 bytes the lead
+narrows to 5.6 to 6.9 times, 2.01 to 2.32 microseconds against 11.87 to 13.77. As one batch the list runs at 6.9 to 9.6
+times Hugging Face's faster call on one thread and at 3.7 to 4.2 times it on 24, where the package's arrays reach 295.9
+to 362.1 MiB/s against Hugging Face's 27.7 to 35.5, which is why the arrays are the calls to use on many threads. The
+figures compare the calls a Python program makes to have the ids of these four files, and no more. Hugging Face's calls
+return an `Encoding` that carries the tokens' strings, their offsets unless `encode_batch_fast()` drops them, and the
+masks its other features use, none of which the package computes, so the tables measure what each call costs as it is,
+not where Hugging Face's time goes or what its merge alone would cost; [benchmarks.md](benchmarks.md) sets the C++
+encoder beside Hugging Face's Rust crate and the other engines. Nothing was measured of Hugging Face's normalizers,
+post-processors, padding or truncation, of any tokenizer.json but the four pinned ones, or on any other machine, and the
+single-thread figures carry the spread across WSL2's processors that [benchmarks.md](benchmarks.md) describes.
 
 ## **Tests**
 
