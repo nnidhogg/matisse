@@ -16,6 +16,7 @@ authors:
   - family-names: "Nidhögg"
     given-names: "Nicklas"
     orcid: "https://orcid.org/0009-0006-6161-6150"
+    website: "https://nidhogg.se"
 repository-code: "https://github.com/nnidhogg/matisse"
 url: "https://github.com/nnidhogg/matisse"
 license: MIT
