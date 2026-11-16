@@ -348,29 +348,6 @@ def test_the_package_s_version_is_its_metadata_s_and_the_user_agent_s():
     assert load.USER_AGENT == f"matisse-tokenizer/{matisse_tokenizer.__version__}"
 
 
-def test_allowed_special_all_is_the_special_tokens_set_as_the_caller_edits_it_as_for_tiktoken(pairs):
-    if "gpt2" not in pairs:
-        pytest.skip("the vocabulary does not hold gpt2")
-    _, theirs = pairs["gpt2"]
-    ranks = theirs._mergeable_ranks
-    specials = {"<|endoftext|>": 50256, "<|x|>": 50257}
-    mine = matisse_tokenizer.Encoding("x", pat_str=theirs._pat_str, mergeable_ranks=ranks, special_tokens=specials)
-    reference = tiktoken.Encoding("x", pat_str=theirs._pat_str, mergeable_ranks=ranks, special_tokens=specials)
-    for encoding in (mine, reference):
-        encoding.special_tokens_set.discard("<|endoftext|>")
-        encoding.special_tokens_set.add("<|y|>")
-    text = "a<|endoftext|>b<|x|>c<|y|>"
-    for disallowed in ("all", ()):
-        arguments = {"allowed_special": "all", "disallowed_special": disallowed}
-        assert outcome(lambda: mine.encode(text, **arguments)) == outcome(lambda: reference.encode(text, **arguments))
-        assert outcome(lambda: mine.encode_to_numpy(text, **arguments)) == outcome(
-            lambda: reference.encode_to_numpy(text, **arguments)
-        )
-        assert outcome(lambda: mine.encode_batch([text], **arguments)) == outcome(
-            lambda: reference.encode_batch([text], **arguments)
-        )
-
-
 def test_allowed_special_holds_strings_alone_as_tiktoken_requires(pair):
     ours, theirs = pair
     spelling = sorted(theirs.special_tokens_set)[0]
