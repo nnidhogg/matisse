@@ -153,8 +153,9 @@ class Encoding:
                 "tiktoken and Meta publish them; this pattern has no description in matisse"
             )
 
-        for spelling, token in special_tokens.items():
-            _special_token_checked(spelling, token)
+        special_tokens = {
+            spelling: _special_token_checked(spelling, token) for spelling, token in special_tokens.items()
+        }
 
         if explicit_n_vocab:
             assert len(mergeable_ranks) + len(special_tokens) == explicit_n_vocab
@@ -1218,7 +1219,7 @@ def _aliases_ordered(special_tokens: dict[str, int]) -> dict[str, int]:
     )
 
 
-def _special_token_checked(spelling: object, token: object) -> None:
+def _special_token_checked(spelling: object, token: object) -> int:
     """Refuses a special token the constructor cannot take, as tiktoken's conversion of its special tokens refuses it:
     a spelling that is not a string or holds a lone surrogate, and an id that is not an integer or does not fit an
     unsigned 32-bit integer.
@@ -1226,6 +1227,9 @@ def _special_token_checked(spelling: object, token: object) -> None:
     Args:
         spelling: The spelling.
         token: The id.
+
+    Returns:
+        The id as a Python integer, as tiktoken's calls return it.
 
     Raises:
         TypeError: If the spelling is not a string or the id not an integer.
@@ -1240,6 +1244,7 @@ def _special_token_checked(spelling: object, token: object) -> None:
         raise OverflowError("Python int too large to convert to C long")
     if not 0 <= value < 2**32:
         raise OverflowError("out of range integral type conversion attempted")
+    return value
 
 
 def _read_only(array: npt.NDArray[np.uint32]) -> npt.NDArray[np.uint32]:

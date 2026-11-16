@@ -5,6 +5,7 @@ from ranks, and the calls matisse_tokenizer refuses."""
 from __future__ import annotations
 
 import contextlib
+import json
 import pickle
 import shutil
 import threading
@@ -414,6 +415,24 @@ def test_the_constructor_refuses_special_tokens_as_tiktoken_s_conversion_refuses
         assert raised(lambda: matisse_tokenizer.Encoding("x", **arguments)) == raised(
             lambda: tiktoken.Encoding("x", **arguments)
         )
+
+
+def test_a_special_token_s_id_given_as_another_integer_type_is_returned_as_tiktoken_returns_it(pairs):
+    if "gpt2" not in pairs:
+        pytest.skip("the vocabulary does not hold gpt2")
+    _, theirs = pairs["gpt2"]
+    specials = {"<x>": numpy.int64(50300)}
+    arguments = {"pat_str": theirs._pat_str, "mergeable_ranks": theirs._mergeable_ranks, "special_tokens": specials}
+    mine = matisse_tokenizer.Encoding("x", **arguments)
+    reference = tiktoken.Encoding("x", **arguments)
+    for call in (
+        lambda encoding: encoding.encode("a<x>", allowed_special="all"),
+        lambda encoding: encoding.encode_batch(["a<x>", "<x>"], allowed_special="all"),
+        lambda encoding: encoding.encode_single_token("<x>"),
+    ):
+        assert json.dumps(call(mine)) == json.dumps(call(reference))
+    expected = json.dumps(reference.encode("a<x>", allowed_special="all"))
+    assert json.dumps(mine.encode_parallel("a<x>", 2, allowed_special="all")) == expected
 
 
 def test_the_text_is_read_before_the_allowed_special_tokens_as_tiktoken_s_core_reads_them(pair):
