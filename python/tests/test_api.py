@@ -423,7 +423,7 @@ def raised_or_ids(call: object) -> object:
         return type(error), str(error)
 
 
-def test_decoding_takes_a_sequence_as_tiktoken_requires(pair):
+def test_decoding_takes_the_sequences_and_the_iterables_tiktoken_takes(pair):
     ours, theirs = pair
     for tokens in ({1, 2}, frozenset({1}), {1: 2}, iter([1]), (token for token in [1]), "ab", [1, 2], (1, 2), b"ab",
                    range(3), numpy.array([1, 2], dtype=numpy.uint32)):
@@ -431,6 +431,13 @@ def test_decoding_takes_a_sequence_as_tiktoken_requires(pair):
         assert raised_or_ids(lambda: ours.decode(rebuilt())) == raised_or_ids(lambda: theirs.decode(rebuilt()))
         assert raised_or_ids(lambda: ours.decode_bytes(rebuilt())) == raised_or_ids(
             lambda: theirs.decode_bytes(rebuilt())
+        )
+        # The two calls tiktoken writes in Python iterate their ids, so they take any iterable.
+        assert raised_or_ids(lambda: ours.decode_tokens_bytes(rebuilt())) == raised_or_ids(
+            lambda: theirs.decode_tokens_bytes(rebuilt())
+        )
+        assert raised_or_ids(lambda: ours.decode_with_offsets(rebuilt())) == raised_or_ids(
+            lambda: theirs.decode_with_offsets(rebuilt())
         )
     assert raised_or_ids(lambda: ours.decode_batch([{1}])) == raised_or_ids(lambda: theirs.decode_batch([{1}]))
     assert raised_or_ids(lambda: ours.decode_bytes_batch([{1}])) == raised_or_ids(

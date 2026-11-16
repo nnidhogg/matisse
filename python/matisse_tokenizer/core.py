@@ -136,8 +136,9 @@ class Encoding:
 
         Raises:
             ValueError: If the pattern is not one matisse describes, if one special token's spelling begins another's,
-                or if matisse's loader or encoder refuses the ranks, which must hold each of the 256 bytes as a token,
-                or the special tokens, two of which sharing an id among them.
+                if two special tokens share an id in any table but tiktoken's own of o200k_harmony, which is taken, or
+                if matisse's loader or encoder refuses the ranks, which must hold each of the 256 bytes as a token, or
+                the special tokens.
             TypeError: If a rank is not an integer, or a special token's spelling is not a string or its id not an
                 integer, as tiktoken's conversion refuses them.
             OverflowError: If a special token's id is negative or does not fit 32 bits, as tiktoken's conversion
@@ -351,8 +352,9 @@ class Encoding:
     ) -> npt.NDArray[np.uint32]:
         """Returns the ids of a text as a NumPy array of unsigned 32-bit integers, as encode() returns them.
 
-        The array owns the encoder's buffer, so no Python integer is made per id. A lone surrogate is refused with
-        UnicodeEncodeError, as tiktoken's encode_to_numpy() refuses it.
+        The array owns the encoder's buffer, or is a copy where the stretches around allowed special tokens are joined,
+        so no Python integer is made per id. A lone surrogate is refused with UnicodeEncodeError, as tiktoken's
+        encode_to_numpy() refuses it.
 
         Args:
             text: The text.

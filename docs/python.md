@@ -187,12 +187,14 @@ are the places where matisse-tokenizer does something else:
   `allowed_special` is `"all"` or a `set` or `frozenset` of strings, and anything else, a string or a list among them,
   is refused with `TypeError`, and a set holding a string with a lone surrogate, a special token's or not, with
   `UnicodeEncodeError`. A text that is not a string is refused with `TypeError`, before `allowed_special` is read, and
-  so is a lone surrogate in a call that does not replace it. The ids given to the decoding calls are a sequence, and a
-  set, a dict, an iterator or a string is refused with `TypeError`. `encode_single_token()` takes a string or `bytes`
-  alone. The constructor refuses a special token's id that is negative or does not fit 32 bits with `OverflowError` and
-  a spelling holding a lone surrogate with `UnicodeEncodeError`. `num_threads` takes what tiktoken's thread pool takes,
-  `None`, a fraction and infinity among them, except a NaN, which tiktoken's pool waits on forever and which is refused
-  here with `ValueError`. Every array returned is read-only, as tiktoken's are.
+  so is a lone surrogate in a call that does not replace it. The ids given to `decode()`, `decode_bytes()` and each run
+  of the batch decoders are a sequence, and a set, a dict, an iterator or a string is refused with `TypeError`, while
+  `decode_tokens_bytes()` and `decode_with_offsets()` take any iterable of ids, as tiktoken's do.
+  `encode_single_token()` takes a string or `bytes` alone. The constructor refuses a special token's id that is negative
+  or does not fit 32 bits with `OverflowError` and a spelling holding a lone surrogate with `UnicodeEncodeError`.
+  `num_threads` takes what tiktoken's thread pool takes, `None`, a fraction and infinity among them, except a NaN, which
+  tiktoken's pool waits on forever and which is refused here with `ValueError`. Every array returned is read-only, as
+  tiktoken's are.
 - **The load module.** `matisse_tokenizer.load` gives tiktoken's `load_tiktoken_bpe()`, `read_file_cached()` and
   `read_file()` with tiktoken's behavior, so that Meta's tokenizer.py reads Llama 3's ranks with it, but reads only
   local files and http and https URLs, refusing with `ValueError` the other schemes tiktoken reads through blobfile. A
@@ -256,10 +258,12 @@ encoded in C++ by a pool of `num_threads` threads, the calling thread one of the
 counter, each with a cache of its own, as matisse's bench encodes a batch; `encode_parallel()` starts a thread per chunk
 beyond the last, as matisse's `encode_parallel()` does. The text's UTF-8 is read from the Python string, which CPython
 computes once and keeps beside the string, and an ASCII string needs no conversion. The ids are returned as a list of
-Python integers, or as a NumPy array that owns matisse's buffer with no copy. On many threads the arrays are the calls
-to choose: a list holds one Python integer per id, made on the calling thread once the encoding is done, so a batch of
-lists scales with its threads only as far as that one thread can build them, while an array, which owns matisse's
-buffer, scales with the encoding itself, as the batch tables under Performance show.
+Python integers, or as a NumPy array that owns matisse's buffer with no copy, except where the stretches of a text
+around allowed special tokens are joined, which `numpy.concatenate` copies, as it copies every array of a batch with
+special tokens allowed, a text holding none included. On many threads the arrays are the calls to choose: a list holds
+one Python integer per id, made on the calling thread once the encoding is done, so a batch of lists scales with its
+threads only as far as that one thread can build them, while an array, which owns matisse's buffer, scales with the
+encoding itself, as the batch tables under Performance show.
 
 ## **Performance**
 
@@ -590,9 +594,10 @@ tests that read them skip without them.
   whole corpus and every refutation that is UTF-8 to Hugging Face's tokens of it; and its refusals and what a window
   decided carries.
 - **test_load.py** holds the fetch and the cache against a server on the loopback interface: tiktoken's cache keys and
-  directories, the digest, a cached file that is not the pinned one, the cache turned off, and the request's headers.
+  directories, the digest, a cached file that is not the pinned one, also where it cannot be replaced, the cache turned
+  off, and the request's headers.
 - **test_reports.py** holds each shipped report to the report `validate()` decides at the registry's width, and its
   refusal under a pattern of other class symbols.
 
-With every input given, the suite is 233 tests, all passing, in about nine minutes on the machine above, most of them
-the Unicode tests; with no vocabulary, 25 pass and 208 skip.
+With every input given, the suite is 243 tests, all passing, in about nine minutes on the machine above, most of them
+the Unicode tests; with no vocabulary, 27 pass and 216 skip.
