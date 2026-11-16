@@ -202,8 +202,9 @@ token is ordinary text. It refuses an allowed spelling that is not one of the de
 definition the merge cannot take. No call changes an encoder, so one encoder serves any number of threads. An encoder is
 copied and moved and never assigned to.
 
-- `encode(text)` returns the ids of a text, as the vendor's tokenizer encodes it with those special tokens allowed. It
-  builds a piece cache for the call.
+- `encode(text)` returns the ids of a text, as the vendor's tokenizer encodes it with those special tokens allowed,
+  Llama 3's being tiktoken's encoding built from Meta's rank file, pattern and special tokens, as Meta's tokenizer.py
+  builds it. It builds a piece cache for the call.
 - `encode(text, cache)` encodes with a `Piece_cache` the caller keeps across its calls, made for this encoder with the
   number of pieces it holds before it stops filling, where `piece_cache_capacity` is the bound the encoder's own caches
   use. A cache has no lock, so keep one per thread. It pays on short texts, as [limits.md](limits.md) measures.

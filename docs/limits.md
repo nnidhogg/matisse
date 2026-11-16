@@ -8,15 +8,23 @@ it.
 
 ## **The Model: The Vendor's Ids, or a Refusal**
 
-matisse gives the token ids the vendor's tokenizer gives, exactly, or it throws. It does so for four tokenizers: GPT-2,
-read from encoder.json and vocab.bpe or from a tiktoken rank file, and cl100k_base, o200k_base and Llama 3, read from
-their tiktoken rank files, each under its published pre-tokenizer pattern and with the vendor's special tokens, and for
-a Hugging Face tokenizer.json under GPT-2's, o200k's or Llama 3's pattern, whose ids are Hugging Face tokenizers' own
-for the file, with `add_special_tokens` false. On the fourteen corpora of [benchmarks.md](benchmarks.md) matisse's ids
-equal tiktoken's, Hugging Face tokenizers' and the bpe crate's by digest wherever each of them ran. The one caveat is
-the Unicode version: the class tables are pinned to Unicode 16.0.0, the version tiktoken's regex engine reads, and a
-text holding a code point whose class differs between Unicode versions can be segmented differently by an engine with
-tables of another version, as the section on Unicode below describes.
+matisse gives the token ids the vendor's tokenizer gives, exactly, or it throws, Llama 3's reference being tiktoken's
+encoding built from Meta's rank file, pattern and special tokens, as Meta's tokenizer.py builds it. It does so for four
+tokenizers: GPT-2, read from encoder.json and vocab.bpe or from a tiktoken rank file, and cl100k_base, o200k_base and
+Llama 3, read from their tiktoken rank files, each under its published pre-tokenizer pattern and with the vendor's
+special tokens, and for a Hugging Face tokenizer.json under GPT-2's, o200k's or Llama 3's pattern, whose ids are Hugging
+Face tokenizers' own for the file, with `add_special_tokens` false. On the fourteen corpora of
+[benchmarks.md](benchmarks.md) matisse's ids equal tiktoken's, Hugging Face tokenizers' and the bpe crate's by digest
+wherever each of them ran. The one caveat is the Unicode version: the class tables are pinned to Unicode 16.0.0, the
+version tiktoken's regex engine reads, and a text holding a code point whose class differs between Unicode versions can
+be segmented differently by an engine with tables of another version, as the section on Unicode below describes.
+
+Meta's `Tokenizer.encode`, the wrapper around that encoding in meta-llama/llama3's llama/tokenizer.py, first cuts a text
+into substrings of at most 400,000 characters and each of those at runs of more than 25,000 consecutive white space or
+non-white space characters, and encodes the parts apart. matisse, like tiktoken's encoding, cuts nothing, so its ids can
+differ from the wrapper's on a text longer than 400,000 characters or holding such a run, and do on 25,001 spaces:
+tiktoken's encoding and matisse give 196 ids, ending 58040, 58040, 58040 and 10724, and the encoding of the first 25,000
+spaces and the last one apart, the wrapper's parts, gives 197, ending 58040, 58040, 13137 and 220.
 
 The model excludes the following, some of it permanently and some only in this version:
 
