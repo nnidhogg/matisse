@@ -166,13 +166,16 @@ template <typename Work>
 }
 
 /**
- * @brief Returns ids as a NumPy array that owns them, with no copy.
+ * @brief Returns ids as a read-only NumPy array that owns them, with no copy, an empty one included.
  * @param ids The ids.
  * @return The array.
  */
 [[nodiscard]] Id_array_t array_of(Ids_t ids)
 {
     auto owned{std::make_unique<Ids_t>(std::move(ids))};
+
+    // NumPy makes a writable array of its own for a null buffer, which an empty vector may hold.
+    owned->reserve(1);
 
     const auto data{owned->data()};
 

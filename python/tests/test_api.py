@@ -436,6 +436,10 @@ def test_every_array_is_read_only_as_tiktoken_s_is(pair):
     assert ours.encode_to_numpy("ab").flags.writeable is False
     assert ours.encode_parallel_to_numpy(text, 2, allowed_special="all").flags.writeable is False
     assert all(not array.flags.writeable for array in ours.encode_batch_to_numpy([text, "ab"], allowed_special="all"))
+    assert theirs.encode_to_numpy("").flags.writeable is False
+    assert ours.encode_to_numpy("").flags.writeable is False
+    assert ours.encode_parallel_to_numpy("", 2).flags.writeable is False
+    assert all(not array.flags.writeable for array in ours.encode_batch_to_numpy(["", "ab"]))
 
 
 def test_an_unbounded_pool_runs_as_tiktoken_s_does(pair):
