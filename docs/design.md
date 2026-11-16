@@ -427,23 +427,40 @@ ordinary tokens are the vocabulary's other entries, their ids dense from zero: G
 vocabulary at 50256 and leaves the ordinary tokens as a special token, the special tokens of Xenova's conversions stand
 in their vocabularies above the ordinary ids, and Llama 3's stand in its added tokens alone. Hugging Face reads no added
 token's own id but gives it one, in the file's order: its id in the vocabulary when its spelling is there, and otherwise
-the vocabulary's size, or one past the greatest id given before it when that is no less. The reader refuses a special
-token whose id is another, naming the id Hugging Face gives it, so that every special token stands at Hugging Face's id.
-The ids are those Hugging Face's `encode()` gives with `add_special_tokens` false. A post-processor is taken when it
-adds tokens only under `add_special_tokens`: ByteLevel, which moves offsets alone, TemplateProcessing, as Llama 3's file
-adds its `<|begin_of_text|>` with one, or a Sequence of the two, and a caller that wants such a token adds its id, as
-[limits.md](limits.md) says of every beginning-of-sequence token.
+the vocabulary's size and the number of such tokens before it. The reader refuses a special token whose id is another,
+naming the id Hugging Face gives it, so that every special token stands at Hugging Face's id. The ids are those Hugging
+Face's `encode()` gives with `add_special_tokens` false. A post-processor is taken when it adds tokens only under
+`add_special_tokens`: ByteLevel, which moves offsets alone, a TemplateProcessing whose template of a single text holds
+the text once, as Llama 3's file adds its `<|begin_of_text|>` with one, or a Sequence of the two, and a caller that
+wants such a token adds its id, as [limits.md](limits.md) says of every beginning-of-sequence token. Hugging Face writes
+a text's ids once for every sequence of the template, special tokens added or not, so that a template `$A $A` writes
+them twice, and the reader refuses a template that holds the sequence A more than once or not at all.
+
+Hugging Face cuts its added tokens out of a text before the pre-tokenizer reads it, in two passes whatever the
+normalizer: first those whose `normalized` is false, the earliest occurrence first and the longest of those that begin
+at one byte, then those whose `normalized` is true, in the same way, out of each stretch the first pass leaves. The mark
+therefore decides between two spellings that overlap: with ab marked and bc not, abc is a and the token bc, where one
+pass would cut ab and leave c. `Special_token::normalized` carries the mark, false when the file gives none, and the
+`Encoder`, the stream and the Python package cut in the same two passes among the special tokens allowed. A rank file's
+special tokens are all unmarked, so that their one pass is tiktoken's on the vendors' rank files, where no special
+token's spelling begins another's. With `ignore_merges` true Hugging Face looks a piece up in the whole vocabulary,
+where the definition looks up the ordinary tokens alone, so a piece that spells a special token's entry would be that
+token's id even as ordinary text, as the piece ` PAD` is under an entry `ĠPAD` that is also an added token. The reader
+therefore refuses a vocabulary entry with a special token's id when `ignore_merges` is true. Without it no piece reaches
+such an entry but by a merge that forms it, which the encoder refuses, naming the merge.
 
 The reader refuses, naming the member by its path from the root, such as `pre_tokenizer.pretokenizers[1].use_regex`,
 what it holds and what the reader takes there: a model other than BPE, dropout, a continuing-subword prefix, an
 end-of-word suffix or byte fallback; a normalizer, truncation or padding other than null; any other pre-tokenizer or
 pattern, the empty pattern among them, which splits a text into its characters, and any other post-processor; an added
 token that is not special, since Hugging Face matches every added token in the text before its pre-tokenizer, or that
-strips white space or matches single words; ordinary ids that are not dense from zero, an empty token, two tokens with
-one spelling, a character the byte map does not carry, a merge that is not two parts, and a pair listed twice. The
-model's `unk_token` is not read, since the encoder refuses a definition in which a byte is no token.
-`tokenizer_json_spelling(path)` returns the spelling a file's pre-tokenizer runs, by the same recognition, for a caller
-that finds the tokenizer library by the file, as `matisse-validate` does through lookup.
+strips white space or matches single words, or whose `normalized` is no boolean; ordinary ids that are not dense from
+zero, an empty token, two tokens with one spelling, a character the byte map does not carry, a merge that is not two
+parts, and a pair listed twice. The model's `unk_token` is not read: Hugging Face reads it only for a character its
+vocabulary does not hold, which it drops when the model names none, and the encoder and `validate_merges()` refuse a
+definition in which a byte is no token. `tokenizer_json_spelling(path)` returns the spelling a file's pre-tokenizer
+runs, by the same recognition, for a caller that finds the tokenizer library by the file, as `matisse-validate` does
+through lookup.
 
 load's tests hold every recognition and refusal on small files the tests write. The tokenizer libraries' tests read the
 pinned tokenizer.json files: GPT-2's under `gpt2::spelling()` holds encoder.json's tokens but `<|endoftext|>`,
@@ -724,14 +741,15 @@ It refuses an `allowed` spelling that is not one of the definition's special tok
 `chunk_boundaries()` and `encode_parallel()` here.
 
 `encode()` is the sequential encoding. The text is split at every occurrence of an allowed special token, the earliest
-first and the longest of those that begin at one byte, which emits its id. Each stretch between them is segmented by the
-`Segmenter` as a complete input, and every piece is then looked up whole where the definition's whole-piece lookup says
-so and otherwise merged alone by its merge rule. Special tokens not allowed are ordinary text, which is tiktoken's
-`encode()` with that `allowed_special` and an empty `disallowed_special`, and encoder.py's behavior when none is
-allowed. tiktoken leaves the choice between allowed spellings that begin at one byte to the order of its table, and no
-allowed spelling begins another on any definition in scope. `decode()` spells each ordinary id's bytes and each special
-id's spelling as raw bytes, not checked to be UTF-8, since a run of ids cut inside a code point spells bytes that are
-not.
+first and the longest of those that begin at one byte, which emits its id, the tokens a tokenizer.json marks
+`normalized` split out of the stretches the others leave, as Hugging Face cuts them. Each stretch between them is
+segmented by the `Segmenter` as a complete input, and every piece is then looked up whole where the definition's
+whole-piece lookup says so and otherwise merged alone by its merge rule. Special tokens not allowed are ordinary text.
+On the vendors' rank files and GPT-2's files, whose special tokens are unmarked, that is tiktoken's `encode()` with that
+`allowed_special` and an empty `disallowed_special`, and encoder.py's behavior when none is allowed. tiktoken leaves the
+choice between allowed spellings that begin at one byte to the order of its table, and no allowed spelling begins
+another on the pinned vendor definitions. `decode()` spells each ordinary id's bytes and each special id's spelling as
+raw bytes, not checked to be UTF-8, since a run of ids cut inside a code point spells bytes that are not.
 
 `chunk_boundaries()` aims for `chunks` pieces of equal size, as `core::Lexer`'s does. Each interior boundary is the
 first cut at or after the later of its equal-division target and one past the previous boundary, and a target with no
@@ -799,9 +817,10 @@ GCC 13 returns an optional through a byte and a word stored apart and read back 
 The stream has three layers, each exact at its level.
 
 The first cuts the special tokens. An occurrence of an allowed spelling, the earliest and the longest at its byte as
-`encode()` finds it, is committed once no proper prefix of an allowed spelling begins at or before it in the bytes read.
-The stretches between special tokens are then `encode()`'s on every completion of the text, and only the whole code
-points before the earliest such prefix reach the second layer.
+`encode()` finds it, is committed once no proper prefix of an allowed spelling begins at or before it in the bytes read,
+and that of a token marked `normalized` once no proper prefix of an unmarked spelling begins inside it either, since an
+unmarked token is cut out first. The stretches between special tokens are then `encode()`'s on every completion of the
+text, and only the whole code points before the earliest such prefix reach the second layer.
 
 The second keeps the live runs of M over the stretch, a `Live_runs`. A run is a path of M over a marking of the code
 points read, and since every state of M is reachable and reaches acceptance, the runs are exactly the restrictions of

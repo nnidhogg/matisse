@@ -412,13 +412,20 @@ std::vector<Encoder::Occurrence> Encoder::occurrences(const std::string_view tex
 
     std::size_t from{0};
 
-    while (true)
-    {
+    const auto two_passes{std::ranges::any_of(allowed_, &load::Special_token::normalized)};
+
+    // The earliest occurrence from the search that ends by a limit, of the tokens with the mark or of those without.
+    const auto earliest{[&](const bool normalized, const std::size_t limit) {
         std::optional<Occurrence> first{};
 
         for (std::size_t special{0}; special < allowed_.size(); ++special)
         {
             const auto& spelling{allowed_[special].spelling};
+
+            if (two_passes && allowed_[special].normalized != normalized)
+            {
+                continue;
+            }
 
             if (next[special] < from)
             {
@@ -427,7 +434,7 @@ std::vector<Encoder::Occurrence> Encoder::occurrences(const std::string_view tex
 
             const auto at{next[special]};
 
-            if (at == std::string_view::npos)
+            if (at == std::string_view::npos || at + spelling.size() > limit)
             {
                 continue;
             }
@@ -441,6 +448,19 @@ std::vector<Encoder::Occurrence> Encoder::occurrences(const std::string_view tex
                 first = Occurrence{.at = at, .special = special};
             }
         }
+
+        return first;
+    }};
+
+    while (true)
+    {
+        const auto unmarked{earliest(false, text.size())};
+
+        const auto stretch_end{unmarked ? unmarked->at : text.size()};
+
+        const auto marked{two_passes ? earliest(true, stretch_end) : std::nullopt};
+
+        const auto first{marked ? marked : unmarked};
 
         if (!first)
         {
@@ -513,7 +533,7 @@ std::vector<load::Token_id_t> Encoder::encode_chunk(
     {
         const auto [at, special]{*next};
 
-        const auto& [spelling, id]{allowed_[special]};
+        const auto& [spelling, id, normalized]{allowed_[special]};
 
         encode_stretch(text.substr(start, at - start), at - start);
 

@@ -734,6 +734,84 @@ TEST(Definition_test, Read_tokenizer_json_orders_the_special_tokens_by_id_and_ta
     EXPECT_EQ(specials[3].id, 6U);
 }
 
+TEST(Definition_test, Read_tokenizer_json_reads_each_special_token_s_normalized_false_when_absent)
+{
+    Tokenizer_json_parts parts{};
+
+    // Hugging Face cuts the added tokens without the mark out of a text first and the marked ones out of the rest.
+    parts.added_tokens = R"([{"id": 6, "content": "<|end|>", "special": true, "normalized": true},
+                            {"id": 7, "content": "<|a|>", "special": true, "normalized": false},
+                            {"id": 8, "content": "<|b|>", "special": true}])";
+
+    const auto path{written("tokenizer.json", text_of(parts))};
+
+    const auto [merge_rule, whole_piece_lookup, spellings, merges, specials]{read_tokenizer_json(path, gpt2_spelling)};
+
+    ASSERT_EQ(specials.size(), 3U);
+    EXPECT_TRUE(specials[0].normalized);
+    EXPECT_FALSE(specials[1].normalized);
+    EXPECT_FALSE(specials[2].normalized);
+
+    parts.added_tokens = R"([{"id": 6, "content": "<|end|>", "special": true, "normalized": 1}])";
+
+    const auto refusal{tokenizer_json_refusal(text_of(parts))};
+
+    EXPECT_TRUE(refusal.contains("added_tokens[0].normalized of")) << refusal;
+    EXPECT_TRUE(refusal.contains("is 1, where the reader takes true or false")) << refusal;
+}
+
+TEST(Definition_test, Read_tokenizer_json_gives_a_token_outside_the_vocabulary_the_next_id_past_the_vocabulary_s_size)
+{
+    Tokenizer_json_parts parts{};
+
+    // The vocabulary holds seven entries, its special token at an id past them, and Hugging Face counts on from seven.
+    parts.model = R"({"vocab": {"a": 0, "b": 1, "Ġ": 2, "ab": 3, "Ġab": 4, "Ã©": 5, "<|end|>": 9},
+                      "merges": ["a b", "Ġ ab"]})";
+    parts.added_tokens = R"([{"id": 9, "content": "<|end|>", "special": true},
+                            {"id": 7, "content": "<|a|>", "special": true},
+                            {"id": 8, "content": "<|b|>", "special": true}])";
+
+    const auto path{written("tokenizer.json", text_of(parts))};
+
+    const auto [merge_rule, whole_piece_lookup, spellings, merges, specials]{read_tokenizer_json(path, gpt2_spelling)};
+
+    ASSERT_EQ(specials.size(), 3U);
+    EXPECT_EQ(specials[0].spelling, "<|a|>");
+    EXPECT_EQ(specials[1].spelling, "<|b|>");
+    EXPECT_EQ(specials[2].spelling, "<|end|>");
+
+    parts.added_tokens = R"([{"id": 9, "content": "<|end|>", "special": true},
+                            {"id": 10, "content": "<|a|>", "special": true}])";
+
+    const auto refusal{tokenizer_json_refusal(text_of(parts))};
+
+    EXPECT_TRUE(refusal.contains("is 10, where the reader takes 7, the id Hugging Face gives the token")) << refusal;
+}
+
+TEST(Definition_test, Read_tokenizer_json_refuses_a_whole_piece_lookup_over_a_special_token_s_entry)
+{
+    Tokenizer_json_parts parts{};
+
+    // Hugging Face looks a piece up in the whole vocabulary, so the piece <|end|> read as text is the special token.
+    parts.model = R"({"ignore_merges": true,
+                      "vocab": {"a": 0, "b": 1, "Ġ": 2, "ab": 3, "Ġab": 4, "Ã©": 5, "<|end|>": 6},
+                      "merges": ["a b", "Ġ ab"]})";
+
+    const auto refusal{tokenizer_json_refusal(text_of(parts))};
+
+    EXPECT_TRUE(refusal.contains(R"(model.vocab["<|end|>"] of)")) << refusal;
+    EXPECT_TRUE(
+            refusal.contains("is 6, a special token's id, where the reader takes an ordinary token's id while "
+                             "model.ignore_merges is true"))
+            << refusal;
+
+    parts.added_tokens = R"([{"id": 7, "content": "<|a|>", "special": true}])";
+    parts.model = R"({"ignore_merges": true, "vocab": {"a": 0, "b": 1, "Ġ": 2, "ab": 3, "Ġab": 4, "Ã©": 5, "<": 6},
+                      "merges": ["a b", "Ġ ab"]})";
+
+    EXPECT_TRUE(tokenizer_json_refusal(text_of(parts)).empty());
+}
+
 TEST(Definition_test, Read_tokenizer_json_refuses_a_special_token_whose_id_is_not_the_one_hugging_face_gives_it)
 {
     // Hugging Face reads no added token's own id: one in the vocabulary gets its id there and any other the next id
@@ -887,9 +965,50 @@ TEST(Definition_test, Read_tokenizer_json_refuses_a_normalizer_truncation_or_pos
     // Llama 3's post-processor adds its beginning of text only under add_special_tokens.
     Tokenizer_json_parts template_processing{};
     template_processing.post_processor = R"({"type": "Sequence", "processors": [{"type": "ByteLevel"},
-        {"type": "TemplateProcessing", "single": [{"SpecialToken": {"id": "<|end|>", "type_id": 0}}]}]})";
+        {"type": "TemplateProcessing", "single": [{"SpecialToken": {"id": "<|end|>", "type_id": 0}},
+                                                  {"Sequence": {"id": "A", "type_id": 0}}]}]})";
 
     EXPECT_TRUE(tokenizer_json_refusal(text_of(template_processing)).empty());
+}
+
+TEST(Definition_test, Read_tokenizer_json_refuses_a_template_that_does_not_hold_a_single_text_once)
+{
+    constexpr std::string_view special{R"({"SpecialToken": {"id": "<|end|>", "type_id": 0}})"};
+    constexpr std::string_view sequence{R"({"Sequence": {"id": "A", "type_id": 0}})"};
+    constexpr std::string_view second{R"({"Sequence": {"id": "B", "type_id": 1}})"};
+
+    // Hugging Face writes a text's ids once for every sequence of the template, special tokens added or not.
+    const std::vector<std::pair<std::string, std::string_view>> refusals{
+            {std::format("[{}, {}]", sequence, sequence), "is a template that holds the sequence A 2 times"},
+            {std::format("[{}]", special), "is a template that holds the sequence A 0 times"},
+            {std::format("[{}, {}]", sequence, second), "single[1] of"},
+            {R"("$A")", R"(is "$A", where the reader takes an array of pieces)"}};
+
+    for (const auto& [single, expected] : refusals)
+    {
+        Tokenizer_json_parts parts{};
+
+        parts.post_processor = std::format(R"({{"type": "TemplateProcessing", "single": {}}})", single);
+
+        const auto refusal{tokenizer_json_refusal(text_of(parts))};
+
+        EXPECT_TRUE(refusal.contains("post_processor.single")) << single << ": " << refusal;
+        EXPECT_TRUE(refusal.contains(expected)) << single << ": " << refusal;
+    }
+
+    Tokenizer_json_parts in_sequence{};
+
+    in_sequence.post_processor = std::format(
+            R"({{"type": "Sequence", "processors": [{{"type": "TemplateProcessing", "single": [{}, {}]}}]}})", sequence,
+            sequence);
+
+    EXPECT_TRUE(tokenizer_json_refusal(text_of(in_sequence)).contains("post_processor.processors[0].single of"));
+
+    Tokenizer_json_parts once{};
+
+    once.post_processor = std::format(R"({{"type": "TemplateProcessing", "single": [{}, {}]}})", sequence, special);
+
+    EXPECT_TRUE(tokenizer_json_refusal(text_of(once)).empty());
 }
 
 TEST(Definition_test, Read_tokenizer_json_refuses_a_model_that_is_not_bpe_as_the_reader_takes_it)

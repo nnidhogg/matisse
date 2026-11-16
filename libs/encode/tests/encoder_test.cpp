@@ -874,6 +874,133 @@ TEST(Encoder_test, A_special_token_spelled_from_a_code_point_s_bytes_is_encoded_
     }
 }
 
+TEST(Encoder_test, Special_tokens_marked_normalized_are_cut_out_of_the_stretches_the_others_leave_however_encoded)
+{
+    auto definition{test_definition()};
+
+    auto next{definition.specials.back().id};
+
+    const std::vector<std::string> unmarked{"bc", "<t>"};
+
+    const std::vector<std::string> marked{"ab", "abc", "c<", "t>a"};
+
+    for (const auto& spelling : unmarked)
+    {
+        definition.specials.push_back({.spelling = spelling, .id = ++next});
+    }
+
+    for (const auto& spelling : marked)
+    {
+        definition.specials.push_back({.spelling = spelling, .id = ++next, .normalized = true});
+    }
+
+    auto allowed{unmarked};
+
+    allowed.insert(allowed.end(), marked.begin(), marked.end());
+
+    const auto encoder{encoder_of(definition, allowed)};
+
+    const auto id_of{[&](const std::string_view spelling) {
+        return std::ranges::find(definition.specials, spelling, &Special_token::spelling)->id;
+    }};
+
+    // Hugging Face cuts bc out of abc before ab, which begins earlier, and leaves a.
+    EXPECT_EQ(encoder.encode("abc"), (std::vector<Token_id_t>{Token_id_t{'a'}, id_of("bc")}));
+    EXPECT_EQ(encoder.encode("abd"), (std::vector<Token_id_t>{id_of("ab"), Token_id_t{'d'}}));
+
+    // The ids by brute force: the unmarked tokens cut out of the text, then the marked ones out of each stretch left.
+    const auto two_passes{[&](const std::string_view text) {
+        std::vector<Token_id_t> ids{};
+
+        const auto append_stretch{[&](const std::string_view stretch) {
+            std::size_t start{0};
+
+            for (const auto [begin, end] : special_spans(stretch, marked))
+            {
+                const auto before{uncached_ids(definition, stretch.substr(start, begin - start))};
+
+                ids.insert(ids.end(), before.begin(), before.end());
+
+                ids.push_back(id_of(stretch.substr(begin, end - begin)));
+
+                start = end;
+            }
+
+            const auto rest{uncached_ids(definition, stretch.substr(start))};
+
+            ids.insert(ids.end(), rest.begin(), rest.end());
+        }};
+
+        std::size_t start{0};
+
+        for (const auto [begin, end] : special_spans(text, unmarked))
+        {
+            append_stretch(text.substr(start, begin - start));
+
+            ids.push_back(id_of(text.substr(begin, end - begin)));
+
+            start = end;
+        }
+
+        append_stretch(text.substr(start));
+
+        return ids;
+    }};
+
+    constexpr std::array<std::string_view, 12> shapes{"a",  "b",  "c",  "ab", "bc", "<t>",
+                                                      "<t", ">a", "c<", " ",  "d",  "<"};
+
+    std::mt19937 random{29};
+
+    std::uniform_int_distribution<std::size_t> shape{0, shapes.size() - 1};
+
+    std::uniform_int_distribution<std::size_t> fragments{1, 9};
+
+    for (std::size_t count{0}; count < 3000; ++count)
+    {
+        std::string text{};
+
+        for (auto left{fragments(random)}; left > 0; --left)
+        {
+            text += shapes[shape(random)];
+        }
+
+        const auto expected{two_passes(text)};
+
+        ASSERT_EQ(encoder.encode(text), expected) << text;
+
+        for (const std::size_t chunks : {2UZ, 3UZ, 4UZ})
+        {
+            ASSERT_EQ(encoder.encode_parallel(text, chunks), expected) << text << " in " << chunks;
+        }
+
+        // Pushes of one, two and three bytes end inside every spelling and between any two of them.
+        for (const std::size_t push : {1UZ, 2UZ, 3UZ})
+        {
+            Stream_encoder stream{encoder};
+
+            std::vector<Token_id_t> streamed{};
+
+            for (std::size_t at{0}; at < text.size(); at += push)
+            {
+                const auto ids{stream.push(std::string_view{text}.substr(at, push))};
+
+                streamed.insert(streamed.end(), ids.begin(), ids.end());
+
+                const auto final_so_far{std::ranges::mismatch(streamed, expected).in1 == streamed.end()};
+
+                ASSERT_TRUE(final_so_far) << text << " after " << at + push << " bytes in pushes of " << push;
+            }
+
+            const auto rest{stream.finish()};
+
+            streamed.insert(streamed.end(), rest.begin(), rest.end());
+
+            ASSERT_EQ(streamed, expected) << text << " in pushes of " << push;
+        }
+    }
+}
+
 TEST(Encoder_test, Decode_refuses_an_id_that_is_neither_an_ordinary_nor_a_special_token_naming_it_and_its_index)
 {
     const auto definition{test_definition()};

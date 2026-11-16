@@ -168,11 +168,21 @@ private:
     void require_null(std::string_view member) const;
 
     /**
-     * @brief Requires the post-processor to add tokens only under `add_special_tokens`: null, ByteLevel,
-     *        TemplateProcessing, or a Sequence of the two.
+     * @brief Requires the post-processor to add tokens only under `add_special_tokens`: null, ByteLevel, a
+     *        TemplateProcessing whose template of a single text holds the text once, or a Sequence of the two.
      * @throws std::invalid_argument If it is another.
      */
     void require_post_processor() const;
+
+    /**
+     * @brief Requires a processor to add tokens only under `add_special_tokens`: a ByteLevel, which moves offsets
+     *        alone, or a TemplateProcessing whose template of a single text holds the text once.
+     * @param processor The processor.
+     * @param member The processor's member, for the refusals.
+     * @throws std::invalid_argument If it is another, or a TemplateProcessing whose `single` is not an array of pieces,
+     *         each a special token or the sequence A, that holds the sequence once.
+     */
+    void require_adds_only_special(const hopper::json::Value& processor, std::string_view member) const;
 
     /**
      * @brief Returns the BPE model, after requiring it to be one the reader takes.
@@ -199,11 +209,13 @@ private:
     [[nodiscard]] const hopper::json::Object& vocabulary(const hopper::json::Object& model) const;
 
     /**
-     * @brief Returns the special tokens, the `added_tokens` all marked special, by id ascending.
+     * @brief Returns the special tokens, the `added_tokens` all marked special, by id ascending, each with its
+     *        `normalized`, false when absent.
      * @param vocab The vocabulary's object.
      * @return The special tokens.
      * @throws std::invalid_argument If an added token is not special, strips white space, matches single words, is
-     *         empty, is not an object of a content and an id, or has another id than Hugging Face gives it.
+     *         empty, is not an object of a content and an id, has a `normalized` that is no boolean, or has another id
+     *         than Hugging Face gives it.
      */
     [[nodiscard]] std::vector<Special_token> special_tokens(const hopper::json::Object& vocab) const;
 
@@ -218,12 +230,22 @@ private:
     /**
      * @brief Requires every special token to have the id Hugging Face gives an added token, which reads no added
      *        token's own id: a token whose spelling is in the vocabulary gets its id there, and any other the
-     *        vocabulary's size, or one past the greatest id given before it when that is no less, in the file's order.
+     *        vocabulary's size and the number of such tokens before it, in the file's order.
      * @param listed The special tokens in the file's order.
      * @param vocab The vocabulary's object.
      * @throws std::invalid_argument If a token's id is another; the message names it and the id Hugging Face gives.
      */
     void require_assigned_ids(std::span<const Special_token> listed, const hopper::json::Object& vocab) const;
+
+    /**
+     * @brief Requires no entry of the vocabulary to have a special token's id, for a model that looks a whole piece
+     *        up: Hugging Face looks a piece up in the whole vocabulary, so that a piece spelling such an entry is the
+     *        special token's id, where the definition looks up ordinary tokens alone.
+     * @param vocab The vocabulary's object.
+     * @param specials The special tokens, by id ascending.
+     * @throws std::invalid_argument If an entry has a special token's id; the message names the entry.
+     */
+    void require_ordinary_lookup(const hopper::json::Object& vocab, std::span<const Special_token> specials) const;
 
     /**
      * @brief Returns the ordinary tokens, the vocabulary's entries but the special tokens', placed by id.
@@ -802,6 +824,11 @@ Definition Tokenizer_json::definition(const std::string_view published) const
 
     auto specials{special_tokens(vocab)};
 
+    if (lookup)
+    {
+        require_ordinary_lookup(vocab, specials);
+    }
+
     auto spellings{ordinary(vocab, specials)};
 
     auto table{merges(bpe)};
@@ -992,24 +1019,11 @@ void Tokenizer_json::require_post_processor() const
         return;
     }
 
-    const auto adds_only_special{[](const hopper::json::Value& processor) {
-        const auto type{type_of(processor)};
-
-        return type == "ByteLevel" || type == "TemplateProcessing";
-    }};
-
-    if (adds_only_special(*post_processor))
-    {
-        return;
-    }
-
-    constexpr std::string_view taken{
-            "null, a ByteLevel, a TemplateProcessing or a Sequence of them, which add tokens only under "
-            "add_special_tokens"};
-
     if (type_of(*post_processor) != "Sequence")
     {
-        refuse("post_processor", described(post_processor), taken);
+        require_adds_only_special(*post_processor, "post_processor");
+
+        return;
     }
 
     const auto processors{member_of(post_processor->get().as_object(), "processors")};
@@ -1021,12 +1035,84 @@ void Tokenizer_json::require_post_processor() const
 
     for (const auto& [index, processor] : std::views::enumerate(processors->get().as_array().elements))
     {
-        if (!adds_only_special(processor))
-        {
-            const auto found{described(std::cref(processor))};
+        require_adds_only_special(processor, std::format("post_processor.processors[{}]", index));
+    }
+}
 
-            refuse(std::format("post_processor.processors[{}]", index), found, taken);
+void Tokenizer_json::require_adds_only_special(
+        const hopper::json::Value& processor, const std::string_view member) const
+{
+    const auto type{type_of(processor)};
+
+    if (type == "ByteLevel")
+    {
+        return;
+    }
+
+    if (type != "TemplateProcessing")
+    {
+        const auto found{described(std::cref(processor))};
+
+        refuse(member, found,
+               "null, a ByteLevel, a TemplateProcessing or a Sequence of them, which add tokens only under "
+               "add_special_tokens");
+    }
+
+    const auto single{member_of(processor.as_object(), "single")};
+
+    const auto single_member{std::format("{}.single", member)};
+
+    constexpr std::string_view taken{
+            "an array of pieces, each a special token or the sequence A, that holds the sequence once, since "
+            "Hugging Face writes a text's ids once for every sequence of the template"};
+
+    if (!single || !is_array(*single))
+    {
+        refuse(single_member, described(single), taken);
+    }
+
+    // A piece is an object of one member, a SpecialToken or a Sequence with its id, A for a single text.
+    const auto is_special{[](const hopper::json::Value& piece) {
+        return is_object(piece) && member_of(piece.as_object(), "SpecialToken").has_value();
+    }};
+
+    const auto is_sequence{[](const hopper::json::Value& piece) {
+        if (!is_object(piece))
+        {
+            return false;
         }
+
+        const auto sequence{member_of(piece.as_object(), "Sequence")};
+
+        if (!sequence || !is_object(*sequence))
+        {
+            return false;
+        }
+
+        const auto id{member_of(sequence->get().as_object(), "id")};
+
+        return id && is_string(*id) && id->get().as_string() == "A";
+    }};
+
+    const auto& pieces{single->get().as_array().elements};
+
+    for (const auto& [index, piece] : std::views::enumerate(pieces))
+    {
+        if (!is_special(piece) && !is_sequence(piece))
+        {
+            const auto found{described(std::cref(piece))};
+
+            refuse(std::format("{}[{}]", single_member, index), found, "a special token or the sequence A");
+        }
+    }
+
+    const auto sequences{std::ranges::count_if(pieces, is_sequence)};
+
+    if (sequences != 1)
+    {
+        const auto found{std::format("a template that holds the sequence A {} times", sequences)};
+
+        refuse(single_member, found, taken);
     }
 }
 
@@ -1179,6 +1265,15 @@ std::vector<Special_token> Tokenizer_json::special_tokens(const hopper::json::Ob
             }
         }
 
+        const auto normalized{member_of(fields, "normalized")};
+
+        if (normalized && !is_bool(*normalized))
+        {
+            refuse(std::format("{}.normalized", member), described(normalized), "true or false");
+        }
+
+        const auto marked{normalized && normalized->get().as_bool()};
+
         const auto id{member_of(fields, "id")};
 
         if (!id)
@@ -1193,7 +1288,7 @@ std::vector<Special_token> Tokenizer_json::special_tokens(const hopper::json::Ob
             refuse_id(std::format("{}.id", member), id);
         }
 
-        specials.push_back({.spelling = spelling, .id = *token_id});
+        specials.push_back({.spelling = spelling, .id = *token_id, .normalized = marked});
     }
 
     require_assigned_ids(specials, vocab);
@@ -1216,7 +1311,7 @@ void Tokenizer_json::require_assigned_ids(
     // The id the vocabulary gives each special token's spelling, the last of its members as Hugging Face's map keeps.
     std::map<std::string_view, std::optional<Token_id_t>> in_vocabulary{};
 
-    for (const auto& [spelling, id] : listed)
+    for (const auto& [spelling, id, normalized] : listed)
     {
         in_vocabulary.try_emplace(spelling);
     }
@@ -1244,17 +1339,14 @@ void Tokenizer_json::require_assigned_ids(
         given = *id;
     }
 
-    const auto size{vocab.members.size()};
-
-    std::optional<std::size_t> greatest{};
+    // The id past the vocabulary that the next token outside it is given.
+    auto next{vocab.members.size()};
 
     for (const auto& [index, special] : std::views::enumerate(listed))
     {
-        const auto& [spelling, id]{special};
+        const auto& [spelling, id, normalized]{special};
 
         const auto vocabulary_id{in_vocabulary.at(spelling)};
-
-        const auto next{!greatest || *greatest < size ? size : *greatest + 1};
 
         const auto given{vocabulary_id ? std::size_t{*vocabulary_id} : next};
 
@@ -1264,7 +1356,28 @@ void Tokenizer_json::require_assigned_ids(
                    std::format("{}, the id Hugging Face gives the token", given));
         }
 
-        greatest = std::max(greatest.value_or(given), given);
+        if (!vocabulary_id)
+        {
+            ++next;
+        }
+    }
+}
+
+void Tokenizer_json::require_ordinary_lookup(
+        const hopper::json::Object& vocab, const std::span<const Special_token> specials) const
+{
+    for (const auto& [characters, value] : vocab.members)
+    {
+        const auto id{id_of(value)};
+
+        if (!id || !std::ranges::binary_search(specials, *id, {}, &Special_token::id))
+        {
+            continue;
+        }
+
+        refuse(std::format("model.vocab[{}]", quoted_text(characters)), std::format("{}, a special token's id", *id),
+               "an ordinary token's id while model.ignore_merges is true, since Hugging Face looks a whole piece up "
+               "in the vocabulary, a special token's entry among them");
     }
 }
 

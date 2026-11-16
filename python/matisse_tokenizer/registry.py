@@ -264,7 +264,8 @@ def load_tokenizer_json(path: str | os.PathLike[str]) -> core.Encoding:
     encoding is named by that pattern's encoding: gpt2, o200k_base or llama3, and llama3 for the cl100k conversions on
     the Hugging Face Hub, which carry Llama 3's pattern; no tokenizer.json is read under cl100k_base's, which Hugging
     Face's engine reads otherwise than tiktoken. Its ids are those Hugging Face tokenizers gives the file with
-    add_special_tokens false, a special token's spelling cut out where it is allowed, as tiktoken's calls cut it. A file
+    add_special_tokens false, a special token's spelling cut out where a call allows it, as tiktoken's calls allow one,
+    and those the file marks normalized cut out of the stretches the others leave, as Hugging Face cuts them. A file
     whose SHA-256 is a pinned tokenizer.json's takes the shipped report; any other has its pattern's report decided when
     it is read.
 

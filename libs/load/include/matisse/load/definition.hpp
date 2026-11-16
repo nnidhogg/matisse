@@ -70,6 +70,13 @@ struct Special_token
      * @brief The token's id.
      */
     Token_id_t id{};
+
+    /**
+     * @brief Whether the token is cut out of a text after the special tokens without the mark, in the stretches they
+     *        leave, as Hugging Face matches an added token marked `normalized`; false for every special token of a
+     *        rank file, which are all cut out in one pass.
+     */
+    bool normalized{};
 };
 
 /**
@@ -166,17 +173,23 @@ struct Definition
  * rewrite, which is Llama 3's pattern.
  *
  * The vocabulary's spellings and the merges' parts are read with GPT-2's byte map undone, as the ByteLevel
- * pre-tokenizer maps the bytes. The `added_tokens` marked special are the special tokens, by id ascending, and the
- * ordinary tokens are the vocabulary's other entries. Hugging Face reads no added token's own id but gives it one: its
- * id in the vocabulary when its spelling is there, and otherwise the vocabulary's size, or one past the greatest id
- * given before it in the file's order when that is no less, so a token whose id is another is refused. The definition
- * has the pair rule, which is Hugging Face's own, with the merges in the file's order, each a string of two parts
- * separated by a space or an array of two strings, and not every part of a merge need be formed before it, as
- * read_gpt2() requires of its files; the whole-piece lookup is the model's `ignore_merges`, false when it is absent.
- * Its ids are those Hugging Face's encode() gives with `add_special_tokens` false: the tokens a post-processor adds
- * under `add_special_tokens` are the caller's to add. The model's `unk_token` is not read, since the encoder refuses a
- * definition in which a byte is no token, and under one in which every byte is a token no text holds an unknown
- * character.
+ * pre-tokenizer maps the bytes. The `added_tokens` marked special are the special tokens, by id ascending, each with
+ * its `normalized`, false when absent: Hugging Face cuts the added tokens without it out of a text first and those
+ * with it out of the stretches left, whatever the normalizer, so the mark decides which of two overlapping spellings
+ * is cut. The ordinary tokens are the vocabulary's other entries. Hugging Face reads no added token's own id but gives
+ * it one: its id in the vocabulary when its spelling is there, and otherwise the vocabulary's size and the number of
+ * such tokens before it in the file's order, so a token whose id is another is refused. The definition has the pair
+ * rule, which is Hugging Face's own, with the merges in the file's order, each a string of two parts separated by a
+ * space or an array of two strings, and not every part of a merge need be formed before it, as read_gpt2() requires of
+ * its files; the whole-piece lookup is the model's `ignore_merges`, false when it is absent. Hugging Face looks a
+ * piece up in the whole vocabulary, a special token's entry among them, where the definition looks up ordinary tokens
+ * alone, so a vocabulary entry with a special token's id is refused when `ignore_merges` is true. Its ids are those
+ * Hugging Face's encode() gives with `add_special_tokens` false: the tokens a post-processor adds under
+ * `add_special_tokens` are the caller's to add, and a TemplateProcessing is taken only when its template of a single
+ * text holds the text once, since Hugging Face writes a text's ids once for every sequence of the template. The
+ * model's `unk_token` is not read, since the encoder and validate_merges() refuse a definition in which a byte is no
+ * token, and under one in which every byte is a token no text holds an unknown character; Hugging Face drops a
+ * character its vocabulary does not hold when the model names no `unk_token`.
  * @param path The path of tokenizer.json.
  * @param published The published spelling of the pattern the file is read under, as the pattern's tokenizer library
  *        gives it, or empty for a pre-tokenizer that splits nothing.
@@ -186,10 +199,12 @@ struct Definition
  *         prefix, an end-of-word suffix or byte fallback, its normalizer, truncation or padding is not null, its
  *         pre-tokenizer is not one of the three under the published spelling or its pattern holds an interval followed
  *         by a plus or is empty, its post-processor is not null, ByteLevel, TemplateProcessing or a Sequence of them,
- *         an added token is not special, strips white space, matches single words or has another id than the one
- *         Hugging Face gives it, the ordinary ids are not dense from zero, a token is empty or holds a character the
- *         byte map does not carry, two tokens have one spelling, a merge is not two parts, or a pair is listed twice;
- *         the message names the member of the file and what it holds, or the ids or the tokens.
+ *         or a TemplateProcessing's template of a single text does not hold the text once, an added token is not
+ *         special, strips white space, matches single words, has a `normalized` that is no boolean or has another id
+ *         than the one Hugging Face gives it, a vocabulary entry has a special token's id while `ignore_merges` is
+ *         true, the ordinary ids are not dense from zero, a token is empty or holds a character the byte map does not
+ *         carry, two tokens have one spelling, a merge is not two parts, or a pair is listed twice; the message names
+ *         the member of the file and what it holds, or the ids or the tokens.
  */
 [[nodiscard]] Definition read_tokenizer_json(const std::filesystem::path& path, std::string_view published);
 

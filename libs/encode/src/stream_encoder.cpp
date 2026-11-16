@@ -396,8 +396,9 @@ std::size_t Stream_encoder::read(const std::string_view text, const bool ended, 
     const auto longest{std::ranges::fold_left(
             spelling_sizes, 0UZ, [](const std::size_t a, const std::size_t b) { return std::max(a, b); })};
 
-    // The earliest byte from which the rest of the text is a nonempty proper prefix of an allowed spelling.
-    const auto held_from{[&](const std::size_t from) -> std::optional<std::size_t> {
+    // The earliest byte from which the rest of the text is a nonempty proper prefix of an allowed spelling, of any
+    // token or of those without the mark alone.
+    const auto held_from{[&](const std::size_t from, const bool unmarked_alone) -> std::optional<std::size_t> {
         const auto back_from{text.size() < longest ? 0UZ : text.size() - longest + 1};
 
         const auto earliest{std::max(from, back_from)};
@@ -406,8 +407,10 @@ std::size_t Stream_encoder::read(const std::string_view text, const bool ended, 
         {
             const auto rest{text.substr(at)};
 
-            const auto begins{[rest](const load::Special_token& token) {
-                return rest.size() < token.spelling.size() && token.spelling.starts_with(rest);
+            const auto begins{[rest, unmarked_alone](const load::Special_token& token) {
+                const auto counted{!unmarked_alone || !token.normalized};
+
+                return counted && rest.size() < token.spelling.size() && token.spelling.starts_with(rest);
             }};
 
             if (std::ranges::any_of(allowed, begins))
@@ -429,13 +432,20 @@ std::size_t Stream_encoder::read(const std::string_view text, const bool ended, 
 
     std::size_t from{0};
 
-    while (true)
-    {
+    const auto two_passes{std::ranges::any_of(allowed, &load::Special_token::normalized)};
+
+    // The token with the earliest occurrence from the search that ends by a limit, with the mark or without it.
+    const auto earliest{[&](const bool normalized, const std::size_t limit) {
         std::optional<std::size_t> first{};
 
         for (std::size_t special{0}; special < allowed.size(); ++special)
         {
             const auto& spelling{allowed[special].spelling};
+
+            if (two_passes && allowed[special].normalized != normalized)
+            {
+                continue;
+            }
 
             if (next[special] < from)
             {
@@ -444,7 +454,7 @@ std::size_t Stream_encoder::read(const std::string_view text, const bool ended, 
 
             const auto at{next[special]};
 
-            if (at == std::string_view::npos)
+            if (at == std::string_view::npos || at + spelling.size() > limit)
             {
                 continue;
             }
@@ -459,7 +469,20 @@ std::size_t Stream_encoder::read(const std::string_view text, const bool ended, 
             }
         }
 
-        const auto held{ended ? std::nullopt : held_from(from)};
+        return first;
+    }};
+
+    while (true)
+    {
+        const auto unmarked{earliest(false, text.size())};
+
+        const auto unmarked_at{unmarked ? next[*unmarked] : text.size()};
+
+        const auto marked{two_passes ? earliest(true, unmarked_at) : std::nullopt};
+
+        const auto first{marked ? marked : unmarked};
+
+        const auto held{ended ? std::nullopt : held_from(from, false)};
 
         const auto stretch_end{first ? next[*first] : text.size()};
 
@@ -471,20 +494,28 @@ std::size_t Stream_encoder::read(const std::string_view text, const bool ended, 
 
         from += feed(stretch, completes, ids);
 
-        const auto commits{first && !(held && *held <= next[*first])};
-
-        if (!commits)
+        if (!first || (held && *held <= next[*first]))
         {
             return from;
         }
 
-        const auto& [spelling, id]{allowed[*first]};
+        const auto& [spelling, id, normalized]{allowed[*first]};
+
+        const auto occurrence_end{next[*first] + spelling.size()};
+
+        // A token without the mark that begins inside a marked one's occurrence is cut out before it.
+        const auto preempted{normalized && !ended ? held_from(from, true) : std::nullopt};
+
+        if (preempted && *preempted < occurrence_end)
+        {
+            return from;
+        }
 
         flush(ids);
 
         ids.push_back(id);
 
-        from = next[*first] + spelling.size();
+        from = occurrence_end;
     }
 }
 

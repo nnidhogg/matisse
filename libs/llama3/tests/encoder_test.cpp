@@ -299,7 +299,7 @@ std::vector<std::string> special_spellings()
 {
     std::vector<std::string> spellings{};
 
-    for (const auto& [spelling, id] : matisse::llama3::specials())
+    for (const auto& [spelling, id, normalized] : matisse::llama3::specials())
     {
         spellings.push_back(spelling);
     }

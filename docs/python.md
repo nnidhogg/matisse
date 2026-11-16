@@ -116,11 +116,11 @@ Hugging Face's engine reads cl100k_base's published `\p{N}{1,3}+` as the interva
 than tiktoken.
 
 Its ids are those Hugging Face tokenizers gives the file with `add_special_tokens=False`: a special token is cut out
-where it is allowed, as Hugging Face cuts its added tokens, and read as text where it is not, as Hugging Face's
-`encode_special_tokens` reads it. The tokens a post-processor adds under `add_special_tokens`, such as Llama 3's
-`<|begin_of_text|>`, are the caller's to add. A file whose SHA-256 is one of the four pinned tokenizer.json files' takes
-its pattern's shipped report, and any other file has the report decided when it is read. An encoding read so pickles by
-its path.
+where it is allowed, as Hugging Face cuts its added tokens, those the file marks `normalized` out of the stretches the
+others leave, and read as text where it is not, as Hugging Face's `encode_special_tokens` reads it. The tokens a
+post-processor adds under `add_special_tokens`, such as Llama 3's `<|begin_of_text|>`, are the caller's to add. A file
+whose SHA-256 is one of the four pinned tokenizer.json files' takes its pattern's shipped report, and any other file has
+the report decided when it is read. An encoding read so pickles by its path.
 
 ## **Certifying a merge table without a pre-tokenizer**
 
@@ -178,8 +178,9 @@ are the places where matisse-tokenizer does something else:
 - **tokenizer.json.** `load_tokenizer_json()` refuses with `ValueError`, with matisse's loader's message, which names
   the member of the file by its path from the root and what it holds, whatever the loader refuses: a model other than
   BPE, a normalizer, truncation or padding, a pre-tokenizer whose pattern is none of the four, a post-processor that
-  adds tokens otherwise than under `add_special_tokens`, an added token that is not special or that stands at another id
-  than the one Hugging Face gives it, and ordinary ids that are not dense from zero, among the others
+  adds tokens otherwise than under `add_special_tokens` or whose template does not hold a single text once, an added
+  token that is not special or that stands at another id than the one Hugging Face gives it, a vocabulary entry with a
+  special token's id under `ignore_merges`, and ordinary ids that are not dense from zero, among the others
   [design.md](design.md) lists. A file it cannot read is refused with `RuntimeError`. Its special tokens are refused as
   the constructor's are, an empty one, one with an ordinary token's id and one whose spelling begins another's among
   them.
@@ -252,9 +253,10 @@ at its width.
 
 The encoder is built with the factorization inventory, the one [design.md](design.md) recommends, and with no special
 token allowed. A call that allows special tokens cuts the text at their spellings in Python, as matisse's encoder cuts
-at those it is built with, the earliest first and the longest among those that begin at one place, and encodes each
-stretch between them as a complete input, which is the encoding matisse's encoder gives with those tokens allowed. One
-encoder therefore serves every set of allowed special tokens, Llama 3's 256 among them.
+at those it is built with, the earliest first and the longest among those that begin at one place, the special tokens a
+tokenizer.json marks `normalized` out of the stretches the others leave, and encodes each stretch between them as a
+complete input, which is the encoding matisse's encoder gives with those tokens allowed. One encoder therefore serves
+every set of allowed special tokens, Llama 3's 256 among them.
 
 ## **Threads and the interpreter lock**
 

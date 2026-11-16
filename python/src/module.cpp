@@ -58,12 +58,33 @@ using Id_array_t = nb::ndarray<nb::numpy, const matisse::load::Token_id_t, nb::n
 {
     std::vector<std::pair<std::string, matisse::load::Token_id_t>> specials{};
 
-    for (const auto& [spelling, id] : definition.specials)
+    for (const auto& [spelling, id, normalized] : definition.specials)
     {
         specials.emplace_back(spelling, id);
     }
 
     return specials;
+}
+
+/**
+ * @brief Returns the spellings of a definition's special tokens that are cut out of a text after the others, as
+ *        Hugging Face cuts an added token marked `normalized`.
+ * @param definition The definition.
+ * @return The spellings, in the definition's order.
+ */
+[[nodiscard]] std::vector<std::string> normalized_specials_of(const matisse::load::Definition& definition)
+{
+    std::vector<std::string> spellings{};
+
+    for (const auto& [spelling, id, normalized] : definition.specials)
+    {
+        if (normalized)
+        {
+            spellings.push_back(spelling);
+        }
+    }
+
+    return spellings;
 }
 
 /**
@@ -520,7 +541,7 @@ void check_text(const nb::handle text)
 
     std::vector<std::pair<std::string, matisse::load::Token_id_t>> specials{};
 
-    for (const auto& [spelling, id] : described.specials)
+    for (const auto& [spelling, id, normalized] : described.specials)
     {
         specials.emplace_back(spelling, id);
     }
@@ -702,6 +723,9 @@ NB_MODULE(_core, module)
                     [](const matisse::load::Definition& definition) { return definition.spellings.size(); },
                     "The number of ordinary tokens, whose ids are dense from zero.")
             .def_prop_ro("specials", &specials_of, "The special tokens, each a spelling and an id.")
+            .def_prop_ro(
+                    "normalized_specials", &normalized_specials_of,
+                    "The spellings of the special tokens cut out of a text after the others.")
             .def("spellings", &spellings_of, "The bytes of every ordinary token, by id.");
 
     nb::class_<matisse::validate::Report>(module, "Report", "The windows of a pattern that certify a cut.")

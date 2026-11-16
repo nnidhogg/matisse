@@ -378,7 +378,7 @@ TEST(Definition_test, The_pinned_cl100k_tokenizer_json_reads_under_llama3_s_spel
 
     std::vector<std::pair<std::string, Token_id_t>> named{};
 
-    for (const auto& [spelling, id] : specials)
+    for (const auto& [spelling, id, normalized] : specials)
     {
         named.emplace_back(spelling, id);
     }

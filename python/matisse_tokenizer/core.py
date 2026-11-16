@@ -3,9 +3,10 @@ describes, held to tiktoken's on every call tiktoken offers that matisse_tokeniz
 
 An Encoding holds one matisse encoder, built with no special token allowed. A call that allows special tokens cuts the
 text at their spellings here, as matisse's encoder cuts at those it is built with: from the end of each, the earliest
-next one, the longest among those that begin at one byte. Each stretch between them is encoded as a complete input and
-each special token emits its id, which is the encoding matisse's encoder gives with those tokens allowed, so that any
-set of special tokens is served by the one encoder. A thread keeps a piece cache of its own across its calls, which
+next one, the longest among those that begin at one byte, the special tokens a tokenizer.json marks normalized cut out
+of the stretches the others leave, as Hugging Face cuts them. Each stretch between them is encoded as a complete input
+and each special token emits its id, which is the encoding matisse's encoder gives with those tokens allowed, so that
+any set of special tokens is served by the one encoder. A thread keeps a piece cache of its own across its calls, which
 never changes an id. The checks tiktoken makes in Python, the disallowed special tokens and the lone surrogates, are
 made here as tiktoken makes them.
 """
@@ -256,6 +257,7 @@ class Encoding:
         self._tokenizer_json: str | None = None
         self._ranks: dict[bytes, int] | None = None
         self._definition = definition
+        self._normalized = frozenset(definition.normalized_specials)
         by_id = sorted(self._special_tokens.items(), key=lambda item: item[1])
 
         ordinary = self._definition.ordinary_count
@@ -966,7 +968,8 @@ class Encoding:
 
     def _split(self, text: str, allowed: frozenset[str]) -> tuple[list[str], list[int]]:
         """Cuts a text at the spellings of the allowed special tokens, as matisse's encoder cuts at those it allows:
-        from the end of each, the earliest next one, the longest among those that begin at one byte.
+        from the end of each, the earliest next one, the longest among those that begin at one byte, the special tokens
+        a tokenizer.json marks normalized cut out of the stretches the others leave.
 
         Args:
             text: The text.
@@ -977,10 +980,36 @@ class Encoding:
         """
         if not allowed:
             return [text], []
+        marked = allowed & self._normalized
+        if not marked:
+            return self._cut(text, allowed)
+        outer, unmarked = self._cut(text, allowed - marked)
+        stretches = []
+        specials = []
+        for index, stretch in enumerate(outer):
+            inner, found = self._cut(stretch, marked)
+            stretches += inner
+            specials += found
+            specials += unmarked[index : index + 1]
+        return stretches, specials
+
+    def _cut(self, text: str, tokens: frozenset[str]) -> tuple[list[str], list[int]]:
+        """Cuts a text at the spellings of special tokens in one pass: from the end of each, the earliest next one, the
+        longest among those that begin at one byte.
+
+        Args:
+            text: The text.
+            tokens: The spellings, special tokens of the encoding.
+
+        Returns:
+            The stretches between the special tokens, one more than the special tokens, and the special tokens' ids.
+        """
+        if not tokens:
+            return [text], []
         stretches = []
         specials = []
         start = 0
-        for match in _allowed_regex(allowed).finditer(text):
+        for match in _allowed_regex(tokens).finditer(text):
             stretches.append(text[start : match.start()])
             specials.append(self._special_tokens[match.group()])
             start = match.end()

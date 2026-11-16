@@ -30,7 +30,8 @@
  * are all byte strings, where the pattern allows fewer.
  *
  * The encoding has three layers, each exact at its level. A special token's occurrence is committed once no proper
- * prefix of an allowed spelling can still begin before it, so the stretches between special tokens are encode()'s. In a
+ * prefix of an allowed spelling can still begin at or before it, and that of a token marked `normalized` once none of
+ * an unmarked spelling can still begin inside it either, so the stretches between special tokens are encode()'s. In a
  * stretch the live runs of the pattern's split verifier M, Live_runs in live_runs.hpp, are the restrictions of every
  * continuation's segmentation, and a piece whose end every run keeps is closed and its ids returned. Inside each run's
  * open piece the ids returned are the ones every byte continuation of the piece keeps, which by projection need only
@@ -104,8 +105,8 @@ public:
 private:
     /**
      * @brief Reads bytes as far as it can: every allowed special token's occurrence that no held spelling can still
-     *        begin before is cut out with its id, and the code points before it, or before the bytes held, are fed to
-     *        the live runs.
+     *        begin before, nor an unmarked one inside it when the token is marked `normalized`, is cut out with its id,
+     *        and the code points before it, or before the bytes held, are fed to the live runs.
      * @param text The bytes, the held ones first.
      * @param ended Whether the text ends after them, so that no spelling is held and no sequence can be completed.
      * @param ids The ids closed so far, appended to.

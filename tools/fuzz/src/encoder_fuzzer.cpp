@@ -286,7 +286,7 @@ std::vector<Encoder> built_encoders()
 
             std::vector<std::string> allowed{};
 
-            for (const auto& [spelling, id] : specials)
+            for (const auto& [spelling, id, normalized] : specials)
             {
                 allowed.push_back(spelling);
             }

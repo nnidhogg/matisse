@@ -63,16 +63,16 @@ is read as `" the"`. Its definition has the pair rule, no whole-piece lookup and
 reads `<|endoftext|>` as text.
 
 `read_tokenizer_json(path, published)` reads a Hugging Face tokenizer.json with a BPE model, its vocabulary and merges
-with GPT-2's byte map undone and its special added tokens as the special tokens. It takes the published spelling of the
-pattern the file is read under, as the tokenizer's library gives it with `spelling()`, and recognizes the file's
-pre-tokenizer only by it: GPT-2's ByteLevel under `gpt2::spelling()`, a Split on the spelling followed by a ByteLevel
-without its regex, which Llama 3's file and Xenova's conversions of cl100k and o200k carry, and a ByteLevel without its
-regex alone under the empty spelling. Xenova's cl100k conversion carries Llama 3's pattern, so it is read under
-`llama3::spelling()`, and `cl100k::spelling()` reads no file, since Hugging Face's engine reads cl100k's published
-pattern otherwise. Its definition has the pair rule, Hugging Face's own, and the whole-piece lookup the model's
-`ignore_merges` gives, and its ids are those Hugging Face's `encode()` gives with `add_special_tokens` false.
-`tokenizer_json_spelling(path)` returns the spelling a file's pre-tokenizer runs, for a caller that chooses the
-tokenizer by the file.
+with GPT-2's byte map undone and its special added tokens as the special tokens, each with the `normalized` by which
+Hugging Face cuts it out before or after the others. It takes the published spelling of the pattern the file is read
+under, as the tokenizer's library gives it with `spelling()`, and recognizes the file's pre-tokenizer only by it:
+GPT-2's ByteLevel under `gpt2::spelling()`, a Split on the spelling followed by a ByteLevel without its regex, which
+Llama 3's file and Xenova's conversions of cl100k and o200k carry, and a ByteLevel without its regex alone under the
+empty spelling. Xenova's cl100k conversion carries Llama 3's pattern, so it is read under `llama3::spelling()`, and
+`cl100k::spelling()` reads no file, since Hugging Face's engine reads cl100k's published pattern otherwise. Its
+definition has the pair rule, Hugging Face's own, and the whole-piece lookup the model's `ignore_merges` gives, and its
+ids are those Hugging Face's `encode()` gives with `add_special_tokens` false. `tokenizer_json_spelling(path)` returns
+the spelling a file's pre-tokenizer runs, for a caller that chooses the tokenizer by the file.
 
 All three refuse content they cannot take exactly with `std::invalid_argument`, naming the file and the line, the byte
 offset, the token, the merge or the member, and a file they cannot read with `std::runtime_error`. `read_tiktoken()`

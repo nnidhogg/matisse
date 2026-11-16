@@ -278,7 +278,7 @@ std::vector<std::string> special_spellings()
 {
     std::vector<std::string> spellings{};
 
-    for (const auto& [spelling, id] : matisse::o200k::specials())
+    for (const auto& [spelling, id, normalized] : matisse::o200k::specials())
     {
         spellings.push_back(spelling);
     }

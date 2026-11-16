@@ -95,11 +95,13 @@ public:
      * @brief Returns the ids of a text, as the definition's tokenizer encodes it with the allowed special tokens.
      *
      * The text is cut at every occurrence of an allowed special token, the earliest first and the longest among those
-     * that begin at one byte, each emitting its id; each stretch between them is segmented by the pattern as a complete
-     * input. A piece that is a token is that one token where the definition's whole-piece lookup says so, and every
-     * other piece is merged alone by the definition's merge rule. That is tiktoken's encode() with these special tokens
-     * allowed and none disallowed, where no allowed spelling begins another, as on every definition in scope, and
-     * encoder.py's encode() when none is allowed.
+     * that begin at one byte, each emitting its id, the tokens a definition marks `normalized` cut out of the stretches
+     * the others leave, as Hugging Face cuts its added tokens; each stretch between them is segmented by the pattern as
+     * a complete input. A piece that is a token is that one token where the definition's whole-piece lookup says so,
+     * and every other piece is merged alone by the definition's merge rule. On the vendors' rank files and GPT-2's
+     * files, whose special tokens are unmarked, that is tiktoken's encode() with these special tokens allowed and none
+     * disallowed, where no allowed spelling begins another, as on the pinned vendor definitions, and encoder.py's
+     * encode() when none is allowed.
      * @param text The text, well-formed UTF-8.
      * @return The ids.
      * @throws std::invalid_argument If the text is not well-formed UTF-8, as the Segmenter refuses it, the byte offset
@@ -286,8 +288,10 @@ private:
      * @brief Returns the occurrences of the allowed special tokens in a text that encode() cuts out, front to back:
      *        from the end of each, the earliest next one, the longest among those that begin at one byte.
      *
-     * Each token's next occurrence is kept until the search passes it, so that the text is read once for every token
-     * however many of its occurrences the search finds.
+     * A token marked `normalized` is cut out of the stretches the others leave: after each occurrence the next is the
+     * earliest of a marked token that ends by the next occurrence of an unmarked one, and that unmarked occurrence when
+     * no marked one does. Each token's next occurrence is kept until the search passes it, so that the text is read
+     * once for every token however many of its occurrences the search finds.
      * @param text The text.
      * @return The occurrences, ascending, none overlapping another.
      */

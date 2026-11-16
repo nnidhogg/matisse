@@ -68,7 +68,7 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* const data, const std:
 
         require(std::ranges::is_sorted(definition.specials, {}, &Special_token::id));
 
-        for (const auto& [text, id] : definition.specials)
+        for (const auto& [text, id, normalized] : definition.specials)
         {
             require(!text.empty());
 
