@@ -149,8 +149,9 @@ def vocabulary(tmp_path_factory: pytest.TempPathFactory) -> dict[str, pathlib.Pa
         for name, source in SOURCES.items():
             if source.url is None:
                 continue
-            with load.fetched(source.url, source.sha256) as path:
-                paths[name] = pathlib.Path(path)
+            path = files / source.file
+            path.write_bytes(load.read_file_cached(source.url, source.sha256))
+            paths[name] = path
     else:
         pytest.skip("no vocabulary: set MATISSE_VOCAB_DIR, or MATISSE_TEST_DOWNLOAD=1 to fetch it")
 

@@ -195,8 +195,10 @@ are the places where matisse-tokenizer does something else:
   here with `ValueError`. Every array returned is read-only, as tiktoken's are.
 - **The load module.** `matisse_tokenizer.load` gives tiktoken's `load_tiktoken_bpe()`, `read_file_cached()` and
   `read_file()` with tiktoken's behavior, so that Meta's tokenizer.py reads Llama 3's ranks with it, but reads only
-  local files and http and https URLs, refusing with `ValueError` the other schemes tiktoken reads through blobfile.
-  tiktoken's `data_gym_to_mergeable_bpe_ranks()` and `dump_tiktoken_bpe()` do not exist.
+  local files and http and https URLs, refusing with `ValueError` the other schemes tiktoken reads through blobfile. A
+  request that fails raises urllib's errors, an HTTP error status `urllib.error.HTTPError` where tiktoken's raises
+  `requests.exceptions.HTTPError`, both of them an `OSError`. tiktoken's `data_gym_to_mergeable_bpe_ranks()` and
+  `dump_tiktoken_bpe()` do not exist.
 - **Model names.** `encoding_name_for_model()` and `encoding_for_model()` follow tiktoken 0.14.0's table of models and
   its prefixes, and refuse with `KeyError`, naming the encoding, a model tiktoken maps to p50k_base or p50k_edit, which
   the package does not serve. A model a later tiktoken knows and 0.14.0 does not is refused with tiktoken's `KeyError`
@@ -213,14 +215,19 @@ are the places where matisse-tokenizer does something else:
 
 ## **Vocabulary files and the cache**
 
-`get_encoding()` fetches a rank file from the URL tiktoken reads it from and holds it to the SHA-256 tiktoken pins:
-r50k_base.tiktoken for gpt2, which holds GPT-2's ranks as tiktoken builds its gpt2 encoding and has the digest
-[benchmarks.md](benchmarks.md) pins for gpt2.tiktoken, and cl100k_base.tiktoken and o200k_base.tiktoken, with the
-digests [design.md](design.md) pins. The cache is tiktoken's own: the directory `TIKTOKEN_CACHE_DIR` names, else
+`get_encoding()` fetches a rank file and holds it to the SHA-256 tiktoken pins: r50k_base.tiktoken for gpt2, from the
+URL tiktoken's r50k_base reads it from, which holds GPT-2's ranks as tiktoken builds its gpt2 encoding and has the
+digest [benchmarks.md](benchmarks.md) pins for gpt2.tiktoken, and cl100k_base.tiktoken and o200k_base.tiktoken, from the
+URLs tiktoken reads them from and with the digests [design.md](design.md) pins. tiktoken's gpt2 reads GPT-2's two
+original files, vocab.bpe and encoder.json, from URLs of their own, so a cache that holds only what tiktoken's gpt2
+fetched does not serve the package's gpt2. The cache is tiktoken's own: the directory `TIKTOKEN_CACHE_DIR` names, else
 `DATA_GYM_CACHE_DIR`, else `data-gym-cache` under the system's temporary directory, each file under the SHA-1 of its
-URL, so a file either package has fetched serves both. An empty `TIKTOKEN_CACHE_DIR` turns the cache off, as for
-tiktoken. A cached file with another digest is fetched again and replaced, and a fetched file with another digest is
-refused with `ValueError`. A request carries the User-Agent `matisse-tokenizer/0.1.0` and no other header of the
+URL, so a file either package has fetched from one URL serves both. An empty `TIKTOKEN_CACHE_DIR` turns the cache off,
+as for tiktoken, and `get_encoding()` still holds the file it fetches to its digest, which `read_file_cached()` does not
+with the cache off, in either package. A cached file with another digest is fetched again and replaced, and in a default
+directory that cannot be written it is left as it is and the bytes fetched are read instead; a fetched file with another
+digest is refused with `ValueError`. matisse's loader reads the bytes held to the digest, which `get_encoding()` writes
+to a temporary file for it. A request carries the User-Agent `matisse-tokenizer/0.1.0` and no other header of the
 caller's.
 
 ## **Reports shipped with the package**

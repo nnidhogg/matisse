@@ -1,11 +1,11 @@
 """Reading rank files through tiktoken's cache directory, as tiktoken's load module reads them: read_file(),
-read_file_cached() and load_tiktoken_bpe(), and fetched(), which gives matisse's loader a pinned file's path.
+read_file_cached() and load_tiktoken_bpe(), and fetched(), which gives matisse's loader a pinned file's bytes.
 
 The cache is tiktoken's own: the directory TIKTOKEN_CACHE_DIR names, else the one DATA_GYM_CACHE_DIR names, else
 data-gym-cache under the system's temporary directory, each file named by the SHA-1 of its URL, so that a file either
 package fetched serves both. An empty TIKTOKEN_CACHE_DIR turns the cache off, as it does for tiktoken. A cached file
-whose SHA-256 is not the pinned one is fetched again and replaced. A request carries the User-Agent
-matisse-tokenizer/VERSION and nothing else of the caller's.
+whose SHA-256 is not the pinned one is fetched again and replaced, or left as it is in a default directory that cannot
+be written. A request carries the User-Agent matisse-tokenizer/VERSION and nothing else of the caller's.
 """
 
 from __future__ import annotations
@@ -98,7 +98,8 @@ def read_file_cached(blobpath: str, expected_hash: str | None = None) -> bytes:
     read_file_cached() returns them.
 
     A cached file is returned when it has the SHA-256 or none is given; one with another SHA-256 is removed and read
-    again. A file read is written to the cache, a local file as well as a URL's, as tiktoken writes it.
+    again, and left as it is in a default directory that cannot be written. A file read is written to the cache, a local
+    file as well as a URL's, as tiktoken writes it.
 
     Args:
         blobpath: The path or the URL.
@@ -163,10 +164,11 @@ def load_tiktoken_bpe(tiktoken_bpe_file: str, expected_hash: str | None = None) 
 
 @contextlib.contextmanager
 def fetched(url: str, expected_hash: str) -> Iterator[str]:
-    """Yields the path of a URL's file held to its SHA-256, read through the cache by read_file_cached().
+    """Yields the path of a file holding a URL's bytes, read through the cache by read_file_cached() and held to their
+    SHA-256 whether caching is on or off.
 
-    The path is the cache's; when caching is off, or the default cache directory cannot be written, the file is written
-    to a temporary file that is removed once the caller is done with it.
+    The file is a temporary one, written from the bytes whose SHA-256 was checked and removed once the caller is done
+    with it, so that matisse's loader reads those bytes whatever the cache holds.
 
     Args:
         url: The URL.
@@ -176,15 +178,15 @@ def fetched(url: str, expected_hash: str) -> Iterator[str]:
         The file's path.
 
     Raises:
-        ValueError: If the fetched bytes have another SHA-256.
+        ValueError: If the bytes have another SHA-256, with tiktoken's message.
         OSError: If the cache directory the environment names cannot be written.
     """
     data = read_file_cached(url, expected_hash)
-
-    cached = cache_path(url)
-    if cached is not None and os.path.exists(cached):
-        yield cached
-        return
+    if hashlib.sha256(data).hexdigest() != expected_hash:
+        raise ValueError(
+            f"Hash mismatch for data downloaded from {url} (expected {expected_hash}). This may indicate a corrupted "
+            f"download. Please try again."
+        )
 
     with tempfile.TemporaryDirectory() as directory:
         path = os.path.join(directory, os.path.basename(url))

@@ -1,6 +1,6 @@
-"""Fetching and caching a rank file: tiktoken's cache directory and its keys, the digest every file is held to, a
-cached file that is not the pinned one, caching turned off, and the request's User-Agent, all against a server on the
-loopback interface, so that no test reaches the network."""
+"""Fetching and caching a rank file: tiktoken's cache directory and its keys, the digest every file is held to, a cached
+file that is not the pinned one, also where it cannot be replaced, caching turned off, and the request's User-Agent, all
+against a server on the loopback interface, so that no test reaches the network."""
 
 from __future__ import annotations
 
@@ -75,14 +75,26 @@ DIGEST = hashlib.sha256(PAYLOAD).hexdigest()
 """The SHA-256 of PAYLOAD."""
 
 
+def refused(*args: object) -> None:
+    """Refuses to change a file, as a directory that cannot be written refuses it, whoever the process runs as.
+
+    Args:
+        args: The call's arguments.
+
+    Raises:
+        PermissionError: Always.
+    """
+    raise PermissionError("the directory cannot be written")
+
+
 def test_a_fetched_file_is_held_to_its_digest_and_cached_under_tiktoken_s_key(server, cache):
     with load.fetched(server, DIGEST) as path:
         assert open(path, "rb").read() == PAYLOAD
     key = hashlib.sha1(server.encode()).hexdigest()
-    assert path == os.path.join(cache, key)
     assert os.listdir(cache) == [key]
+    assert open(os.path.join(cache, key), "rb").read() == PAYLOAD
     with load.fetched(server, DIGEST) as again:
-        assert again == path
+        assert open(again, "rb").read() == PAYLOAD
     assert len(Handler.requests) == 1
 
 
@@ -122,11 +134,37 @@ def test_an_empty_cache_directory_turns_the_cache_off(server, monkeypatch, tmp_p
     assert len(Handler.requests) == 2
 
 
+def test_with_the_cache_off_a_file_with_another_digest_is_refused_though_read_file_cached_returns_it(
+    server, monkeypatch
+):
+    monkeypatch.setenv("TIKTOKEN_CACHE_DIR", "")
+    assert load.read_file_cached(server, "0" * 64) == PAYLOAD
+    with pytest.raises(ValueError, match="Hash mismatch"):
+        with load.fetched(server, "0" * 64):
+            pass
+
+
+def test_the_fetched_bytes_are_read_where_a_stale_file_in_the_default_directory_cannot_be_replaced(
+    server, monkeypatch, tmp_path
+):
+    directory = tmp_path / "default"
+    directory.mkdir()
+    cached = directory / hashlib.sha1(server.encode()).hexdigest()
+    cached.write_bytes(b"something else")
+    monkeypatch.setattr(load, "cache_dir", lambda: (str(directory), False))
+    monkeypatch.setattr(load.os, "remove", refused)
+    monkeypatch.setattr(load.os, "replace", refused)
+    with load.fetched(server, DIGEST) as path:
+        assert open(path, "rb").read() == PAYLOAD
+    assert cached.read_bytes() == b"something else"
+
+
 def test_data_gym_s_directory_serves_when_tiktoken_s_is_not_named(server, monkeypatch, tmp_path):
     monkeypatch.delenv("TIKTOKEN_CACHE_DIR", raising=False)
     monkeypatch.setenv("DATA_GYM_CACHE_DIR", str(tmp_path / "gym"))
-    with load.fetched(server, DIGEST) as path:
-        assert os.path.dirname(path) == str(tmp_path / "gym")
+    with load.fetched(server, DIGEST):
+        pass
+    assert os.listdir(tmp_path / "gym") == [hashlib.sha1(server.encode()).hexdigest()]
 
 
 def test_load_tiktoken_bpe_reads_ranks_as_tiktoken_s_does(vocabulary, cache, server):
