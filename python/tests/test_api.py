@@ -459,6 +459,25 @@ def test_the_constructor_refuses_special_tokens_as_tiktoken_s_conversion_refuses
         )
 
 
+def test_the_constructor_takes_ranks_that_are_integers_as_tiktoken_does_and_each_of_the_256_bytes(pairs):
+    if "gpt2" not in pairs:
+        pytest.skip("the vocabulary does not hold gpt2")
+    _, theirs = pairs["gpt2"]
+    dense = {bytes([byte]): byte for byte in range(256)}
+    for ranks in ({token: str(rank) for token, rank in dense.items()}, {**dense, b"a": 97.0}):
+        arguments = {"pat_str": theirs._pat_str, "mergeable_ranks": ranks, "special_tokens": {}}
+        assert raised(lambda: matisse_tokenizer.Encoding("x", **arguments))[0] is TypeError
+        assert raised(lambda: tiktoken.Encoding("x", **arguments))[0] is TypeError
+    arguments = {"pat_str": theirs._pat_str, "mergeable_ranks": {**dense, b"\x00": False}, "special_tokens": {}}
+    mine = matisse_tokenizer.Encoding("x", **arguments)
+    reference = tiktoken.Encoding("x", **arguments)
+    assert mine.encode_ordinary("\x00a") == reference.encode_ordinary("\x00a")
+    assert mine.encode_single_token(b"\x00") == reference.encode_single_token(b"\x00")
+    lacking = {**{bytes([byte]): byte for byte in range(255)}, b"ab": 255}
+    with pytest.raises(ValueError, match="is not a token of the definition"):
+        matisse_tokenizer.Encoding("x", pat_str=theirs._pat_str, mergeable_ranks=lacking, special_tokens={})
+
+
 def test_a_special_token_s_id_given_as_another_integer_type_is_returned_as_tiktoken_returns_it(pairs):
     if "gpt2" not in pairs:
         pytest.skip("the vocabulary does not hold gpt2")

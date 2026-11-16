@@ -162,13 +162,14 @@ are the places where matisse-tokenizer does something else:
   they skip 50256, the id of `<|endoftext|>`, and so are not dense from zero.
 - **Other patterns and special tokens.** The constructor refuses with `ValueError` a pattern that is not one of the four
   as spelled, since matisse encodes only under a pattern it has a verified description of. It refuses ranks that are not
-  dense from zero or that spell one token twice, as matisse's loader does. It refuses a special token whose spelling is
-  empty or whose id is an ordinary token's, as matisse's encoder refuses them, and a special token whose spelling begins
-  another's, such as `<|a|>` and `<|a|>b`. tiktoken chooses between two such spellings at one place by the order of its
-  table and steps past a disallowed one by a byte, so its ids there follow no rule matisse could hold to. It refuses two
-  special tokens that share an id in any table but tiktoken's own of o200k_harmony, in whatever order: tiktoken decodes
-  a shared id as one of its spellings by the hash order of its table, whichever order they are given in, and only
-  o200k_harmony's has been checked against it.
+  dense from zero or that spell one token twice, as matisse's loader does, and ranks that do not hold each of the 256
+  bytes as a token, as matisse's encoder does. It refuses a special token whose spelling is empty or whose id is an
+  ordinary token's, as matisse's encoder refuses them, and a special token whose spelling begins another's, such as
+  `<|a|>` and `<|a|>b`. tiktoken chooses between two such spellings at one place by the order of its table and steps
+  past a disallowed one by a byte, so its ids there follow no rule matisse could hold to. It refuses two special tokens
+  that share an id in any table but tiktoken's own of o200k_harmony, in whatever order: tiktoken decodes a shared id as
+  one of its spellings by the hash order of its table, whichever order they are given in, and only o200k_harmony's has
+  been checked against it.
 - **tokenizer.json.** `load_tokenizer_json()` refuses with `ValueError`, with matisse's loader's message, which names
   the member of the file by its path from the root and what it holds, whatever the loader refuses: a model other than
   BPE, a normalizer, truncation or padding, a pre-tokenizer whose pattern is none of the four, a post-processor that
