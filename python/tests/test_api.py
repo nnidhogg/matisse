@@ -268,7 +268,7 @@ def test_a_batch_takes_any_iterable_of_texts_as_tiktoken_s_does(pair):
 
 def test_a_text_that_is_not_a_string_is_refused_with_tiktoken_s_type_error(pair):
     ours, theirs = pair
-    for texts in (["a", 5], [b"a"], [None]):
+    for texts in (["a", 5], [b"a"], [None], ["\ud800", 5], ["a\udfff", "b", None]):
         assert raised(lambda: ours.encode_ordinary_batch(texts)) == raised(lambda: theirs.encode_ordinary_batch(texts))
         mine = raised(lambda: ours.encode_batch(texts, disallowed_special=()))
         assert mine == raised(lambda: theirs.encode_batch(texts, disallowed_special=()))

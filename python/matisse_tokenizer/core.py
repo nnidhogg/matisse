@@ -1087,6 +1087,9 @@ class Encoding:
         """Returns the ids of every text with special tokens allowed, by a pool of threads, a lone surrogate replaced by
         U+FFFD first, as tiktoken replaces it.
 
+        A batch holding a lone surrogate is encoded text by text as encode() encodes each, so that a text after it that
+        is not a string is refused as tiktoken's pool refuses it.
+
         Args:
             texts: The texts.
             allowed: The spellings allowed.
@@ -1095,11 +1098,13 @@ class Encoding:
         Returns:
             The ids of each text.
 
+        Raises:
+            TypeError: If a text is not a string, the first in order.
         """
         try:
             return self._encode_batch_stretches(texts, allowed, num_threads)
         except UnicodeEncodeError:
-            return self._encode_batch_stretches([_without_surrogates(each) for each in texts], allowed, num_threads)
+            return [self._encode(each, allowed) for each in texts]
 
     def _encode_batch_stretches(
         self, texts: list[str], allowed: frozenset[str], num_threads: int, arrays: bool = False
