@@ -203,8 +203,9 @@ def get_encoding(encoding_name: str) -> core.Encoding:
         The encoding.
 
     Raises:
-        ValueError: If matisse_tokenizer knows no encoding of the name, if the name is llama3, whose rank file no vendor
-            publishes to fetch, or if the file fetched is not the pinned one.
+        ValueError: If matisse_tokenizer knows no encoding of the name, if the name is llama3, whose rank file its
+            vendor distributes under its own license and load_encoding() reads from a path, or if the file fetched is
+            not the pinned one.
     """
     if not isinstance(encoding_name, str):
         raise ValueError(f"Expected a string in get_encoding, got {type(encoding_name)}")

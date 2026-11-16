@@ -919,7 +919,8 @@ the tokenizer.json files, which they do not read, Llama 3's rank file included. 
 were taken once from the Hugging Face Hub, GPT-2's from openai-community/gpt2 at commit
 607a30d783dfa663caf39e06633721c8d4cfcd7e, cl100k's from Xenova/gpt-4 at 1d9f1f1b1fae88c0e4df1dab0a397f8de6229075 and
 o200k's from Xenova/gpt-4o at 7956d98f2a83b2751a98ea7136fdf7fe6cf54e69, the files [benchmarks.md](benchmarks.md) runs
-Hugging Face tokenizers on, and Llama 3's, gated by its vendor as its rank file is, is held beside the rank file.
+Hugging Face tokenizers on, and Llama 3's, Meta's under the Llama 3 Community License as its rank file is, is held
+beside the rank file.
 
 ### **The fixtures**
 
@@ -1049,9 +1050,9 @@ installed-consumer job builds a consumer against the installed package. Every jo
 pull request against it, and CodeQL runs on both and weekly. The coverage job fetches the seven public vocabulary files
 the tests pin, GPT-2's two files and the two rank files from OpenAI and the three tokenizer.json files from the Hugging
 Face Hub at their commits, held to their digests, so the real-vocabulary tests of the loaders, the encoders and the
-command line run in the measured build. Llama 3's files are gated by its vendor, so their tests skip there and the two
-probes' tests are not registered. Under the instrumented build each tokenizer's suite runs for many minutes, so that job
-runs the suites four at a time, each given an hour.
+command line run in the measured build. Llama 3's rank file and tokenizer.json, Meta's under the Llama 3 Community
+License, are not fetched, so their tests skip there and the two probes' tests are not registered. Under the instrumented
+build each tokenizer's suite runs for many minutes, so that job runs the suites four at a time, each given an hour.
 
 ## **What matisse needs from munch**
 
