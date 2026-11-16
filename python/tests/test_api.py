@@ -389,6 +389,25 @@ def test_allowed_special_holds_strings_alone_as_tiktoken_requires(pair):
                 )
 
 
+def test_a_lone_surrogate_in_allowed_special_is_refused_where_tiktoken_s_core_refuses_it(pair):
+    ours, theirs = pair
+    spelling = sorted(theirs.special_tokens_set)[0]
+    cases = [(text, disallowed) for text in ("a", "a\ud800", f"a{spelling}") for disallowed in ("all", ())]
+    # A text that is not a string is searched for disallowed special tokens first, tiktoken's with the regex package.
+    cases.append((None, ()))
+    for allowed in ({"\ud800"}, {spelling, "x\udfff"}, {5, "\ud800"}):
+        for text, disallowed in cases:
+            arguments = {"allowed_special": allowed, "disallowed_special": disallowed}
+            expected = raised(lambda: theirs.encode(text, **arguments))
+            assert raised(lambda: ours.encode(text, **arguments)) == expected
+            assert raised(lambda: ours.encode_parallel(text, 2, **arguments)) == expected
+            assert raised(lambda: ours.encode_batch([text], **arguments)) == expected
+            expected = raised(lambda: theirs.encode_to_numpy(text, **arguments))
+            assert raised(lambda: ours.encode_to_numpy(text, **arguments)) == expected
+            assert raised(lambda: ours.encode_parallel_to_numpy(text, 2, **arguments)) == expected
+            assert raised(lambda: ours.encode_batch_to_numpy([text], **arguments)) == expected
+
+
 def raised_or_ids(call: object) -> object:
     """Returns what a call returns, or the type and message of the exception it raises.
 

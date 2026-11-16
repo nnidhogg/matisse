@@ -337,6 +337,7 @@ class Encoding:
         Raises:
             TypeError: If allowed_special is neither "all" nor a set, as tiktoken refuses it.
             ValueError: If the text holds the spelling of a disallowed special token.
+            UnicodeEncodeError: If a spelling of allowed_special holds a lone surrogate, as tiktoken refuses it.
         """
         allowed = self._arguments(text, allowed_special, disallowed_special, repaired=True)
         return self._encode(text, allowed)
@@ -364,7 +365,7 @@ class Encoding:
         Raises:
             TypeError: If allowed_special is neither "all" nor a set, as tiktoken refuses it.
             ValueError: If the text holds the spelling of a disallowed special token.
-            UnicodeEncodeError: If the text holds a lone surrogate.
+            UnicodeEncodeError: If the text or a spelling of allowed_special holds a lone surrogate.
         """
         allowed = self._arguments(text, allowed_special, disallowed_special, repaired=False)
         return self._encode_array(text, allowed)
@@ -411,6 +412,7 @@ class Encoding:
         Raises:
             TypeError: If allowed_special is neither "all" nor a set, as tiktoken refuses it.
             ValueError: If a text holds the spelling of a disallowed special token, or num_threads is not positive.
+            UnicodeEncodeError: If a spelling of allowed_special holds a lone surrogate, as tiktoken refuses it.
         """
         texts, allowed, threads = self._batch_arguments(
             text, num_threads, allowed_special, disallowed_special, repaired=True
@@ -443,7 +445,7 @@ class Encoding:
         Raises:
             TypeError: If allowed_special is neither "all" nor a set, as tiktoken refuses it.
             ValueError: If a text holds the spelling of a disallowed special token, or num_threads is not positive.
-            UnicodeEncodeError: If a text holds a lone surrogate.
+            UnicodeEncodeError: If a text or a spelling of allowed_special holds a lone surrogate.
         """
         texts, allowed, threads = self._batch_arguments(
             text, num_threads, allowed_special, disallowed_special, repaired=False
@@ -475,6 +477,7 @@ class Encoding:
         Raises:
             TypeError: If allowed_special is neither "all" nor a set, as tiktoken refuses it.
             ValueError: If the text holds the spelling of a disallowed special token, or chunks is negative.
+            UnicodeEncodeError: If a spelling of allowed_special holds a lone surrogate, as tiktoken refuses it.
         """
         allowed = self._arguments(text, allowed_special, disallowed_special, repaired=True)
         if chunks < 0:
@@ -508,7 +511,7 @@ class Encoding:
         Raises:
             TypeError: If allowed_special is neither "all" nor a set, as tiktoken refuses it.
             ValueError: If the text holds the spelling of a disallowed special token, or chunks is negative.
-            UnicodeEncodeError: If the text holds a lone surrogate.
+            UnicodeEncodeError: If the text or a spelling of allowed_special holds a lone surrogate.
         """
         allowed = self._arguments(text, allowed_special, disallowed_special, repaired=False)
         if chunks < 0:
@@ -813,7 +816,7 @@ class Encoding:
                 of strings, or the text is not a string where a step reads it.
             ValueError: If the text holds the spelling of a disallowed special token.
             UnicodeEncodeError: If the call does not repair the text, which holds a lone surrogate, and allowed_special
-                is refused.
+                is refused, or a spelling of allowed_special holds a lone surrogate.
         """
         if type(allowed_special) in (frozenset, set) and not allowed_special:
             disallowed = self.special_tokens_set if disallowed_special == "all" else disallowed_special
@@ -857,6 +860,7 @@ class Encoding:
 
         Raises:
             TypeError: If allowed_special is neither "all" nor a set nor a frozenset, as tiktoken's core refuses it.
+            UnicodeEncodeError: If a spelling holds a lone surrogate, as tiktoken's core refuses it.
         """
         if allowed_special == "all":
             allowed_special = self.special_tokens_set
@@ -865,6 +869,7 @@ class Encoding:
         for spelling in allowed_special:
             if not isinstance(spelling, str):
                 raise TypeError(f"{_described(spelling)} is not an instance of 'str'")
+            spelling.encode("utf-8")
         return frozenset(allowed_special).intersection(self._special_tokens)
 
     def _allowed_for(self, allowed_special: Literal["all"] | Set[str], text: object, repaired: bool) -> frozenset[str]:
@@ -883,11 +888,11 @@ class Encoding:
         Raises:
             TypeError: If the text is not a string, or allowed_special is neither "all" nor a set of strings.
             UnicodeEncodeError: If the call does not repair the text, which holds a lone surrogate, and allowed_special
-                is refused.
+                is refused, or a spelling of allowed_special holds a lone surrogate.
         """
         try:
             return self._allowed(allowed_special)
-        except TypeError:
+        except (TypeError, UnicodeEncodeError):
             if not repaired or not isinstance(text, str):
                 _core.check_text(text)
             raise
@@ -933,6 +938,7 @@ class Encoding:
         Raises:
             TypeError: If allowed_special is neither "all" nor a set and a text is given.
             ValueError: If a text holds the spelling of a disallowed special token, or num_threads is not positive.
+            UnicodeEncodeError: If a spelling of allowed_special holds a lone surrogate and a text is given.
         """
         disallowed = frozenset(self._disallowed(allowed_special, disallowed_special))
         pool = _pool(num_threads)

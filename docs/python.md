@@ -184,13 +184,14 @@ are the places where matisse-tokenizer does something else:
   refused with `TypeError` and a file it cannot read with `RuntimeError`.
 - **Argument types.** The arguments are read as tiktoken 0.14.0 reads them, in its order, with its exceptions.
   `allowed_special` is `"all"` or a `set` or `frozenset` of strings, and anything else, a string or a list among them,
-  is refused with `TypeError`. A text that is not a string is refused with `TypeError`, before `allowed_special` is
-  read, and so is a lone surrogate in a call that does not replace it. The ids given to the decoding calls are a
-  sequence, and a set, a dict, an iterator or a string is refused with `TypeError`. `encode_single_token()` takes a
-  string or `bytes` alone. The constructor refuses a special token's id that is negative or does not fit 32 bits with
-  `OverflowError` and a spelling holding a lone surrogate with `UnicodeEncodeError`. `num_threads` takes what tiktoken's
-  thread pool takes, `None`, a fraction and infinity among them, except a NaN, which tiktoken's pool waits on forever
-  and which is refused here with `ValueError`. Every array returned is read-only, as tiktoken's are.
+  is refused with `TypeError`, and a set holding a string with a lone surrogate, a special token's or not, with
+  `UnicodeEncodeError`. A text that is not a string is refused with `TypeError`, before `allowed_special` is read, and
+  so is a lone surrogate in a call that does not replace it. The ids given to the decoding calls are a sequence, and a
+  set, a dict, an iterator or a string is refused with `TypeError`. `encode_single_token()` takes a string or `bytes`
+  alone. The constructor refuses a special token's id that is negative or does not fit 32 bits with `OverflowError` and
+  a spelling holding a lone surrogate with `UnicodeEncodeError`. `num_threads` takes what tiktoken's thread pool takes,
+  `None`, a fraction and infinity among them, except a NaN, which tiktoken's pool waits on forever and which is refused
+  here with `ValueError`. Every array returned is read-only, as tiktoken's are.
 - **The load module.** `matisse_tokenizer.load` gives tiktoken's `load_tiktoken_bpe()`, `read_file_cached()` and
   `read_file()` with tiktoken's behavior, so that Meta's tokenizer.py reads Llama 3's ranks with it, but reads only
   local files and http and https URLs, refusing with `ValueError` the other schemes tiktoken reads through blobfile.
