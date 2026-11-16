@@ -316,8 +316,10 @@ to classes does, and with it the ids of a text holding a code point whose class 
   every piece the merge makes.
 - A `pretok::Class_table` keeps one table per distinct block of 256 code points and refuses an alphabet with more
   distinct blocks than a byte indexes; GPT-2's, cl100k's, o200k's and Llama 3's have 133, 134, 141 and 134. Class
-  symbols are bytes, as munch's verifier alphabet is, which holds every class alphabet in sight and no character-level
-  merge table, so character-level SentencePiece waits on a decision about munch's alphabet.
+  symbols are bytes, as munch's verifier alphabet is, which holds every class alphabet in sight. munch 3.1.0's
+  `token_automaton(merges, alphabet)` reads a character-level merge table over an alphabet of characters, so
+  character-level SentencePiece waits on a loader that supplies the alphabet and handles SentencePiece's normalizer and
+  byte fallback, as the open questions of [design.md](design.md) describe.
 - `validate()` refuses a width of zero, a pattern that is not total, as `split_verifier()` refuses it, a certified
   window whose right context is unbounded, and a factorization window the split verifier does not certify.
 - `validate_merges()` refuses a definition under the rank rule or with the whole-piece lookup, an empty candidate, and a
