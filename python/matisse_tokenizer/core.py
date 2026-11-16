@@ -337,8 +337,7 @@ class Encoding:
             TypeError: If allowed_special is neither "all" nor a set, as tiktoken refuses it.
             ValueError: If the text holds the spelling of a disallowed special token.
         """
-        self._check(text, self._disallowed(allowed_special, disallowed_special))
-        allowed = self._allowed_for(allowed_special, text, repaired=True)
+        allowed = self._arguments(text, allowed_special, disallowed_special, repaired=True)
         return self._encode(text, allowed)
 
     def encode_to_numpy(
@@ -366,8 +365,7 @@ class Encoding:
             ValueError: If the text holds the spelling of a disallowed special token.
             UnicodeEncodeError: If the text holds a lone surrogate.
         """
-        self._check(text, self._disallowed(allowed_special, disallowed_special))
-        allowed = self._allowed_for(allowed_special, text, repaired=False)
+        allowed = self._arguments(text, allowed_special, disallowed_special, repaired=False)
         return self._encode_array(text, allowed)
 
     def encode_ordinary_batch(self, text: list[str], *, num_threads: int = 8) -> list[list[int]]:
@@ -477,8 +475,7 @@ class Encoding:
             TypeError: If allowed_special is neither "all" nor a set, as tiktoken refuses it.
             ValueError: If the text holds the spelling of a disallowed special token, or chunks is negative.
         """
-        self._check(text, self._disallowed(allowed_special, disallowed_special))
-        allowed = self._allowed_for(allowed_special, text, repaired=True)
+        allowed = self._arguments(text, allowed_special, disallowed_special, repaired=True)
         if chunks < 0:
             raise ValueError(f"chunks must not be negative, not {chunks}")
         try:
@@ -512,8 +509,7 @@ class Encoding:
             ValueError: If the text holds the spelling of a disallowed special token, or chunks is negative.
             UnicodeEncodeError: If the text holds a lone surrogate.
         """
-        self._check(text, self._disallowed(allowed_special, disallowed_special))
-        allowed = self._allowed_for(allowed_special, text, repaired=False)
+        allowed = self._arguments(text, allowed_special, disallowed_special, repaired=False)
         if chunks < 0:
             raise ValueError(f"chunks must not be negative, not {chunks}")
         import numpy
@@ -787,6 +783,43 @@ class Encoding:
     # ====================
     # Private
     # ====================
+
+    def _arguments(
+        self,
+        text: str,
+        allowed_special: Literal["all"] | Set[str],
+        disallowed_special: Literal["all"] | Collection[str],
+        repaired: bool,
+    ) -> frozenset[str]:
+        """Reads a call's arguments in the order tiktoken's encode() reads them: the disallowed special tokens, the text
+        checked for one, then the allowed special tokens.
+
+        An allowed_special that is a set or frozenset and empty, the default, allows nothing and leaves a
+        disallowed_special of "all" every special token, which the call takes directly, since the general steps are a
+        sizeable part of a call on a short text. A subclass takes the general steps, as it may compare equal to "all".
+
+        Args:
+            text: The text.
+            allowed_special: The special tokens allowed, or "all".
+            disallowed_special: The special tokens disallowed, or "all".
+            repaired: Whether the call replaces a lone surrogate before it encodes, as encode() does.
+
+        Returns:
+            The special tokens allowed.
+
+        Raises:
+            TypeError: If disallowed_special is not a collection of strings, allowed_special is neither "all" nor a set
+                of strings, or the text is not a string where a step reads it.
+            ValueError: If the text holds the spelling of a disallowed special token.
+            UnicodeEncodeError: If the call does not repair the text, which holds a lone surrogate, and allowed_special
+                is refused.
+        """
+        if type(allowed_special) in (frozenset, set) and not allowed_special:
+            disallowed = self.special_tokens_set if disallowed_special == "all" else disallowed_special
+            self._check(text, disallowed)
+            return frozenset()
+        self._check(text, self._disallowed(allowed_special, disallowed_special))
+        return self._allowed_for(allowed_special, text, repaired)
 
     def _disallowed(
         self, allowed_special: Literal["all"] | Set[str], disallowed_special: Literal["all"] | Collection[str]
