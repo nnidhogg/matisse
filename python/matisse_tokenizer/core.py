@@ -845,8 +845,9 @@ class Encoding:
         return disallowed_special
 
     def _allowed(self, allowed_special: Literal["all"] | Set[str]) -> frozenset[str]:
-        """Returns the special tokens a call allows: every one for "all", and otherwise the ones given that are special
-        tokens of the encoding, a spelling that is not one changing nothing, as for tiktoken.
+        """Returns the special tokens a call allows: those of special_tokens_set for "all", as the caller may have
+        edited it, and otherwise the ones given, either way only those that are special tokens of the encoding, a
+        spelling that is not one changing nothing, as for tiktoken.
 
         Args:
             allowed_special: The special tokens allowed, "all" or a set.
@@ -858,7 +859,7 @@ class Encoding:
             TypeError: If allowed_special is neither "all" nor a set nor a frozenset, as tiktoken's core refuses it.
         """
         if allowed_special == "all":
-            return frozenset(self._special_tokens)
+            allowed_special = self.special_tokens_set
         if not isinstance(allowed_special, (set, frozenset)):
             raise TypeError(f"{_described(allowed_special)} is not an instance of 'set'")
         for spelling in allowed_special:
