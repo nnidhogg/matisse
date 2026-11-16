@@ -167,9 +167,11 @@ where the window's own encoding begins the token covering its last byte, the onl
 segmentation of a string with an occurrence of the window whose covering token begins elsewhere. On GPT-2's table the
 automaton is built in 0.03 seconds and a decision takes about half a millisecond on average on a window of three bytes,
 so decide a table's candidates in one call. It refuses with `std::invalid_argument` a definition under the rank rule or
-with the whole-piece lookup, an empty candidate, and a table munch's `token_automaton()` refuses, with munch's message.
-`render_merges(windows)` writes the windows decided as text, the certified and then the refuted ones, and
-`merges_json(windows)` as one JSON object.
+with the whole-piece lookup, one in which a byte is no token, an empty candidate, and a table munch's
+`token_automaton()` refuses, with munch's message. A certified window certifies its cut at every occurrence inside one
+stretch between the special tokens cut out of a text, and a refutation shows only that the covering token begins
+elsewhere at one occurrence. `render_merges(windows)` writes the windows decided as text, the certified and then the
+refuted ones, and `merges_json(windows)` as one JSON object.
 
 ## **Encoding**
 

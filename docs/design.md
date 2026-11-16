@@ -469,6 +469,20 @@ string, the first the search finds. A certified window's cut is a boundary of ev
 theorem the bytes on either side of a boundary are encoded alone as the whole text encodes them, so a caller that cuts
 there reads no byte past the cut.
 
+The certificate is of the merge of one piece, and three premises carry it to the ids Hugging Face gives a file with
+`add_special_tokens` false. The automaton reads every byte as a token, so `validate_merges()` refuses a definition in
+which a byte is no token, naming the byte, as the encoder does. Hugging Face's BPE model drops a byte its vocabulary
+does not hold when the model names no `unk_token`, and the tokens on either side of it can then merge: under the
+vocabulary of a, b and ab that Hugging Face trains on the text ab, axb is the one token ab, while a and xb, cut apart,
+are a and b. The whole-piece lookup is refused, as the next paragraph says, since each side of a cut is a text of its
+own and would be looked up whole where the same bytes inside the longer text are merged. And Hugging Face cuts its added
+tokens out of a text before the model reads it, so the piece the merge reads is a stretch between them. A certified
+window certifies its cut at every occurrence that lies inside one stretch: the stretch is a byte string that holds the
+window, so the cut is a boundary of its encoding, and no added token cut out of the text spans the cut, so each side is
+cut into the stretches the whole text is cut into and its ids are the whole text's. It certifies nothing at an
+occurrence that an added token cut out of the text overlaps, where no stretch holds the window. That is the rule the
+`Encoder` cuts by under a pattern, at an anchor inside one stretch between allowed special tokens.
+
 The encoder decided is canonical byte-pair encoding, the merge of least rank applied at its leftmost occurrence until
 none applies, which is the pair rule. A definition under the rank rule carries no merge table and is refused, and so is
 one with the whole-piece lookup, which with no pre-tokenizer would take a whole text that is a token as that one token,
@@ -481,8 +495,11 @@ merge by merge over the parts made before, and it certifies nothing of them.
 A candidate is a window, not a window with an origin. Every byte string is encoded, the window among them, so at its
 occurrence in itself the token covering its last byte begins where the window's own encoding begins it, and that is the
 only origin that can be certified. `validate_merges()` encodes each candidate alone by the table and decides it at that
-origin, as munch's `chunk_plan()` decides a window of a byte table, so a refuted window certifies no cut at any origin
-and a caller has no origin to choose. The candidates are the caller's, since every window of a width is too many to
+origin, as munch's `chunk_plan()` decides a window of a byte table, so a refuted window is certified at no origin and a
+caller has no origin to choose. A refutation decides that and no more: the token covering the window's last byte begins
+elsewhere at one occurrence, and a boundary can still stand at the origin at every occurrence. Under the merges (b, c)
+and (a, b) the window zab is z and ab alone and z, a and bc in zabc, which refutes it at origin 1, though no merge reads
+z and a boundary follows it in every text. The candidates are the caller's, since every window of a width is too many to
 decide at full scale. On GPT-2's table of 50,000 merges the automaton has 50,001 states, one past the base state for
 every merge since every product is read, is built in 0.03 seconds and holds about 8 MB, so its memory is no concern at
 that size; a decision takes on average about 0.1 ms on a byte, 0.2 ms on a pair and 0.5 ms on a triple, so that the

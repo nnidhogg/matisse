@@ -1,5 +1,5 @@
 """validate_merges(), matisse's certification of the windows of a byte-level merge table without a pre-tokenizer, with
-the MergeWindow each candidate is decided as and the Refutation of a window that certifies no cut.
+the MergeWindow each candidate is decided as and the Refutation of a window that is not certified.
 
 A Hugging Face tokenizer.json whose pre-tokenizer is a ByteLevel without its regex splits nothing, so its merge table
 merges a whole text as one piece and has no pattern to encode under; its cuts are the windows the table certifies
@@ -18,8 +18,8 @@ from matisse_tokenizer import _core
 
 @dataclasses.dataclass(frozen=True)
 class Refutation:
-    """A string on which a window certifies no cut: the merge's tokens of it, and where the window occurs in it with
-    the token covering its last byte beginning elsewhere than the origin."""
+    """A string that refutes a window: the merge's tokens of it, and where the window occurs in it with the token
+    covering its last byte beginning elsewhere than the origin."""
 
     tokens: tuple[bytes, ...]
     """The encoder's segmentation of the string, which the tokens spell."""
@@ -41,7 +41,8 @@ class MergeWindow:
 
     refutation: Refutation | None
     """None when the window is certified, the token covering its last byte beginning at the origin at every occurrence
-    in every byte string; otherwise a string that refutes it, so that it certifies no cut at any origin."""
+    in every byte string; otherwise a string that refutes it, so that it is certified at no origin, though a boundary
+    can still stand at the origin at every occurrence."""
 
     @property
     def certified(self) -> bool:
@@ -56,8 +57,10 @@ def validate_merges(path: str | os.PathLike[str], candidates: Iterable[bytes]) -
     The file is read by matisse's loader under the empty spelling, which takes a ByteLevel pre-tokenizer without its
     regex, and every window is decided at the origin where its own encoding begins the token covering its last byte, by
     munch's miscovering() on the table's token automaton, built once for all of them. The verdicts are of the merge
-    alone, on a text with no special token cut out. The interpreter lock is released while the file is read and the
-    windows are decided.
+    alone, which merges each stretch between the special tokens Hugging Face cuts out of a text as one piece: a
+    certified window certifies its cut at every occurrence inside one stretch, and none where a special token cut out of
+    the text overlaps the window's occurrence. The interpreter lock is released while the file is read and the windows
+    are decided.
 
     Args:
         path: The tokenizer.json's path.
@@ -71,7 +74,8 @@ def validate_merges(path: str | os.PathLike[str], candidates: Iterable[bytes]) -
         ValueError: If matisse's loader refuses the file under the empty spelling, a pre-tokenizer that splits a text
             among its refusals, with its message naming the member, or matisse refuses the table, with munch's message
             naming a merge whose part no earlier merge makes or that makes a token again, or the whole-piece lookup the
-            file's ignore_merges gives, or an empty candidate, naming its index.
+            file's ignore_merges gives, or a vocabulary that does not hold every byte, naming the first it lacks, or an
+            empty candidate, naming its index.
         RuntimeError: If the file cannot be read.
     """
     windows = list(candidates)

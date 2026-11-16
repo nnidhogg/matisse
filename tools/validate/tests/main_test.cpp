@@ -641,3 +641,29 @@ TEST(Command_line_test, A_merge_table_that_recreates_a_token_exits_one_with_the_
 
     std::filesystem::remove_all(dir);
 }
+
+TEST(Command_line_test, A_merge_table_whose_vocabulary_does_not_hold_every_byte_exits_one_naming_the_first_it_lacks)
+{
+    const auto dir{scratch()};
+
+    const auto file{(dir / "partial.tokenizer.json").string()};
+    const auto input{(dir / "input.txt").string()};
+
+    // Hugging Face trains this model on ab, and drops the x of axb, which it does not hold, before it merges a and b.
+    std::ofstream{file} << std::format(
+            R"({{"normalizer": null, "pre_tokenizer": {}, "post_processor": null, "added_tokens": [],
+                 "model": {{"type": "BPE", "vocab": {{"a": 0, "b": 1, "ab": 2}}, "merges": [["a", "b"]]}}}})",
+            merge_table_pre_tokenizer);
+
+    std::ofstream{input} << "axb";
+
+    const auto [status, out, err]{run({file, "--input", input})};
+
+    constexpr std::string_view refusal{R"(validate_merges: the byte "\x00" is not a token of the definition)"};
+
+    EXPECT_EQ(status, 1);
+    EXPECT_EQ(err, "");
+    EXPECT_EQ(out, std::format("== {}\nrefused: {}\n", file, refusal));
+
+    std::filesystem::remove_all(dir);
+}

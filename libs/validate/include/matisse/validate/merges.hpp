@@ -32,7 +32,9 @@ namespace matisse::validate
  *
  * Every byte string is encoded, and the window is one of them, so at its occurrence in itself the token covering its
  * last byte begins where the window's own encoding begins it, and no other origin can be certified. A window refuted at
- * that origin therefore certifies no cut at any origin.
+ * that origin is therefore certified at no origin. A refutation shows that the token covering the window's last byte
+ * begins elsewhere at one occurrence, and decides nothing more: a boundary can stand at the origin at every occurrence
+ * of a refuted window, as after the z of zab under the merges (b, c) and (a, b), where zabc refutes the window.
  */
 struct Merge_window
 {
@@ -61,17 +63,22 @@ struct Merge_window
  *
  * The token automaton is built once for all the candidates, and each decision reads every token against the window: on
  * GPT-2's table of 50,000 merges the automaton has 50,001 states, is built in 0.03 s and holds 8 MB, and a decision
- * takes on average about 0.1 ms on one byte, 0.2 ms on a pair and 0.5 ms on a triple. The verdicts are of the merge
- * alone, on a text with no special token cut out, and a refutation is the encoder's segmentation of a string of at most
- * 2L + |window| - 2 bytes, L the longest token, the first the search finds and not necessarily the shortest.
- * @param definition The definition, merged by the pair rule without the whole-piece lookup.
+ * takes on average about 0.1 ms on one byte, 0.2 ms on a pair and 0.5 ms on a triple. The automaton reads every byte as
+ * a token, so the definition must hold every byte as one, as the encoder requires: Hugging Face's BPE model drops a
+ * byte its vocabulary does not hold when the model names no `unk_token`, and the tokens on either side of it can then
+ * merge. The verdicts are of the merge alone, which merges each stretch between the special tokens cut out of a text as
+ * one piece: a certified window certifies its cut at every occurrence inside one stretch, and none where a special
+ * token cut out of the text overlaps the window's occurrence. A refutation is the encoder's segmentation of a string of
+ * at most 2L + |window| - 2 bytes, L the longest token, the first the search finds and not necessarily the shortest.
+ * @param definition The definition, merged by the pair rule without the whole-piece lookup, every byte a token of it.
  * @param candidates The candidate windows, each nonempty, in the order they are decided.
  * @return Each candidate decided, in the order given.
  * @throws std::invalid_argument If the definition merges by the rank rule, which carries no merge table, or looks a
- *         whole piece up, which with no pre-tokenizer takes a whole text that is a token as that token; if a candidate
- *         is empty, the message naming its index; or as munch::verifier::token_automaton() refuses the table, a part
- *         that neither a byte nor an earlier merge carries or a product that a byte or an earlier merge already
- *         carries, the message munch's, naming the merge and its rank.
+ *         whole piece up, which with no pre-tokenizer takes a whole text that is a token as that token; if a byte is no
+ *         token of the definition, the message naming the byte; if a candidate is empty, the message naming its index;
+ *         or as munch::verifier::token_automaton() refuses the table, a part that neither a byte nor an earlier merge
+ *         carries or a product that a byte or an earlier merge already carries, the message munch's, naming the merge
+ *         and its rank.
  */
 [[nodiscard]] std::vector<Merge_window> validate_merges(
         const load::Definition& definition, std::span<const std::string> candidates);

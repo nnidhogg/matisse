@@ -1,6 +1,7 @@
 #include "matisse/validate/merges.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cstddef>
 #include <format>
 #include <map>
@@ -35,6 +36,38 @@ constexpr std::size_t shown_examples{6};
  * @brief The first byte past ASCII's printable range, the delete control.
  */
 constexpr unsigned char delete_control{0x7F};
+
+/**
+ * @brief The number of bytes, each of which a definition decided holds as a token.
+ */
+constexpr std::size_t byte_count{256};
+
+/**
+ * @brief Returns the first byte that is no token of a definition, std::nullopt when every byte is one.
+ * @param spellings The bytes of every ordinary token.
+ * @return The byte.
+ */
+[[nodiscard]] std::optional<unsigned char> missing_byte(const std::span<const std::string> spellings)
+{
+    std::array<bool, byte_count> held{};
+
+    for (const auto& spelling : spellings)
+    {
+        if (spelling.size() == 1)
+        {
+            held[static_cast<unsigned char>(spelling.front())] = true;
+        }
+    }
+
+    const auto missing{std::ranges::find(held, false)};
+
+    if (missing == held.end())
+    {
+        return std::nullopt;
+    }
+
+    return static_cast<unsigned char>(std::ranges::distance(held.begin(), missing));
+}
 
 /**
  * @brief Returns the rank of every merge of a table by its two parts.
@@ -398,6 +431,14 @@ std::vector<Merge_window> validate_merges(
         throw std::invalid_argument{
                 "validate_merges: the definition looks a whole piece up, which with no pre-tokenizer takes a whole "
                 "text that is a token as that token"};
+    }
+
+    if (const auto missing{missing_byte(definition.spellings)})
+    {
+        const std::string byte{static_cast<char>(*missing)};
+
+        throw std::invalid_argument{
+                std::format("validate_merges: the byte {} is not a token of the definition", shown(byte))};
     }
 
     const auto empty{std::ranges::find_if(candidates, std::ranges::empty)};

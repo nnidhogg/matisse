@@ -205,13 +205,20 @@ leftmost occurrence until none applies, which is the pair rule:
 - A window is decided at the one origin it can be certified at, where its own encoding begins the token covering its
   last byte. Certified, the token covering its last byte begins there at every occurrence in every byte string, and the
   cut there is a boundary of every text's encoding, with the bytes on either side of it encoded alone as the whole text
-  encodes them, so a worker reads no byte past its cut. Refuted, it certifies no cut at any origin, and the refutation
-  is the encoder's segmentation of a string of at most 2L + |window| - 2 bytes, L the longest token, holding the window
-  at an occurrence where that token begins elsewhere, the first the search finds and not necessarily the shortest.
-- The verdicts are of the merge alone, on a text with no special token cut out, and only of the windows given. The
-  candidates are the caller's, since every window of three bytes is too many to decide at full scale, and
-  `matisse-validate` draws every byte an input holds and its most frequent pairs and triples, 1,000 of each unless
-  `--candidates` gives another count.
+  encodes them, so a worker reads no byte past its cut. Refuted, it is certified at no origin, and the refutation is the
+  encoder's segmentation of a string of at most 2L + |window| - 2 bytes, L the longest token, holding the window at an
+  occurrence where that token begins elsewhere, the first the search finds and not necessarily the shortest. A
+  refutation decides no more than that: a boundary can still stand at the origin at every occurrence of a refuted
+  window, as [design.md](design.md) shows on zab.
+- The definition must hold every byte as a token, as the encoder requires, and a definition that does not is refused,
+  naming the byte: Hugging Face's BPE model drops a byte its vocabulary does not hold when the model names no
+  `unk_token`, and the tokens on either side of it can then merge, so that a cut certified of the table with every byte
+  would not hold of the file.
+- The verdicts are of the merge alone, which merges each stretch between the special tokens cut out of a text as one
+  piece, and only of the windows given. A certified window certifies its cut at every occurrence inside one stretch, and
+  none where a special token cut out of the text overlaps the window's occurrence. The candidates are the caller's,
+  since every window of three bytes is too many to decide at full scale, and `matisse-validate` draws every byte an
+  input holds and its most frequent pairs and triples, 1,000 of each unless `--candidates` gives another count.
 - It refuses with `std::invalid_argument` a definition under the rank rule, which carries no merge table, one with the
   whole-piece lookup, which with no pre-tokenizer would take a whole text that is a token as that one token, and an
   empty candidate, naming its index. It refuses as munch's `token_automaton()` refuses, with munch's message naming the

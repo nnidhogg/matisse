@@ -145,10 +145,15 @@ candidate is bytes, and each is returned as a `MergeWindow` of its `window`, its
 encoding begins the token covering its last byte, the only origin that can be certified, and its `refutation`. That is
 None when the window is certified, and `certified` is then true, and otherwise a `Refutation` of the `tokens` of a
 string, the merge's segmentation of it, and the `occurrence` of the window in it, at which the token covering the
-window's last byte begins elsewhere, so that the window certifies no cut at any origin. The verdicts are exact under the
-pair rule, Hugging Face's merge, and of the merge alone, on a text with no special token cut out. The file is read and
-the windows decided with the interpreter lock released and the table's token automaton built once for all of them, and
-on GPT-2's table a window of three bytes takes about half a millisecond on average, as [limits.md](limits.md) gives.
+window's last byte begins elsewhere, so that the window is certified at no origin; a refutation decides no more, and a
+boundary can still stand at the origin at every occurrence. The verdicts are exact under the pair rule, Hugging Face's
+merge, and of the merge alone, which merges each stretch between the special tokens Hugging Face cuts out of a text as
+one piece: a certified window certifies its cut at every occurrence inside one stretch, and none where a special token
+cut out of the text overlaps the window's occurrence. A file whose vocabulary does not hold every byte is refused, since
+Hugging Face drops a byte its vocabulary does not hold when the model names no `unk_token`, and the tokens on either
+side of it can then merge. The file is read and the windows decided with the interpreter lock released and the table's
+token automaton built once for all of them, and on GPT-2's table a window of three bytes takes about half a millisecond
+on average, as [limits.md](limits.md) gives.
 
 ## **Where it refuses or differs**
 
@@ -180,9 +185,10 @@ are the places where matisse-tokenizer does something else:
   them.
 - **Merge tables.** `validate_merges()` refuses with `ValueError`, with matisse's message, a file matisse's loader
   refuses under the empty spelling, a pre-tokenizer that splits a text among them, a model whose `ignore_merges` is
-  true, which would look a whole text up, a table munch's token automaton refuses, with a merge whose part no earlier
-  merge makes or that makes a token again, and an empty candidate, naming its index. A candidate that is not bytes is
-  refused with `TypeError` and a file it cannot read with `RuntimeError`.
+  true, which would look a whole text up, a vocabulary that does not hold every byte, naming the first it lacks, a table
+  munch's token automaton refuses, with a merge whose part no earlier merge makes or that makes a token again, and an
+  empty candidate, naming its index. A candidate that is not bytes is refused with `TypeError` and a file it cannot read
+  with `RuntimeError`.
 - **Argument types.** The arguments are read as tiktoken 0.14.0 reads them, in its order, with its exceptions.
   `allowed_special` is `"all"` or a `set` or `frozenset` of strings, and anything else, a string or a list among them,
   is refused with `TypeError`, and a set holding a string with a lone surrogate, a special token's or not, with

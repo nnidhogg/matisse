@@ -1,7 +1,8 @@
 """validate_merges() held to Hugging Face tokenizers' own encoding of the same merge table without a pre-tokenizer: on
 small tables over three letters at every window of up to three bytes and every string up to the length past which no
-refutation is needed, and on GPT-2's merge table at the frequent windows of twitter.json and at every occurrence of
-each certified one there; and its refusals, which are matisse's."""
+refutation is needed, with a cut at every occurrence of each certified one inside a stretch between special tokens, and
+on GPT-2's merge table at the frequent windows of twitter.json and at every occurrence of each certified one there;
+and its refusals, which are matisse's, a vocabulary that does not hold every byte among them."""
 
 from __future__ import annotations
 
@@ -10,6 +11,7 @@ import functools
 import itertools
 import json
 import pathlib
+from collections.abc import Sequence
 
 import pytest
 
@@ -83,15 +85,17 @@ def written_table(
     merges: list[tuple[str, str]],
     ignore_merges: bool = False,
     pre_tokenizer: dict[str, object] = MERGE_TABLE_PRE_TOKENIZER,
+    added: Sequence[tuple[str, bool]] = (),
 ) -> pathlib.Path:
     """Writes a tokenizer.json of a merge table over ASCII letters, with no pre-tokenizer unless told: the 256 single
-    bytes under GPT-2's byte map, each product once after them, and one special token.
+    bytes under GPT-2's byte map, each product once after them, and one special token, with further ones when told.
 
     Args:
         directory: The directory.
         merges: The merges, in rank order, each two parts of letters.
         ignore_merges: The model's ignore_merges, whether a text that is a token is looked up whole.
         pre_tokenizer: The pre-tokenizer.
+        added: Further special tokens after <|endoftext|>, each its spelling and its normalized.
 
     Returns:
         The file's path.
@@ -105,14 +109,15 @@ def written_table(
         "post_processor": None,
         "added_tokens": [
             {
-                "id": len(vocab),
-                "content": "<|endoftext|>",
+                "id": len(vocab) + index,
+                "content": content,
                 "single_word": False,
                 "lstrip": False,
                 "rstrip": False,
-                "normalized": False,
+                "normalized": normalized,
                 "special": True,
             }
+            for index, (content, normalized) in enumerate([("<|endoftext|>", False), *added])
         ],
         "model": {
             "type": "BPE",
@@ -235,6 +240,59 @@ def test_every_window_is_decided_as_hugging_face_s_encoding_of_every_string_up_t
             assert covering_starts(list(window.refutation.tokens))[occurrence + len(window.window) - 1] != (
                 occurrence + window.origin
             )
+
+
+@pytest.mark.parametrize("merges", TABLES)
+def test_a_certified_window_s_cut_inside_a_stretch_between_special_tokens_leaves_hugging_face_s_ids(tmp_path, merges):
+    # Two special tokens spelled over the alphabet, one normalized, so that windows meet them and both passes cut.
+    path = written_table(tmp_path, merges, added=[("ca", True), ("acb", False)])
+    theirs = tokenizers.Tokenizer.from_file(str(path))
+    specials = {theirs.token_to_id(spelling) for spelling in ("<|endoftext|>", "ca", "acb")}
+    windows = [
+        bytes(window) for width in range(1, WIDEST_WINDOW + 1) for window in itertools.product(ALPHABET, repeat=width)
+    ]
+    certified = [window for window in matisse_tokenizer.validate_merges(path, windows) if window.certified]
+    stretches = [string.decode() for string in every_string(6)]
+    texts = stretches + [f"{left}<|endoftext|>{right}" for left, right in itertools.product(stretches[:39], repeat=2)]
+    cuts = overlapped = 0
+
+    for text in texts:
+        whole = theirs.encode(text, add_special_tokens=False)
+        # Where Hugging Face cuts a special token out of the text.
+        cut_out = [offsets for token, offsets in zip(whole.ids, whole.offsets) if token in specials]
+        for window in certified:
+            spelling = window.window.decode()
+            at = text.find(spelling)
+            while at != -1:
+                inside = all(at + len(spelling) <= begin or end <= at for begin, end in cut_out)
+                cut = at + window.origin
+                overlapped += not inside
+                if inside and 0 < cut:
+                    sides = theirs.encode_batch([text[:cut], text[cut:]], add_special_tokens=False)
+                    assert sides[0].ids + sides[1].ids == whole.ids, (text, spelling, cut)
+                    cuts += 1
+                at = text.find(spelling, at + 1)
+
+    assert cuts > 0
+    assert overlapped > 0
+
+
+def test_a_vocabulary_that_does_not_hold_every_byte_is_refused_since_hugging_face_drops_a_byte_it_does_not_hold(
+    tmp_path,
+):
+    trained = tokenizers.Tokenizer(tokenizers.models.BPE())
+    trained.pre_tokenizer = tokenizers.pre_tokenizers.ByteLevel(add_prefix_space=False, use_regex=False)
+    trained.train_from_iterator(["ab"], tokenizers.trainers.BpeTrainer(vocab_size=3, show_progress=False))
+    path = tmp_path / "trained.json"
+    trained.save(str(path))
+
+    # Hugging Face drops the x, which the vocabulary of a, b and ab does not hold, and merges the a and the b.
+    assert trained.get_vocab() == {"a": 0, "b": 1, "ab": 2}
+    assert trained.encode("axb").ids == [2]
+    assert trained.encode("a").ids + trained.encode("xb").ids == [0, 1]
+    with pytest.raises(ValueError) as refusal:
+        matisse_tokenizer.validate_merges(path, [b"x", b"xb"])
+    assert str(refusal.value) == 'validate_merges: the byte "\\x00" is not a token of the definition'
 
 
 def test_gpt2_s_table_certifies_twitter_json_s_frequent_windows_at_every_occurrence_hugging_face_encodes(

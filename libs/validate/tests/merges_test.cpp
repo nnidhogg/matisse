@@ -497,7 +497,7 @@ TEST(Merges_test, A_table_that_recreates_a_token_is_refused_as_munch_s_token_aut
             std::invalid_argument);
 }
 
-TEST(Merges_test, A_rank_rule_a_whole_piece_lookup_and_an_empty_candidate_are_refused)
+TEST(Merges_test, A_rank_rule_a_whole_piece_lookup_a_missing_byte_and_an_empty_candidate_are_refused)
 {
     const std::vector<std::string> candidates{"ab", ""};
 
@@ -529,6 +529,12 @@ TEST(Merges_test, A_rank_rule_a_whole_piece_lookup_and_an_empty_candidate_are_re
             refusal(lookup, {"ab"}),
             "validate_merges: the definition looks a whole piece up, which with no pre-tokenizer takes a whole text "
             "that is a token as that token");
+    // The automaton reads every byte as a token, and Hugging Face's BPE model drops a byte its vocabulary lacks.
+    auto partial{definition_of(written_tables[1])};
+
+    std::erase(partial.spellings, "x");
+
+    EXPECT_EQ(refusal(partial, {"ab"}), R"(validate_merges: the byte "x" is not a token of the definition)");
     EXPECT_EQ(refusal(definition_of(written_tables[1]), candidates), "validate_merges: candidate 1 is empty");
     EXPECT_TRUE(validate_merges(definition_of(written_tables[1]), {}).empty());
 }
