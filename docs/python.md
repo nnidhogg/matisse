@@ -556,8 +556,9 @@ tests that read them skip without them.
   spellings and random code points of every plane, adversarial texts with runs of up to 100,000 spaces, letters, digits
   and CJK, newlines before runs of tabs, pieces either side of the merge's 128-byte threshold and special tokens'
   spellings against letters and each other, every special token allowed alone and as text, and the ten corpora of
-  [benchmarks.md](benchmarks.md) below a gigabyte, each held to the vendors' digests of `vendors_reference.txt` and to
-  tiktoken's ids, through every encoding call, both batch calls and `encode_parallel()`.
+  [benchmarks.md](benchmarks.md) other than enwik8 and the three of a gigabyte or more, each held to the vendors'
+  digests of `vendors_reference.txt` and to tiktoken's ids, through every encoding call, both batch calls and
+  `encode_parallel()`.
 - **test_unicode.py** holds the Unicode version: matisse-tokenizer's ids are tiktoken's at every Unicode scalar value
   followed by `'s`, and at every code point of planes 0 to 3 and 14 in three more contexts; the class tables are of
   Unicode 16.0.0; and tiktoken reads every code point the tables leave out as the other class, by matisse's own

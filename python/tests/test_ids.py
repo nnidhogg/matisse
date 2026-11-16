@@ -207,7 +207,8 @@ CORPORA = [
     "wiki-sv.txt",
     "prompts.txt",
 ]
-"""The corpora of matisse's docs/benchmarks.md the tests encode, all but the files of a gigabyte or more."""
+"""The corpora of matisse's docs/benchmarks.md the tests encode, all but enwik8 and the three files of a gigabyte or
+more."""
 
 
 @pytest.mark.parametrize("corpus", CORPORA)
