@@ -592,20 +592,27 @@ tests that read them skip without them.
 - **test_tokenizer_json.py** holds `load_tokenizer_json()` to Hugging Face tokenizers on each pinned tokenizer.json,
   GPT-2's, Xenova's conversions of cl100k and o200k and Llama 3's: the known answers, 1,000 seeded random texts, the
   adversarial texts, special tokens allowed and as text, and the three corpora of the test strategy, there held to the
-  vendors' digests as well; and the encoding's name, special tokens, report and pickling, a file of the bytes alone, and
-  the refusals, each the loader's message.
+  vendors' digests as well; on 48 seeded small models that Hugging Face tokenizers builds and saves, with the
+  whole-piece lookup on and off and up to four special added tokens, each normalized or not, on 200 seeded texts each,
+  special tokens cut out and as text; on an added token under every combination of its five flags, cut out as Hugging
+  Face cuts it or refused naming the flag; and the encoding's name, special tokens, report and pickling, a file of the
+  bytes alone, and the refusals, each the loader's message, a template that repeats a text and a looked-up entry of a
+  special token among them.
 - **test_merges.py** holds `validate_merges()` to Hugging Face tokenizers: on six written tables over three letters at
   every window of up to three bytes, each verdict to the covering tokens Hugging Face gives every string up to the
   length past which no refutation is needed and each refutation to Hugging Face's tokens of it, and on GPT-2's pinned
   tokenizer.json with its pre-tokenizer a ByteLevel without its regex at the candidates drawn from twitter.json as
   `matisse-validate` draws them, every certified window's cut at every occurrence in Hugging Face's encoding of the
-  whole corpus and every refutation that is UTF-8 to Hugging Face's tokens of it; and its refusals and what a window
-  decided carries.
+  whole corpus and every refutation that is UTF-8 to Hugging Face's tokens of it; on the six tables with special tokens
+  spelled over the letters, one of them normalized, the cut of every certified window at every occurrence inside a
+  stretch between the special tokens Hugging Face cuts out, both sides encoded apart to the whole text's ids; and its
+  refusals, a model Hugging Face trains whose vocabulary does not hold every byte among them, and what a window decided
+  carries.
 - **test_load.py** holds the fetch and the cache against a server on the loopback interface: tiktoken's cache keys and
   directories, the digest, a cached file that is not the pinned one, also where it cannot be replaced, the cache turned
   off, and the request's headers.
 - **test_reports.py** holds each shipped report to the report `validate()` decides at the registry's width, and its
   refusal under a pattern of other class symbols.
 
-With every input given, the suite is 243 tests, all passing, in about nine minutes on the machine above, most of them
-the Unicode tests; with no vocabulary, 27 pass and 216 skip.
+With every input given, the suite is 285 tests, all passing, in about eleven minutes on the machine above, most of them
+the Unicode tests; with no vocabulary, 69 pass and 216 skip.
