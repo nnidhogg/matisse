@@ -204,8 +204,9 @@ are the places where matisse-tokenizer does something else:
   `encode_single_token()` takes a string or `bytes` alone. The constructor refuses a special token's id that is negative
   or does not fit 32 bits with `OverflowError` and a spelling holding a lone surrogate with `UnicodeEncodeError`.
   `num_threads` takes what tiktoken's thread pool takes, `None`, a fraction and infinity among them, except a NaN, which
-  tiktoken's pool waits on forever and which is refused here with `ValueError`. Every array returned is read-only, as
-  tiktoken's are.
+  tiktoken's pool waits on forever and which the encoding calls refuse here with `ValueError`, while `decode_batch()`
+  and `decode_bytes_batch()` hand it to Python's pool and wait on it as tiktoken's do. Every array returned is
+  read-only, as tiktoken's are.
 - **The load module.** `matisse_tokenizer.load` gives tiktoken's `load_tiktoken_bpe()`, `read_file_cached()` and
   `read_file()` with tiktoken's behavior, so that Meta's tokenizer.py reads Llama 3's ranks with it, but reads only
   local files and http and https URLs, refusing with `ValueError` the other schemes tiktoken reads through blobfile. A
