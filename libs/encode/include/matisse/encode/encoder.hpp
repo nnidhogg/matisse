@@ -99,9 +99,9 @@ public:
      * the others leave, as Hugging Face cuts its added tokens; each stretch between them is segmented by the pattern as
      * a complete input. A piece that is a token is that one token where the definition's whole-piece lookup says so,
      * and every other piece is merged alone by the definition's merge rule. On the vendors' rank files and GPT-2's
-     * files, whose special tokens are unmarked, that is tiktoken's encode() with these special tokens allowed and none
-     * disallowed, where no allowed spelling begins another, as on the pinned vendor definitions, and encoder.py's
-     * encode() when none is allowed.
+     * encoder.json and vocab.bpe, whose special tokens are unmarked, that is tiktoken's encode() with these special
+     * tokens allowed and none disallowed, where no allowed spelling begins another, as on the pinned vendor
+     * definitions, and encoder.py's encode() when none is allowed.
      * @param text The text, well-formed UTF-8.
      * @return The ids.
      * @throws std::invalid_argument If the text is not well-formed UTF-8, as the Segmenter refuses it, the byte offset

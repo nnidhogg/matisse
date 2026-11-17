@@ -76,12 +76,12 @@ description to them, and the vendors' own ids on the corpora confirm the result.
 
 The special tokens a caller allows are cut out of the text and emit their ids, and every special token that is not
 allowed is ordinary text. An allowed spelling is cut at its earliest occurrence first, and the longest among those that
-begin at one byte wins. On the vendors' rank files and GPT-2's files, whose special tokens are unmarked, that is
-tiktoken's `encode()` with that `allowed_special` and an empty `disallowed_special`, where no allowed spelling begins
-another, as on the pinned vendor definitions, and encoder.py's behavior when none is allowed. The special tokens a
-tokenizer.json marks `normalized` are cut out of the stretches the others leave, as Hugging Face cuts its added tokens
-in two passes, so that an occurrence of an unmarked spelling that is cut out takes the bytes of a marked one it
-overlaps. There is no form that refuses a text for holding a special token.
+begin at one byte wins. On the vendors' rank files and GPT-2's encoder.json and vocab.bpe, whose special tokens are
+unmarked, that is tiktoken's `encode()` with that `allowed_special` and an empty `disallowed_special`, where no allowed
+spelling begins another, as on the pinned vendor definitions, and encoder.py's behavior when none is allowed. The
+special tokens a tokenizer.json marks `normalized` are cut out of the stretches the others leave, as Hugging Face cuts
+its added tokens in two passes, so that an occurrence of an unmarked spelling that is cut out takes the bytes of a
+marked one it overlaps. There is no form that refuses a text for holding a special token.
 
 The encoder's constructor refuses an allowed spelling that is not one of the definition's special tokens, one that is
 empty, since an empty spelling would occur at every byte, and one whose id is an ordinary token's, which `decode()`

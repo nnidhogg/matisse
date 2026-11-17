@@ -500,7 +500,7 @@ cut into the stretches the whole text is cut into and its ids are the whole text
 occurrence that an added token cut out of the text overlaps, where no stretch holds the window. That is the rule the
 `Encoder` cuts by under a pattern, at an anchor inside one stretch between allowed special tokens. The certificate reads
 bytes, so a certified cut can fall inside a UTF-8 sequence, and since Hugging Face's calls take strings, a caller that
-encodes the two sides apart with Hugging Face cuts only where the cut is also between code points.
+encodes the two sides apart with Hugging Face can cut only where the cut also falls between code points.
 
 The encoder decided is canonical byte-pair encoding, the merge of least rank applied at its leftmost occurrence until
 none applies, which is the pair rule. A definition under the rank rule carries no merge table and is refused, and so is
@@ -747,11 +747,12 @@ first and the longest of those that begin at one byte, which emits its id, the t
 `normalized` split out of the stretches the others leave, as Hugging Face cuts them. Each stretch between them is
 segmented by the `Segmenter` as a complete input, and every piece is then looked up whole where the definition's
 whole-piece lookup says so and otherwise merged alone by its merge rule. Special tokens not allowed are ordinary text.
-On the vendors' rank files and GPT-2's files, whose special tokens are unmarked, that is tiktoken's `encode()` with that
-`allowed_special` and an empty `disallowed_special`, and encoder.py's behavior when none is allowed. tiktoken leaves the
-choice between allowed spellings that begin at one byte to the order of its table, and no allowed spelling begins
-another on the pinned vendor definitions. `decode()` spells each ordinary id's bytes and each special id's spelling as
-raw bytes, not checked to be UTF-8, since a run of ids cut inside a code point spells bytes that are not.
+On the vendors' rank files and GPT-2's encoder.json and vocab.bpe, whose special tokens are unmarked, the encoding is
+tiktoken's `encode()` with that `allowed_special` and an empty `disallowed_special`, and encoder.py's behavior when none
+is allowed. tiktoken leaves the choice between allowed spellings that begin at one byte to the order of its table, and
+no allowed spelling begins another on the pinned vendor definitions. `decode()` spells each ordinary id's bytes and each
+special id's spelling as raw bytes, not checked to be UTF-8, since a run of ids cut inside a code point spells bytes
+that are not.
 
 `chunk_boundaries()` aims for `chunks` pieces of equal size, as `core::Lexer`'s does. Each interior boundary is the
 first cut at or after the later of its equal-division target and one past the previous boundary, and a target with no
