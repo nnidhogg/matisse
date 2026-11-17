@@ -243,8 +243,10 @@ again, and a new `Stream_encoder` over the same encoder reads the next text.
 
 What a push returns is the longest prefix that is final, but for three exceptions:
 
-- While the bytes read end in a proper prefix of an allowed special token's spelling, those bytes are held, fewer than
-  the longest allowed spelling, and a push returns the longest prefix final for the bytes before them.
+- While the bytes read end in a proper prefix of an allowed special token's spelling that no special token cut out
+  covers, those bytes are held, and so is an occurrence of a token marked `normalized` inside which such a prefix of an
+  unmarked spelling begins, since that spelling, completed, is cut out first, and a push returns the longest prefix
+  final for the bytes before them.
 - While they end inside a UTF-8 sequence, its bytes are held until the sequence completes, and a push returns the
   longest prefix final for the code points before it, even where an id of those bytes is final under every completion,
   as GPT-2's byte token for `\xF4` is, since no token of two or more bytes begins with it.
@@ -256,12 +258,13 @@ and the tests' own pattern, and against brute force over the continuations on th
 
 How far a stream's ids lag after a push, the bytes it has read and not yet spelled by the ids it has returned, its
 delay, comes from four things. The first is a UTF-8 sequence the push ended inside, at most three bytes. The second is a
-proper prefix of an allowed spelling. The third is the code points after the last one every live run of the pattern's
-verifier agrees on. On GPT-2's pattern the runs agree on every pre-token boundary but the last two code points', by the
-bounded backoff of the report on pre-tokenizer certification. On cl100k's no bound exists, since a newline followed by
-tabs is one piece when the text ends there and a newline and pieces of tabs when a letter follows, so the boundary after
-the newline stays open until something other than white space or the end arrives. Where the two segmentations' ids part,
-no streamer can return them earlier, as Dalirrooyfard and Ye show for o200k's pattern as well. On cl100k's pattern a
+proper prefix of an allowed spelling, with an occurrence of a token marked `normalized` inside which such a prefix of an
+unmarked spelling begins. The third is the code points after the last one every live run of the pattern's verifier
+agrees on. On GPT-2's pattern the runs agree on every pre-token boundary but the last two code points', by the bounded
+backoff of the report on pre-tokenizer certification. On cl100k's no bound exists, since a newline followed by tabs is
+one piece when the text ends there and a newline and pieces of tabs when a letter follows, so the boundary after the
+newline stays open until something other than white space or the end arrives. Where the two segmentations' ids part, no
+streamer can return them earlier, as Dalirrooyfard and Ye show for o200k's pattern as well. On cl100k's pattern a
 vocabulary whose merge joins the newline to the first white-space byte parts the two runs' ids at a fixed id, `\n\t`
 against `\n`, after which the bytes not yet returned and the cost of each push grow without bound for as long as the
 white space lasts. cl100k's own ranks are not such a vocabulary, and under them a newline followed by tabs or by spaces

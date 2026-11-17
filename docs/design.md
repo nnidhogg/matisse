@@ -789,10 +789,11 @@ whatever the rest of the text turns out to be, and after `finish()` they are `en
 the longest such prefix, the greatest stable prefix of Dalirrooyfard and Ye's online tokenization, with three
 exceptions.
 
-- While the bytes read end in a proper prefix of an allowed spelling, those bytes are held, fewer than the longest
-  allowed spelling, and not classed, as their online special-token segmentation holds them. A push then returns the
-  longest prefix final for the bytes before them, and the ids can lag by more than the held bytes: a word before a held
-  `<` stays an open piece when `<|endoftext|>` is allowed.
+- While the bytes read end in a proper prefix of an allowed spelling that no special token cut out covers, those bytes
+  are held and not classed, as their online special-token segmentation holds them, and so is an occurrence of a token
+  marked `normalized` inside which such a prefix of an unmarked spelling begins, since that spelling, completed, is cut
+  out first. A push then returns the longest prefix final for the bytes before them, and the ids can lag by more than
+  the held bytes: a word before a held `<` stays an open piece when `<|endoftext|>` is allowed.
 - While the bytes read end inside a UTF-8 sequence, its bytes are held and not classed until the sequence completes. A
   push then returns the longest prefix final for the code points before it, even where an id of those bytes is final
   under every completion, as GPT-2's byte token for `\xF4` is, since no token of two or more bytes begins with it.
