@@ -239,7 +239,7 @@ its constructor, both `encode()`, `chunk_boundaries()`, `encode_parallel()`, `de
 with its constructor, `push()` and `finish()`; each tokenizer library's `pattern()`, `spelling()` and `specials()`;
 lookup's `Tokenizer`, `tokenizers()` and `tokenizer()`; and the `matisse-validate` command line with its JSON document,
 as munch puts `munch-audit` on its surface. The class tables are pinned to Unicode 16.0.0, as
-[docs/limits.md](docs/limits.md) describes, and moving the pin changes the ids of some texts, those holding a code point
+[docs/limits.md](docs/limits.md) describes, and moving the pin can change the ids of a text that holds a code point
 whose class differs between the two versions, so the pin moves only in a major release.
 
 The classes the encoders are built from, `Merger`, `Backtracker`, `Join_table`, `Spelling_table`, `Token_trie`,

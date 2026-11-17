@@ -54,7 +54,8 @@ A `load::Definition` holds a tokenizer in raw bytes, and its ids are `load::Toke
 - `whole_piece_lookup`, whether a piece that is itself a token is looked up before any merge;
 - `spellings`, the bytes of the ordinary tokens by id, dense from zero;
 - `merges`, the merge table in rank order under the pair rule, empty under the rank rule;
-- `specials`, each a `Special_token` of a spelling and an id.
+- `specials`, each a `Special_token` of a spelling, an id and the `normalized` a tokenizer.json gives it, false for the
+  others.
 
 `read_tiktoken(path, specials)` reads a tiktoken rank file, one base64 token and its rank per line, with the special
 tokens the caller gives, by id ascending. Its definition has the rank rule and the whole-piece lookup, as tiktoken has.
@@ -104,7 +105,7 @@ if (!tokenizer)
 auto definition{matisse::load::read_tiktoken("o200k_base.tiktoken", tokenizer->specials)};
 ```
 
-`lookup::tokenizer(name)` returns a `lookup::Tokenizer`, its `name`, `pattern`, `spelling` and `specials`, or
+`lookup::tokenizer(name)` returns a `lookup::Tokenizer`, its `name`, `pattern`, `specials` and `spelling`, or
 `std::nullopt` for a name it does not know, and `lookup::tokenizers()` lists all four.
 
 ## **Validating a pattern**
