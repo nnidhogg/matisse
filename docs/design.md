@@ -228,8 +228,8 @@ matisse classes every code point as tiktoken does, and the version of Python 3.1
 reference the fixtures are written by reads, so that the fixtures replay. The classes, and therefore the verifiers, the
 certified windows and the right context, do not depend on the version. Only the map from code points to classes does,
 and with it the ids of a text holding a code point whose class moved between versions. Hugging Face's engine carries a
-version of its own, and the vendor cross-check below shows no difference on any corpus. Moving the pin changes the ids
-of some texts, so it is a major release, as the README's Versioning and Stability section says, with the fixtures
+version of its own, and the vendor cross-check below shows no difference on any corpus. Moving the pin can change the
+ids of some texts, so it is a major release, as the README's Versioning and Stability section says, with the fixtures
 regenerated under the new version.
 
 tools/unicode/check_tiktoken.py holds the pin to tiktoken, run with the newest tiktoken and the pinned rank files. Its
@@ -498,7 +498,9 @@ window certifies its cut at every occurrence that lies inside one stretch: the s
 window, so the cut is a boundary of its encoding, and no added token cut out of the text spans the cut, so each side is
 cut into the stretches the whole text is cut into and its ids are the whole text's. It certifies nothing at an
 occurrence that an added token cut out of the text overlaps, where no stretch holds the window. That is the rule the
-`Encoder` cuts by under a pattern, at an anchor inside one stretch between allowed special tokens.
+`Encoder` cuts by under a pattern, at an anchor inside one stretch between allowed special tokens. The certificate reads
+bytes, so a certified cut can fall inside a UTF-8 sequence, and since Hugging Face's calls take strings, a caller that
+encodes the two sides apart with Hugging Face cuts only where the cut is also between code points.
 
 The encoder decided is canonical byte-pair encoding, the merge of least rank applied at its leftmost occurrence until
 none applies, which is the pair rule. A definition under the rank rule carries no merge table and is refused, and so is

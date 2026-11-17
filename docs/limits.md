@@ -300,8 +300,8 @@ scalar value, in the five contexts tools/unicode/check_tiktoken.py writes it in,
 all four tokenizers. A code point assigned a letter or a number after 16.0.0 is in none of the tables' sets, so matisse
 puts it in the other class where an engine with tables of a later version reads it as a letter or a number, and the two
 can segment it differently. Hugging Face tokenizers' and the bpe crate's engines carry tables of their own, and on the
-fourteen corpora no id differs. Moving the pin changes the ids of some texts, so it happens only in a major release, as
-the README's Versioning and Stability section says.
+fourteen corpora no id differs. Moving the pin can change the ids of some texts, so it happens only in a major release,
+as the README's Versioning and Stability section says.
 
 The model is defined on code points. A code point's class is the class of the first set of the pattern's alphabet that
 holds it, the sets GPT-2's, cl100k's and Llama 3's patterns name being L, N, White_Space and the literals' own, and
