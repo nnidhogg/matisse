@@ -193,16 +193,19 @@ are the places where matisse-tokenizer does something else:
 - **Argument types.** The arguments are read as tiktoken 0.14.0 reads them, in its order, with its exceptions.
   `allowed_special` is `"all"` or a `set` or `frozenset` of strings, and anything else, a string or a list among them,
   is refused with `TypeError`, and a set holding a string with a lone surrogate, a special token's or not, with
-  `UnicodeEncodeError`. `allowed_special="all"` allows the special tokens the encoding was built with, where tiktoken's
-  allows `special_tokens_set` as a caller may have edited it. A text that is not a string is refused with `TypeError`,
-  before `allowed_special` is read, and so is a lone surrogate in a call that does not replace it. The ids given to
-  `decode()`, `decode_bytes()` and each run of the batch decoders are a sequence, and a set, a dict, an iterator or a
-  string is refused with `TypeError`, while `decode_tokens_bytes()` and `decode_with_offsets()` take any iterable of
-  ids, as tiktoken's do. `encode_single_token()` takes a string or `bytes` alone. The constructor refuses a special
-  token's id that is negative or does not fit 32 bits with `OverflowError` and a spelling holding a lone surrogate with
-  `UnicodeEncodeError`. `num_threads` takes what tiktoken's thread pool takes, `None`, a fraction and infinity among
-  them, except a NaN, which tiktoken's pool waits on forever and which is refused here with `ValueError`. Every array
-  returned is read-only, as tiktoken's are.
+  `UnicodeEncodeError`. The encoding holds the ranks and special tokens it was built with, each special token's id as a
+  Python integer: `allowed_special="all"`, `_mergeable_ranks`, `_special_tokens`, `eot_token`, `max_token_value` and
+  pickling read those, where tiktoken's read the dictionaries the caller passed, with their values' own integer types
+  and any edit the caller makes after, and its `allowed_special="all"` reads `special_tokens_set` as a caller may have
+  edited it. A text that is not a string is refused with `TypeError`, before `allowed_special` is read, and so is a lone
+  surrogate in a call that does not replace it. The ids given to `decode()`, `decode_bytes()` and each run of the batch
+  decoders are a sequence, and a set, a dict, an iterator or a string is refused with `TypeError`, while
+  `decode_tokens_bytes()` and `decode_with_offsets()` take any iterable of ids, as tiktoken's do.
+  `encode_single_token()` takes a string or `bytes` alone. The constructor refuses a special token's id that is negative
+  or does not fit 32 bits with `OverflowError` and a spelling holding a lone surrogate with `UnicodeEncodeError`.
+  `num_threads` takes what tiktoken's thread pool takes, `None`, a fraction and infinity among them, except a NaN, which
+  tiktoken's pool waits on forever and which is refused here with `ValueError`. Every array returned is read-only, as
+  tiktoken's are.
 - **The load module.** `matisse_tokenizer.load` gives tiktoken's `load_tiktoken_bpe()`, `read_file_cached()` and
   `read_file()` with tiktoken's behavior, so that Meta's tokenizer.py reads Llama 3's ranks with it, but reads only
   local files and http and https URLs, refusing with `ValueError` the other schemes tiktoken reads through blobfile. A
@@ -265,14 +268,16 @@ Every encoding call releases the interpreter lock while matisse encodes, so Pyth
 keeps a piece cache of its own across its calls, which never changes an id, as [design.md](design.md) argues. A batch is
 encoded in C++ by a pool of `num_threads` threads, the calling thread one of them, that take the next text from a shared
 counter, each with a cache of its own, as matisse's bench encodes a batch; `encode_parallel()` starts a thread per chunk
-beyond the last, as matisse's `encode_parallel()` does. The text's UTF-8 is read from the Python string, which CPython
-computes once and keeps beside the string, and an ASCII string needs no conversion. The ids are returned as a list of
-Python integers, or as a NumPy array that owns matisse's buffer with no copy, except where the stretches of a text
-around allowed special tokens are joined, which `numpy.concatenate` copies, as it copies every array of a batch with
-special tokens allowed, a text holding none included. On many threads the arrays are the calls to choose: a list holds
-one Python integer per id, made on the calling thread once the encoding is done, so a batch of lists scales with its
-threads only as far as that one thread can build them, while an array, which owns matisse's buffer, scales with the
-encoding itself, as the batch tables under Performance show.
+beyond the last, as matisse's `encode_parallel()` does. A batch holding a lone surrogate, which the call replaces, is
+encoded text by text on the calling thread, each text as `encode()` encodes it, so that a later text that is not a
+string is refused as tiktoken's pool refuses it. The text's UTF-8 is read from the Python string, which CPython computes
+once and keeps beside the string, and an ASCII string needs no conversion. The ids are returned as a list of Python
+integers, or as a NumPy array that owns matisse's buffer with no copy, except where the stretches of a text around
+allowed special tokens are joined, which `numpy.concatenate` copies, as it copies every array of a batch with special
+tokens allowed, a text holding none included. On many threads the arrays are the calls to choose: a list holds one
+Python integer per id, made on the calling thread once the encoding is done, so a batch of lists scales with its threads
+only as far as that one thread can build them, while an array, which owns matisse's buffer, scales with the encoding
+itself, as the batch tables under Performance show.
 
 ## **Performance**
 
@@ -593,12 +598,12 @@ tests that read them skip without them.
 - **test_tokenizer_json.py** holds `load_tokenizer_json()` to Hugging Face tokenizers on each pinned tokenizer.json,
   GPT-2's, Xenova's conversions of cl100k and o200k and Llama 3's: the known answers, 1,000 seeded random texts, the
   adversarial texts, special tokens allowed and as text, and the three corpora of the test strategy, there held to the
-  vendors' digests as well; on 48 seeded small models that Hugging Face tokenizers builds and saves, with the
-  whole-piece lookup on and off and up to four special added tokens, each normalized or not, on 200 seeded texts each,
-  special tokens cut out and as text; on an added token under every combination of its five flags, cut out as Hugging
-  Face cuts it or refused naming the flag; and the encoding's name, special tokens, report and pickling, a file of the
-  bytes alone, and the refusals, each the loader's message, a template that repeats a text and a looked-up entry of a
-  special token among them.
+  vendors' digests as well; on the models among 48 seeded small ones Hugging Face tokenizers builds and saves that the
+  reader takes, at least half, with the whole-piece lookup on and off and up to four special added tokens, each
+  normalized or not, on 200 seeded texts each, special tokens cut out and as text; on an added token under every
+  combination of its five flags, cut out as Hugging Face cuts it or refused naming the flag; and the encoding's name,
+  special tokens, report and pickling, a file of the bytes alone, and the refusals, each the loader's message, a
+  template that repeats a text and a looked-up entry of a special token among them.
 - **test_merges.py** holds `validate_merges()` to Hugging Face tokenizers: on six written tables over three letters at
   every window of up to three bytes, each verdict to the covering tokens Hugging Face gives every string up to the
   length past which no refutation is needed and each refutation to Hugging Face's tokens of it, and on GPT-2's pinned
@@ -615,5 +620,5 @@ tests that read them skip without them.
 - **test_reports.py** holds each shipped report to the report `validate()` decides at the registry's width, and its
   refusal under a pattern of other class symbols.
 
-With every input given, the suite is 285 tests, all passing, in about eleven minutes on the machine above, most of them
-the Unicode tests; with no vocabulary, 69 pass and 216 skip.
+With every input given, the suite is 284 tests, all passing, in about eleven minutes on the machine above, most of them
+the Unicode tests; with no vocabulary, 69 pass and 215 skip.
