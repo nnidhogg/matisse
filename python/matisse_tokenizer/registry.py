@@ -3,11 +3,12 @@ load_tokenizer_json() and list_encoding_names() over them.
 
 Each encoding is a tiktoken rank file read under one of the patterns matisse describes, gpt2, cl100k, o200k and llama3,
 with the vendor's special tokens, and o200k_harmony is o200k_base's rank file and pattern with tiktoken's special tokens
-of it. GPT-2's rank file is r50k_base.tiktoken, which tiktoken builds its gpt2 encoding from as well: the same ranks,
-pattern and special token, which the package also serves as r50k_base, as tiktoken does. The rank files of GPT-2,
-cl100k_base and o200k_base are fetched from the URLs tiktoken reads them from and held to the SHA-256 tiktoken pins;
-Llama 3's is distributed by Meta under its own license and is read from a file the caller names, with load_encoding().
-A Hugging Face tokenizer.json is read under the pattern its pre-tokenizer runs, with load_tokenizer_json().
+of it. GPT-2's rank file is r50k_base.tiktoken, which holds the ranks tiktoken builds its gpt2 encoding with from
+GPT-2's encoder.json and vocab.bpe, under the same pattern and special token, and which the package also serves as
+r50k_base, as tiktoken does. The rank files of GPT-2, cl100k_base and o200k_base are fetched from the URLs tiktoken
+reads them from and held to the SHA-256 tiktoken pins; Llama 3's is distributed by Meta under its own license and is
+read from a file the caller names, with load_encoding(). A Hugging Face tokenizer.json is read under the pattern its
+pre-tokenizer runs, with load_tokenizer_json().
 """
 
 from __future__ import annotations
@@ -237,7 +238,7 @@ def load_encoding(encoding_name: str, path: str) -> core.Encoding:
     matisse has not seen, and its pattern's report is decided when it is read, which takes a second or two.
 
     Args:
-        encoding_name: gpt2, cl100k_base, o200k_base or llama3.
+        encoding_name: gpt2, r50k_base, cl100k_base, o200k_base, o200k_harmony or llama3.
         path: The rank file's path.
 
     Returns:
@@ -245,7 +246,7 @@ def load_encoding(encoding_name: str, path: str) -> core.Encoding:
 
     Raises:
         ValueError: If matisse_tokenizer knows no encoding of the name, or the file is not a rank file matisse reads.
-        RuntimeError: If the file cannot be read.
+        OSError: If the file cannot be read, as reading its SHA-256 raises it, FileNotFoundError among them.
     """
     source = source_of(encoding_name)
 
