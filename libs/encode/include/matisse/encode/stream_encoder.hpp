@@ -20,29 +20,31 @@
  * turns out to be, and finish() returns the rest, so that the ids returned between two finish() calls, concatenated,
  * are encode() of the bytes pushed between them. What a push returns is the longest such prefix, the greatest stable
  * prefix of Dalirrooyfard and Ye's online tokenization, with three exceptions: while the bytes read end in a proper
- * prefix of an allowed special token's spelling that no special token cut out covers, those bytes are held and not
- * classed, and so is an occurrence of a token marked `normalized` inside which such a prefix of an unmarked spelling
- * begins, since that spelling, completed, is cut out first, and a push then returns the longest prefix final for the
- * bytes before them, and the ids can lag by more than the held bytes: with `<|endoftext|>` allowed, a word followed by
- * `<` stays an open piece whose ids are held until the bytes after it show whether the `<` begins the special token;
- * while they end inside a UTF-8 sequence, its bytes are held and not classed until a later push or finish() completes
- * it, so that a push returns the longest prefix final for the code points before it, even where an id of those bytes is
- * final under every completion, as a byte's own id is when no token of two or more bytes begins with it; and inside a
- * piece the continuations a stable id is held against are all byte strings, where the pattern allows fewer.
+ * prefix of an allowed special token's spelling that begins after the special tokens already cut out, those bytes are
+ * held and not classed, and so is an occurrence of a token marked `normalized` inside which such a prefix of an
+ * unmarked spelling begins, since that spelling, completed, is cut out first, and a push then returns the longest
+ * prefix final for the bytes before them, and the ids can lag by more than the held bytes: with `<|endoftext|>`
+ * allowed, a word followed by `<` stays an open piece whose ids are held until the bytes after it show whether the `<`
+ * begins the special token; while they end inside a UTF-8 sequence, its bytes are held and not classed until a later
+ * push or finish() completes it, so that a push returns the longest prefix final for the code points before it, even
+ * where an id of those bytes is final under every completion, as a byte's own id is when no token of two or more bytes
+ * begins with it; and inside a piece the continuations a stable id is held against are all byte strings, where the
+ * pattern allows fewer.
  *
  * The encoding has three layers, each exact at its level. A special token's occurrence is committed once no proper
- * prefix of an allowed spelling can still begin at or before it, and that of a token marked `normalized` once none of
- * an unmarked spelling can still begin inside it either, so the stretches between special tokens are encode()'s. In a
- * stretch the live runs of the pattern's split verifier M, Live_runs in live_runs.hpp, are the restrictions of every
- * continuation's segmentation, and a piece whose end every run keeps is closed and its ids returned. Inside each run's
- * open piece the ids returned are the ones every byte continuation of the piece keeps, which by projection need only
- * the continuations that a token can straddle the piece's end with, the rest of every token that begins with a suffix
- * of the piece: from the right, the first boundary of the open piece's merge that the merge of the piece followed by
- * each of them keeps is stable, and the ids before it are returned. A boundary across which no token can begin inside
- * the token before it is stable with no merge at all, which is tested first. The ids returned are the common prefix
- * over the runs of each run's closed pieces followed by its open piece's stable ids. The construction is the zero-delay
- * streamer of the report on the left ripple of byte-pair encoding, run on M for the pre-tokenizer and on the merge
- * inside each run's open piece, as docs/design.md describes it.
+ * prefix of an allowed spelling begins at or before it in the bytes read after the special tokens already cut out, and
+ * that of a token marked `normalized` once no such prefix of an unmarked spelling begins inside it either, so the
+ * stretches between special tokens are encode()'s. In a stretch the live runs of the pattern's split verifier M,
+ * Live_runs in live_runs.hpp, are the restrictions of every continuation's segmentation, and a piece whose end every
+ * run keeps is closed and its ids returned. Inside each run's open piece the ids returned are the ones every byte
+ * continuation of the piece keeps, which by projection need only the continuations that a token can straddle the
+ * piece's end with, the rest of every token that begins with a suffix of the piece: from the right, the first boundary
+ * of the open piece's merge that the merge of the piece followed by each of them keeps is stable, and the ids before it
+ * are returned. A boundary across which no token can begin inside the token before it is stable with no merge at all,
+ * which is tested first. The ids returned are the common prefix over the runs of each run's closed pieces followed by
+ * its open piece's stable ids. The construction is the zero-delay streamer of the report on the left ripple of
+ * byte-pair encoding, run on M for the pre-tokenizer and on the merge inside each run's open piece, as docs/design.md
+ * describes it.
  */
 namespace matisse::encode
 {
@@ -73,15 +75,15 @@ public:
      * @brief Reads the next bytes of the text and returns the ids that have become final: every id returned since the
      *        last finish() is a prefix of encode() of the whole text, whatever the rest of it, and what is returned is
      *        the longest such prefix but for three exceptions: while the bytes read end in a proper prefix of an
-     *        allowed special token's spelling that no special token cut out covers, it is the longest prefix final for
-     *        the bytes before that prefix, or before an occurrence of a token marked `normalized` inside which that
-     *        prefix begins, when it is an unmarked spelling's; while they end inside a UTF-8 sequence, it is the
-     *        longest prefix final for the code points before the sequence, though an id of its bytes may be final under
-     *        every completion; and inside a piece an id is held against every byte continuation of the piece, where the
-     *        pattern allows fewer.
+     *        allowed special token's spelling that begins after the special tokens already cut out, it is the longest
+     *        prefix final for the bytes before that prefix, or before an occurrence of a token marked `normalized`
+     *        inside which that prefix begins, when it is an unmarked spelling's; while they end inside a UTF-8
+     *        sequence, it is the longest prefix final for the code points before the sequence, though an id of its
+     *        bytes may be final under every completion; and inside a piece an id is held against every byte
+     *        continuation of the piece, where the pattern allows fewer.
      *
-     * A push may end inside a UTF-8 sequence or inside a special token's spelling; those bytes are held until a later
-     * push or finish() completes them.
+     * A push may end inside a UTF-8 sequence or inside a special token's spelling that begins after the special tokens
+     * already cut out; those bytes are held until a later push completes or breaks them, or finish() ends the text.
      * @param bytes The next bytes of the text, well-formed UTF-8 once the sequence a push ends inside is completed.
      * @return The ids newly final, in order.
      * @throws std::invalid_argument If the bytes read are not well-formed UTF-8, as classes_of() refuses them, the byte
@@ -108,8 +110,8 @@ public:
 private:
     /**
      * @brief Reads bytes as far as it can: every allowed special token's occurrence that no held spelling can still
-     *        begin before, nor an unmarked one inside it when the token is marked `normalized`, is cut out with its id,
-     *        and the code points before it, or before the bytes held, are fed to the live runs.
+     *        begin at or before, nor an unmarked one inside it when the token is marked `normalized`, is cut out with
+     *        its id, and the code points before it, or before the bytes held, are fed to the live runs.
      * @param text The bytes, the held ones first.
      * @param ended Whether the text ends after them, so that no spelling is held and no sequence can be completed.
      * @param ids The ids closed so far, appended to.

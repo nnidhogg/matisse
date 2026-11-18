@@ -244,9 +244,10 @@ A `Stream_encoder` borrows an encoder, which must outlive it and must not be mov
 the encoder's special tokens. `push(bytes)` reads the next bytes and returns the ids that have become final, and
 `finish()` ends the text and returns the rest, after which the stream reads a new text. The ids returned between two
 `finish()` calls, concatenated, are `encode()` of the bytes pushed between them. A push may end inside a UTF-8 sequence
-or inside a special token's spelling, and those bytes are held until a later push completes them. A stream serves one
-thread at a time, and any number of streams may read over one encoder at once. [limits.md](limits.md) gives how far a
-stream's ids lag and what it keeps.
+or inside a special token's spelling that begins after the special tokens already cut out, and those bytes are held
+until a later push completes or breaks them, or `finish()` ends the text. A stream serves one thread at a time, and any
+number of streams may read over one encoder at once. [limits.md](limits.md) gives how far a stream's ids lag and what it
+keeps.
 
 ## **Describing a pattern**
 

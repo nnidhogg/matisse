@@ -243,10 +243,10 @@ again, and a new `Stream_encoder` over the same encoder reads the next text.
 
 What a push returns is the longest prefix that is final, but for three exceptions:
 
-- While the bytes read end in a proper prefix of an allowed special token's spelling that no special token cut out
-  covers, those bytes are held, and so is an occurrence of a token marked `normalized` inside which such a prefix of an
-  unmarked spelling begins, since that spelling, completed, is cut out first, and a push returns the longest prefix
-  final for the bytes before them.
+- While the bytes read end in a proper prefix of an allowed special token's spelling that begins after the special
+  tokens already cut out, those bytes are held, and so is an occurrence of a token marked `normalized` inside which such
+  a prefix of an unmarked spelling begins, since that spelling, completed, is cut out first, and a push returns the
+  longest prefix final for the bytes before them.
 - While they end inside a UTF-8 sequence, its bytes are held until the sequence completes, and a push returns the
   longest prefix final for the code points before it, even where an id of those bytes is final under every completion,
   as GPT-2's byte token for `\xF4` is, since no token of two or more bytes begins with it.

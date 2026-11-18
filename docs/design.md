@@ -784,19 +784,20 @@ the corpus probe asks for at most 32,768 chunks.
 outlive it and not be moved while the stream reads it, so the constructor taking a temporary encoder is deleted, and it
 allows the encoder's special tokens. `push()` takes the next bytes and returns the ids that have become final, and
 `finish()` ends the text and returns the rest, after which the stream reads a new text. A push may end inside a UTF-8
-sequence or inside a special token's spelling, and those bytes are held until a later push completes them. A sequence
-that cannot be completed is refused as `classes_of()` refuses it.
+sequence or inside a special token's spelling that begins after the special tokens already cut out, and those bytes are
+held until a later push completes or breaks them, or `finish()` ends the text. A sequence that cannot be completed is
+refused as `classes_of()` refuses it.
 
 The stream claims one thing. After every push the ids it has returned are a prefix of `encode()` of the whole text,
 whatever the rest of the text turns out to be, and after `finish()` they are `encode()` of it. What a push returns is
 the longest such prefix, the greatest stable prefix of Dalirrooyfard and Ye's online tokenization, with three
 exceptions.
 
-- While the bytes read end in a proper prefix of an allowed spelling that no special token cut out covers, those bytes
-  are held and not classed, as their online special-token segmentation holds them, and so is an occurrence of a token
-  marked `normalized` inside which such a prefix of an unmarked spelling begins, since that spelling, completed, is cut
-  out first. A push then returns the longest prefix final for the bytes before them, and the ids can lag by more than
-  the held bytes: a word before a held `<` stays an open piece when `<|endoftext|>` is allowed.
+- While the bytes read end in a proper prefix of an allowed spelling that begins after the special tokens already cut
+  out, those bytes are held and not classed, as their online special-token segmentation holds them, and so is an
+  occurrence of a token marked `normalized` inside which such a prefix of an unmarked spelling begins, since that
+  spelling, completed, is cut out first. A push then returns the longest prefix final for the bytes before them, and the
+  ids can lag by more than the held bytes: a word before a held `<` stays an open piece when `<|endoftext|>` is allowed.
 - While the bytes read end inside a UTF-8 sequence, its bytes are held and not classed until the sequence completes. A
   push then returns the longest prefix final for the code points before it, even where an id of those bytes is final
   under every completion, as GPT-2's byte token for `\xF4` is, since no token of two or more bytes begins with it.
@@ -821,10 +822,11 @@ GCC 13 returns an optional through a byte and a word stored apart and read back 
 The stream has three layers, each exact at its level.
 
 The first cuts the special tokens. An occurrence of an allowed spelling, the earliest and the longest at its byte as
-`encode()` finds it, is committed once no proper prefix of an allowed spelling begins at or before it in the bytes read,
-and that of a token marked `normalized` once no proper prefix of an unmarked spelling begins inside it either, since an
-unmarked token is cut out first. The stretches between special tokens are then `encode()`'s on every completion of the
-text, and only the whole code points before the earliest such prefix reach the second layer.
+`encode()` finds it, is committed once no proper prefix of an allowed spelling begins at or before it in the bytes read
+after the special tokens already cut out, and that of a token marked `normalized` once no such prefix of an unmarked
+spelling begins inside it either, since an unmarked token is cut out first. The stretches between special tokens are
+then `encode()`'s on every completion of the text, and only the whole code points before the earliest such prefix reach
+the second layer.
 
 The second keeps the live runs of M over the stretch, a `Live_runs`. A run is a path of M over a marking of the code
 points read, and since every state of M is reachable and reaches acceptance, the runs are exactly the restrictions of
