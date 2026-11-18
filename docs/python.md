@@ -223,9 +223,10 @@ are the places where matisse-tokenizer does something else:
   do not exist.
 - **Messages.** The types of the exceptions are tiktoken's: `ValueError` for a disallowed special token, with tiktoken's
   message, `KeyError` for an id or a token the vocabulary does not hold, `OverflowError` for an id that is negative or
-  does not fit 32 bits, `UnicodeEncodeError` where `encode_to_numpy()` meets a lone surrogate, which tiktoken's does not
-  repair either, while `encode()` and the other calls replace it with U+FFFD first as tiktoken does. The other messages
-  are matisse's own.
+  does not fit 32 bits, `UnicodeEncodeError` where a call returning NumPy arrays, a stream's `push()` or
+  `encode_single_token()` meets a lone surrogate, which tiktoken's `encode_to_numpy()` and `encode_single_token()` do
+  not repair either, while the `Encoding`'s calls returning lists replace it with U+FFFD first as tiktoken does. The
+  other messages are matisse's own.
 
 ## **Vocabulary files and the cache**
 
@@ -269,16 +270,16 @@ Every encoding call releases the interpreter lock while matisse encodes, so Pyth
 keeps a piece cache of its own across its calls, which never changes an id, as [design.md](design.md) argues. A batch is
 encoded in C++ by a pool of `num_threads` threads, the calling thread one of them, that take the next text from a shared
 counter, each with a cache of its own, as matisse's bench encodes a batch; `encode_parallel()` starts a thread per chunk
-beyond the last, as matisse's `encode_parallel()` does. A batch holding a lone surrogate, which the call replaces, is
-encoded text by text on the calling thread, each text as `encode()` encodes it, so that a later text that is not a
-string is refused as tiktoken's pool refuses it. The text's UTF-8 is read from the Python string, which CPython computes
-once and keeps beside the string, and an ASCII string needs no conversion. The ids are returned as a list of Python
-integers, or as a NumPy array that owns matisse's buffer with no copy, except where the stretches of a text around
-allowed special tokens are joined, which `numpy.concatenate` copies, as it copies every array of a batch with special
-tokens allowed, a text holding none included. On many threads the arrays are the calls to choose: a list holds one
-Python integer per id, made on the calling thread once the encoding is done, so a batch of lists scales with its threads
-only as far as that one thread can build them, while an array, which owns matisse's buffer, scales with the encoding
-itself, as the batch tables under Performance show.
+beyond the last, as matisse's `encode_parallel()` does. Where a call returning lists is given a batch holding a lone
+surrogate, which it replaces, the batch is encoded text by text on the calling thread, each text as `encode()` encodes
+it, so that a later text that is not a string is refused as tiktoken's pool refuses it. The text's UTF-8 is read from
+the Python string, which CPython computes once and keeps beside the string, and an ASCII string needs no conversion. The
+ids are returned as a list of Python integers, or as a NumPy array that owns matisse's buffer with no copy, except where
+the stretches of a text around allowed special tokens are joined, which `numpy.concatenate` copies, as it copies every
+array of a batch with special tokens allowed, a text holding none included. On many threads the arrays are the calls to
+choose: a list holds one Python integer per id, made on the calling thread once the encoding is done, so a batch of
+lists scales with its threads only as far as that one thread can build them, while an array, which owns matisse's
+buffer, scales with the encoding itself, as the batch tables under Performance show.
 
 ## **Performance**
 
