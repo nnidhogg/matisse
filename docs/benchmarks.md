@@ -164,9 +164,9 @@ matisse that gave it, which each tokenizer's tests hold matisse's ids to on ever
 `-DMATISSE_CORPUS_DIR` holds. Hugging Face could not encode enwik9 whole, its process killed with 46 GiB resident while
 it built the `Encoding`, and was not run on the mixed file, twice that size; its ids of enwik9's pages, concatenated,
 have enwik9's digest, so every page begins at a piece boundary of every pattern, and the batch covers enwik9. Under
-o200k and Llama 3 matisse's ids equal every other encoder's on every corpus as well. Each engine carries Unicode tables
-of its own, and matisse's ids are the same under the tables of Unicode 15.0.0 the commits measured carry and under those
-of 16.0.0, tiktoken's version, which each tokenizer's tests hold to the vendor fixture.
+o200k and Llama 3 matisse's ids equal every other encoder's on every corpus it ran on as well. Each engine carries
+Unicode tables of its own, and matisse's ids are the same under the tables of Unicode 15.0.0 the commits measured carry
+and under those of 16.0.0, tiktoken's version, which each tokenizer's tests hold to the vendor fixture.
 
 | Corpus                  | Tokenizer |         Ids | SHA-256 of the ids                                                 | Agreeing                             |
 |-------------------------|-----------|------------:|--------------------------------------------------------------------|--------------------------------------|
@@ -1287,10 +1287,10 @@ that tiktoken does not are the copy of the text into a Rust string, the byte-lev
 of a piece to a printable character, on which the model merges, the added vocabulary's search for special-token
 spellings, which tiktoken's `encode()` makes as well and its `encode_ordinary()` does not, and under GPT-2 the
 byte-level post-processor, which with `trim_offsets` false changes no offset but still copies the encoding into a merged
-one, and the `Encoding` itself, a string for every token beside its id. Both files leave the BPE model's `ignore_merges`
-false, so a pre-token is merged unless the model's cache holds it; set true, the model looks a pre-token up whole first,
-as tiktoken does, and in a scouting run it gave the same ids on every corpus under 10 MB and no consistent gain, so the
-published files are used:
+one, and the `Encoding` itself, which beside every id holds the token's string, empty under the fast calls. Both files
+leave the BPE model's `ignore_merges` false, so a pre-token is merged unless the model's cache holds it; set true, the
+model looks a pre-token up whole first, as tiktoken does, and in a scouting run it gave the same ids on every corpus
+under 10 MB and no consistent gain, so the published files are used:
 
 | Tokenizer | Corpora | Equal ids | `ignore_merges` over the published file |
 |-----------|--------:|----------:|----------------------------------------:|

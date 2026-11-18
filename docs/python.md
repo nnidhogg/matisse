@@ -434,7 +434,8 @@ Before any of it was timed, both packages' ids were compared document by documen
 48 bytes at a code point, and each timed mode compares them again before its rows and holds every timed row's ids to
 them; a tokenizer and an input whose ids differed would have been reported and left untimed. None differs. Every digest
 below is also the one [benchmarks.md](benchmarks.md)'s exactness table gives for the corpus where it lists it, so that
-under Xenova/gpt-4's file both packages give tiktoken's cl100k_base ids on every corpus that table lists:
+under Xenova/gpt-4's file both packages give tiktoken's cl100k_base ids on every corpus compared here that the table
+lists:
 
 | Corpus                      | tokenizer.json |        Ids | SHA-256 of the ids                                                 | Equal |
 |-----------------------------|----------------|-----------:|--------------------------------------------------------------------|-------|
@@ -550,9 +551,9 @@ narrows to 5.6 to 6.9 times, 2.01 to 2.32 microseconds against 11.87 to 13.77. A
 times Hugging Face's faster call on one thread and at 3.7 to 4.2 times it on 24, where the package's arrays reach 295.9
 to 362.1 MiB/s against Hugging Face's 27.7 to 35.5, which is why the arrays are the calls to use on many threads. The
 figures compare the calls a Python program makes to have the ids of these four files, and no more. Hugging Face's calls
-return an `Encoding` that carries the tokens' strings, their offsets unless `encode_batch_fast()` drops them, and the
-masks its other features use, none of which the package computes, so the tables measure what each call costs as it is,
-not where Hugging Face's time goes or what its merge alone would cost; [benchmarks.md](benchmarks.md) sets the C++
+return an `Encoding` that carries the masks its other features use and, unless `encode_batch_fast()` returns it, the
+tokens' strings and their offsets, none of which the package computes, so the tables measure what each call costs as it
+is, not where Hugging Face's time goes or what its merge alone would cost; [benchmarks.md](benchmarks.md) sets the C++
 encoder beside Hugging Face's Rust crate and the other engines. Nothing was measured of Hugging Face's normalizers,
 post-processors, padding or truncation, of any tokenizer.json but the four pinned ones, or on any other machine, and the
 single-thread figures carry the spread across WSL2's processors that [benchmarks.md](benchmarks.md) describes.
