@@ -602,11 +602,11 @@ The `Merger` also builds a `Backtracker`, and a piece longer than 128 bytes, or 
 outside ASCII, is merged by backtracking instead. A token encodes to itself when the merge of its spelling ends with it
 alone. Its split is the pair of parts that merge joins last, and its order is the rank of that join plus one, zero for a
 byte. A token's own merge joins in order of rank when the parts of every split in it, its own among them, have lower
-orders than the token they make. The constructor decides that once for every token, reading each token's split from the
-merge of its own spelling run until two parts are left and taking the tokens shortest first, so that both parts of a
-split are decided before the token they make. On GPT-2's, cl100k's and o200k's files every token's merge joins in order.
-On Llama 3's 107 do not: 81 of its tokens have a split with a part of higher rank, `.:.:` at 100,421 the first, joined
-from `.:.` at 105,051 and `:`, and 26 more are built on them.
+orders than the token they make. The constructor decides that once for every token that encodes to itself, reading each
+token's split from the merge of its own spelling run until two parts are left and taking the tokens shortest first, so
+that both parts of a split are decided before the token they make. On GPT-2's, cl100k's and o200k's files the merge of
+every token that encodes to itself joins in order. On Llama 3's 107 of them do not: 81 of its tokens have a split with a
+part of higher rank, `.:.:` at 100,421 the first, joined from `.:.` at 105,051 and `:`, and 26 more are built on them.
 
 The backtracking lays along the piece, from the left, the longest token that encodes to itself and begins the rest of
 the piece, read from a `Token_trie`, the trie of those tokens in a double array. It holds each token to the one before
@@ -700,12 +700,12 @@ from each token's own merge.
 The tests hold the backtracking to the plain loop over the joins, wherever it does not give way, on every multi-byte
 token of GPT-2's, cl100k's, o200k's and Llama 3's files and on 20,000 seeded random pieces of each. On those it gives
 way only under Llama 3, on 20 of its tokens and 50 of its pieces. They hold it as well on 6,000 random tables over three
-symbols, where it never gives way on the 4,446 whose every token's merge joins in order and gives way on 6,402 of the
-pieces of the other 1,554. The tests read from the plain loop which tokens' merges join in order, 107 of Llama 3's not.
-On those two tables and a third, aab and then aa after the bytes, on which the pair test would refuse the rule's own aa
-aab on aaaab, they hold the search to give way where the test would be asked about the token out of order and the merge
-to the rule's ids. The merge's references hold the routed merge on every multi-byte token of the four files and on their
-random pieces.
+symbols, where it never gives way on the 4,446 on which the merge of every token that encodes to itself joins in order
+and gives way on 6,402 of the pieces of the other 1,554. The tests read from the plain loop which merges of the tokens
+that encode to themselves join in order, 107 of Llama 3's not. On those two tables and a third, aab and then aa after
+the bytes, on which the pair test would refuse the rule's own aa aab on aaaab, they hold the search to give way where
+the test would be asked about the token out of order and the merge to the rule's ids. The merge's references hold the
+routed merge on every multi-byte token of the four files and on their random pieces.
 
 ## **A cache that never changes an id**
 

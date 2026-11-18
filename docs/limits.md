@@ -125,12 +125,12 @@ random tables over three symbols, among them tables on which the pass and one jo
 128 bytes or at least half outside ASCII is merged by backtracking, a `Backtracker`, whose ids are the same by the proof
 in [design.md](design.md), or, where it gives way, by the scan or the heap. Its pair test is exact on two tokens whose
 own merges join in order of rank, which holds of a token when the last join of every token in its merge, its own among
-them, ranks above the last joins of that token's two parts. `Merger` decides it for every token when the encoder is
-built, and the search gives way where the test would be asked about a token that does not meet it. Every token of
-GPT-2's, cl100k's and o200k's files meets it and 107 of Llama 3's do not. The tests hold the backtracking to the plain
-loop, wherever it does not give way, on every multi-byte token of the four files, on 20,000 seeded random pieces of each
-and on random tables. They hold three small tables on which a pair test that assumed it of every token goes wrong to
-give way beside the token that does not meet it and to be merged to the rule's ids.
+them, ranks above the last joins of that token's two parts. `Merger` decides it for every token that encodes to itself
+when the encoder is built, and the search gives way where the test would be asked about a token that does not meet it.
+Every such token of GPT-2's, cl100k's and o200k's files meets it and 107 of Llama 3's do not. The tests hold the
+backtracking to the plain loop, wherever it does not give way, on every multi-byte token of the four files, on 20,000
+seeded random pieces of each and on random tables. They hold three small tables on which a pair test that assumed it of
+every token goes wrong to give way beside the token that does not meet it and to be merged to the rule's ids.
 
 The whole-piece lookup is the definition's `whole_piece_lookup` flag: whether a piece that is itself an ordinary token
 is that one token, looked up before any merge. `read_tiktoken()` sets it, since tiktoken looks every piece up, and
@@ -399,15 +399,15 @@ windows of one to three bytes twitter.json holds in 7.4 seconds.
 
 Building an encoder builds the merge's tables once: the id of every spelling in a `Spelling_table`, the rank and product
 of every pair the merge may join in a `Join_table`, 233,378 pairs on cl100k's file in 524,288 slots, and the joins of
-all 65,536 pairs of bytes. It also reads the split of every token from the merge of its own spelling, with whether that
-merge joins in order of rank, and builds the trie of the tokens that encode to themselves and the split of each by its
-parts. Those take the construction of the merge's tables from 0.01, 0.05 and 0.15 seconds to 0.04, 0.14 and 0.33 on
-GPT-2's, cl100k's and o200k's files on the machine of [benchmarks.md](benchmarks.md). Beside them the encoder builds the
-`Segmenter`'s product automaton, 36 states for GPT-2's twelve alternatives and 33 for cl100k's eight, and the window
-index. What the streaming encoder reads is built with them: the class table, the split verifier's table, the ordinary
-tokens in the order of their spellings and, where pieces are looked up whole, the tokens the merge does not form. That
-adds 9, 36, 69 and 49 milliseconds on GPT-2's, cl100k's, o200k's and Llama 3's files, so that a stream is made in about
-ten nanoseconds.
+all 65,536 pairs of bytes. It also reads from the merge of each token's own spelling whether the token encodes to itself
+and, for each that does, its split and whether that merge joins in order of rank, and builds the trie of those tokens
+and the split of each by its parts. Those take the construction of the merge's tables from 0.01, 0.05 and 0.15 seconds
+to 0.04, 0.14 and 0.33 on GPT-2's, cl100k's and o200k's files on the machine of [benchmarks.md](benchmarks.md). Beside
+them the encoder builds the `Segmenter`'s product automaton, 36 states for GPT-2's twelve alternatives and 33 for
+cl100k's eight, and the window index. What the streaming encoder reads is built with them: the class table, the split
+verifier's table, the ordinary tokens in the order of their spellings and, where pieces are looked up whole, the tokens
+the merge does not form. That adds 9, 36, 69 and 49 milliseconds on GPT-2's, cl100k's, o200k's and Llama 3's files, so
+that a stream is made in about ten nanoseconds.
 
 `encode(text)` builds its classes, its segmentation and its piece cache afresh, so on a short text a cache kept across
 the calls is what pays. In the backtracking section of [benchmarks.md](benchmarks.md) a call on a prompt of about a
