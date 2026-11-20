@@ -1,0 +1,24 @@
+matisse-py bench
+  matisse-tokenizer  0.1.0
+  tiktoken           0.14.0
+  numpy              2.5.4
+  tokenizers         0.23.3
+  python             3.12.3
+  RAYON_NUM_THREADS  1
+  system             Linux 6.18.58.1-microsoft-standard-WSL2 x86_64
+  processors         24 visible, 1 allowed
+  invocation         bench.py json-prompts llm-vocabs cl100k 5 short.txt
+ids matisse-py cl100k short.txt 335374 775da66306b6e76ef048bbf2221813152dfe87213e79d9db2f22eae24f5b7d1b
+ids hf cl100k short.txt 335374 775da66306b6e76ef048bbf2221813152dfe87213e79d9db2f22eae24f5b7d1b
+ids matisse-py cl100k short.txt 335374 775da66306b6e76ef048bbf2221813152dfe87213e79d9db2f22eae24f5b7d1b
+matisse-py cl100k  json prompts       short.txt                    0.9 MiB,     335374 tokens, 5 passes: best    23.0, median    22.6, worst    21.0 MiB/s; best   8.49, median   8.33 M tokens/s
+matisse-py cl100k  json prompts latency short.txt                20000 calls: per call median pass mean 2.01 us
+ids matisse-py cl100k short.txt 335374 775da66306b6e76ef048bbf2221813152dfe87213e79d9db2f22eae24f5b7d1b
+matisse-py cl100k  json prompts numpy short.txt                    0.9 MiB,     335374 tokens, 5 passes: best    22.5, median    21.7, worst    19.7 MiB/s; best   8.30, median   8.03 M tokens/s
+matisse-py cl100k  json prompts numpy latency short.txt                20000 calls: per call median pass mean 2.09 us
+ids hf cl100k short.txt 335374 775da66306b6e76ef048bbf2221813152dfe87213e79d9db2f22eae24f5b7d1b
+hf         cl100k  prompts            short.txt                    0.9 MiB,     335374 tokens, 5 passes: best     3.5, median     3.5, worst     3.4 MiB/s; best   1.31, median   1.27 M tokens/s
+hf         cl100k  prompts latency    short.txt                20000 calls: per call median pass mean 13.16 us
+ids hf cl100k short.txt 335374 775da66306b6e76ef048bbf2221813152dfe87213e79d9db2f22eae24f5b7d1b
+hf         cl100k  prompts fast       short.txt                    0.9 MiB,     335374 tokens, 5 passes: best     3.8, median     3.7, worst     3.7 MiB/s; best   1.39, median   1.37 M tokens/s
+hf         cl100k  prompts fast latency short.txt                20000 calls: per call median pass mean 12.25 us

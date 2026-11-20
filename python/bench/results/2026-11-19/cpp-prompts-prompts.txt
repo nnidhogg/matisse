@@ -1,0 +1,27 @@
+matisse_bench
+  commit      a426728
+  collected   2026-11-19 23:10:10 UTC
+  compiler    13.3.0
+  system      Linux 6.18.58.1-microsoft-standard-WSL2 x86_64
+  processors  24 visible, 1 allowed
+  invocation  matisse_bench prompts llm-vocabs gpt2,cl100k,o200k,llama3 5 prompts.txt
+ids gpt2 prompts.txt 10832297 2e52723085d05b2a2e01e4e6356619f1d8d18870e9f80eb13f786f9548580bf1
+gpt2    prompts         prompts.txt                 20.0 MiB,   10832297 tokens, 5 passes: best    41.0, median    40.9, worst    37.7 MiB/s; best  22.22, median  22.16 M tokens/s
+gpt2    latency         prompts.txt              20000 calls of 1049 bytes on average: per call mean 24.44, p50 22.29, p90 46.48, p99 65.14 us
+gpt2    prompts kept    prompts.txt                 20.0 MiB,   10832297 tokens, 5 passes: best    57.4, median    57.0, worst    55.2 MiB/s; best  31.11, median  30.87 M tokens/s
+gpt2    latency kept    prompts.txt              20000 calls of 1049 bytes on average: per call mean 17.55, p50 16.14, p90 31.59, p99 47.80 us
+ids cl100k prompts.txt 7202788 88674a5751d4bea4470490c4561cf9ade97e13839097ca542196bcefb7400bca
+cl100k  prompts         prompts.txt                 20.0 MiB,    7202788 tokens, 5 passes: best    39.1, median    38.3, worst    36.9 MiB/s; best  14.07, median  13.80 M tokens/s
+cl100k  latency         prompts.txt              20000 calls of 1049 bytes on average: per call mean 26.09, p50 24.10, p90 45.87, p99 72.50 us
+cl100k  prompts kept    prompts.txt                 20.0 MiB,    7202788 tokens, 5 passes: best    48.0, median    47.8, worst    44.9 MiB/s; best  17.29, median  17.22 M tokens/s
+cl100k  latency kept    prompts.txt              20000 calls of 1049 bytes on average: per call mean 20.92, p50 19.48, p90 37.89, p99 59.66 us
+ids o200k prompts.txt 4566270 cba41e7a3fa25f4d46a664cd4c607d5921129872b108177725fdac0ce8e368c7
+o200k   prompts         prompts.txt                 20.0 MiB,    4566270 tokens, 5 passes: best    33.8, median    33.6, worst    32.8 MiB/s; best   7.72, median   7.67 M tokens/s
+o200k   latency         prompts.txt              20000 calls of 1049 bytes on average: per call mean 29.75, p50 27.18, p90 54.01, p99 77.18 us
+o200k   prompts kept    prompts.txt                 20.0 MiB,    4566270 tokens, 5 passes: best    38.2, median    38.0, worst    35.9 MiB/s; best   8.72, median   8.67 M tokens/s
+o200k   latency kept    prompts.txt              20000 calls of 1049 bytes on average: per call mean 26.33, p50 24.28, p90 48.57, p99 70.39 us
+ids llama3 prompts.txt 5142480 2fc5ecf962ed0d2cc229aa7948c14a58427e270505fe018561ffc43f7872352c
+llama3  prompts         prompts.txt                 20.0 MiB,    5142480 tokens, 5 passes: best    36.8, median    36.4, worst    36.0 MiB/s; best   9.46, median   9.35 M tokens/s
+llama3  latency         prompts.txt              20000 calls of 1049 bytes on average: per call mean 27.51, p50 23.52, p90 52.34, p99 78.10 us
+llama3  prompts kept    prompts.txt                 20.0 MiB,    5142480 tokens, 5 passes: best    42.8, median    42.2, worst    42.0 MiB/s; best  10.99, median  10.85 M tokens/s
+llama3  latency kept    prompts.txt              20000 calls of 1049 bytes on average: per call mean 23.69, p50 20.61, p90 44.53, p99 64.29 us

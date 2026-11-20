@@ -1,0 +1,58 @@
+matisse-py bench
+  matisse-tokenizer  0.1.0
+  tiktoken           0.14.0
+  numpy              2.5.4
+  tokenizers         0.23.3
+  python             3.12.3
+  RAYON_NUM_THREADS  unset
+  system             Linux 6.18.58.1-microsoft-standard-WSL2 x86_64
+  processors         24 visible, 1 allowed
+  invocation         bench.py single llm-vocabs gpt2,cl100k,o200k,llama3 3 enwik8
+ids matisse-py gpt2 enwik8 29013572 a7e18c6d9ab250b10190b6e80c13942596b024e49552c63e699f056b38b9d53d
+matisse-py gpt2    encode fresh       enwik8                      95.4 MiB,   29013572 tokens, 3 passes: best    45.8, median    45.5, worst    44.3 MiB/s; best  13.95, median  13.85 M tokens/s
+ids matisse-py gpt2 enwik8 29013572 a7e18c6d9ab250b10190b6e80c13942596b024e49552c63e699f056b38b9d53d
+matisse-py gpt2    encode cached      enwik8                      95.4 MiB,   29013572 tokens, 3 passes: best    47.9, median    47.7, worst    45.7 MiB/s; best  14.59, median  14.51 M tokens/s
+ids matisse-py gpt2 enwik8 29013572 a7e18c6d9ab250b10190b6e80c13942596b024e49552c63e699f056b38b9d53d
+matisse-py gpt2    numpy fresh        enwik8                      95.4 MiB,   29013572 tokens, 3 passes: best    58.3, median    58.1, worst    57.6 MiB/s; best  17.74, median  17.66 M tokens/s
+ids matisse-py gpt2 enwik8 29013572 a7e18c6d9ab250b10190b6e80c13942596b024e49552c63e699f056b38b9d53d
+matisse-py gpt2    numpy cached       enwik8                      95.4 MiB,   29013572 tokens, 3 passes: best    61.1, median    60.8, worst    60.5 MiB/s; best  18.59, median  18.51 M tokens/s
+ids tiktoken gpt2 enwik8 29013572 a7e18c6d9ab250b10190b6e80c13942596b024e49552c63e699f056b38b9d53d
+tiktoken   gpt2    encode             enwik8                      95.4 MiB,   29013572 tokens, 3 passes: best    22.4, median    22.1, worst    21.5 MiB/s; best   6.82, median   6.74 M tokens/s
+ids tiktoken gpt2 enwik8 29013572 a7e18c6d9ab250b10190b6e80c13942596b024e49552c63e699f056b38b9d53d
+tiktoken   gpt2    numpy              enwik8                      95.4 MiB,   29013572 tokens, 3 passes: best    23.8, median    23.7, worst    23.7 MiB/s; best   7.23, median   7.22 M tokens/s
+ids matisse-py cl100k enwik8 25793085 fc905793ea8efed63d03122c453f1a0f48e062490201b416cb3eacacc1302311
+matisse-py cl100k  encode fresh       enwik8                      95.4 MiB,   25793085 tokens, 3 passes: best    46.7, median    46.6, worst    43.2 MiB/s; best  12.64, median  12.61 M tokens/s
+ids matisse-py cl100k enwik8 25793085 fc905793ea8efed63d03122c453f1a0f48e062490201b416cb3eacacc1302311
+matisse-py cl100k  encode cached      enwik8                      95.4 MiB,   25793085 tokens, 3 passes: best    48.3, median    47.6, worst    46.8 MiB/s; best  13.06, median  12.87 M tokens/s
+ids matisse-py cl100k enwik8 25793085 fc905793ea8efed63d03122c453f1a0f48e062490201b416cb3eacacc1302311
+matisse-py cl100k  numpy fresh        enwik8                      95.4 MiB,   25793085 tokens, 3 passes: best    56.5, median    55.8, worst    55.6 MiB/s; best  15.28, median  15.09 M tokens/s
+ids matisse-py cl100k enwik8 25793085 fc905793ea8efed63d03122c453f1a0f48e062490201b416cb3eacacc1302311
+matisse-py cl100k  numpy cached       enwik8                      95.4 MiB,   25793085 tokens, 3 passes: best    59.0, median    58.7, worst    58.2 MiB/s; best  15.95, median  15.89 M tokens/s
+ids tiktoken cl100k enwik8 25793085 fc905793ea8efed63d03122c453f1a0f48e062490201b416cb3eacacc1302311
+tiktoken   cl100k  encode             enwik8                      95.4 MiB,   25793085 tokens, 3 passes: best    20.5, median    20.4, worst    20.0 MiB/s; best   5.56, median   5.50 M tokens/s
+ids tiktoken cl100k enwik8 25793085 fc905793ea8efed63d03122c453f1a0f48e062490201b416cb3eacacc1302311
+tiktoken   cl100k  numpy              enwik8                      95.4 MiB,   25793085 tokens, 3 passes: best    22.4, median    21.9, worst    21.9 MiB/s; best   6.07, median   5.93 M tokens/s
+ids matisse-py o200k enwik8 25426300 7de481826895d0084a3bca6376494a2f70f6ff71224e7fb2bcdbee5439631ae1
+matisse-py o200k   encode fresh       enwik8                      95.4 MiB,   25426300 tokens, 3 passes: best    43.0, median    42.8, worst    40.9 MiB/s; best  11.46, median  11.41 M tokens/s
+ids matisse-py o200k enwik8 25426300 7de481826895d0084a3bca6376494a2f70f6ff71224e7fb2bcdbee5439631ae1
+matisse-py o200k   encode cached      enwik8                      95.4 MiB,   25426300 tokens, 3 passes: best    44.2, median    44.0, worst    43.0 MiB/s; best  11.78, median  11.73 M tokens/s
+ids matisse-py o200k enwik8 25426300 7de481826895d0084a3bca6376494a2f70f6ff71224e7fb2bcdbee5439631ae1
+matisse-py o200k   numpy fresh        enwik8                      95.4 MiB,   25426300 tokens, 3 passes: best    52.1, median    52.1, worst    52.1 MiB/s; best  13.90, median  13.88 M tokens/s
+ids matisse-py o200k enwik8 25426300 7de481826895d0084a3bca6376494a2f70f6ff71224e7fb2bcdbee5439631ae1
+matisse-py o200k   numpy cached       enwik8                      95.4 MiB,   25426300 tokens, 3 passes: best    54.4, median    54.1, worst    53.9 MiB/s; best  14.50, median  14.43 M tokens/s
+ids tiktoken o200k enwik8 25426300 7de481826895d0084a3bca6376494a2f70f6ff71224e7fb2bcdbee5439631ae1
+tiktoken   o200k   encode             enwik8                      95.4 MiB,   25426300 tokens, 3 passes: best    29.7, median    29.2, worst    28.3 MiB/s; best   7.92, median   7.78 M tokens/s
+ids tiktoken o200k enwik8 25426300 7de481826895d0084a3bca6376494a2f70f6ff71224e7fb2bcdbee5439631ae1
+tiktoken   o200k   numpy              enwik8                      95.4 MiB,   25426300 tokens, 3 passes: best    32.3, median    32.3, worst    32.2 MiB/s; best   8.61, median   8.60 M tokens/s
+ids matisse-py llama3 enwik8 25706310 3fc3bd5e699caaf8956c53b1e3dde1e1bfa9cea39d75454feb1e6c409c073a36
+matisse-py llama3  encode fresh       enwik8                      95.4 MiB,   25706310 tokens, 3 passes: best    44.0, median    43.9, worst    41.8 MiB/s; best  11.85, median  11.84 M tokens/s
+ids matisse-py llama3 enwik8 25706310 3fc3bd5e699caaf8956c53b1e3dde1e1bfa9cea39d75454feb1e6c409c073a36
+matisse-py llama3  encode cached      enwik8                      95.4 MiB,   25706310 tokens, 3 passes: best    46.3, median    44.9, worst    44.3 MiB/s; best  12.48, median  12.11 M tokens/s
+ids matisse-py llama3 enwik8 25706310 3fc3bd5e699caaf8956c53b1e3dde1e1bfa9cea39d75454feb1e6c409c073a36
+matisse-py llama3  numpy fresh        enwik8                      95.4 MiB,   25706310 tokens, 3 passes: best    53.8, median    53.3, worst    53.3 MiB/s; best  14.51, median  14.38 M tokens/s
+ids matisse-py llama3 enwik8 25706310 3fc3bd5e699caaf8956c53b1e3dde1e1bfa9cea39d75454feb1e6c409c073a36
+matisse-py llama3  numpy cached       enwik8                      95.4 MiB,   25706310 tokens, 3 passes: best    55.8, median    55.7, worst    55.0 MiB/s; best  15.03, median  15.03 M tokens/s
+ids tiktoken llama3 enwik8 25706310 3fc3bd5e699caaf8956c53b1e3dde1e1bfa9cea39d75454feb1e6c409c073a36
+tiktoken   llama3  encode             enwik8                      95.4 MiB,   25706310 tokens, 3 passes: best    28.4, median    28.3, worst    27.3 MiB/s; best   7.67, median   7.62 M tokens/s
+ids tiktoken llama3 enwik8 25706310 3fc3bd5e699caaf8956c53b1e3dde1e1bfa9cea39d75454feb1e6c409c073a36
+tiktoken   llama3  numpy              enwik8                      95.4 MiB,   25706310 tokens, 3 passes: best    31.0, median    30.7, worst    30.7 MiB/s; best   8.37, median   8.27 M tokens/s

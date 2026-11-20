@@ -1,0 +1,24 @@
+matisse-py bench
+  matisse-tokenizer  0.1.0
+  tiktoken           0.14.0
+  numpy              2.5.4
+  tokenizers         0.23.3
+  python             3.12.3
+  RAYON_NUM_THREADS  1
+  system             Linux 6.18.58.1-microsoft-standard-WSL2 x86_64
+  processors         24 visible, 1 allowed
+  invocation         bench.py json-prompts llm-vocabs gpt2 5 prompts.txt
+ids matisse-py gpt2 prompts.txt 10832297 2e52723085d05b2a2e01e4e6356619f1d8d18870e9f80eb13f786f9548580bf1
+ids hf gpt2 prompts.txt 10832297 2e52723085d05b2a2e01e4e6356619f1d8d18870e9f80eb13f786f9548580bf1
+ids matisse-py gpt2 prompts.txt 10832297 2e52723085d05b2a2e01e4e6356619f1d8d18870e9f80eb13f786f9548580bf1
+matisse-py gpt2    json prompts       prompts.txt                 20.0 MiB,   10832297 tokens, 5 passes: best    32.9, median    32.4, worst    32.1 MiB/s; best  17.80, median  17.54 M tokens/s
+matisse-py gpt2    json prompts latency prompts.txt              20000 calls: per call median pass mean 30.87 us
+ids matisse-py gpt2 prompts.txt 10832297 2e52723085d05b2a2e01e4e6356619f1d8d18870e9f80eb13f786f9548580bf1
+matisse-py gpt2    json prompts numpy prompts.txt                 20.0 MiB,   10832297 tokens, 5 passes: best    46.1, median    45.9, worst    41.9 MiB/s; best  24.98, median  24.84 M tokens/s
+matisse-py gpt2    json prompts numpy latency prompts.txt              20000 calls: per call median pass mean 21.81 us
+ids hf gpt2 prompts.txt 10832297 2e52723085d05b2a2e01e4e6356619f1d8d18870e9f80eb13f786f9548580bf1
+hf         gpt2    prompts            prompts.txt                 20.0 MiB,   10832297 tokens, 5 passes: best     3.0, median     2.9, worst     2.8 MiB/s; best   1.62, median   1.55 M tokens/s
+hf         gpt2    prompts latency    prompts.txt              20000 calls: per call median pass mean 348.39 us
+ids hf gpt2 prompts.txt 10832297 2e52723085d05b2a2e01e4e6356619f1d8d18870e9f80eb13f786f9548580bf1
+hf         gpt2    prompts fast       prompts.txt                 20.0 MiB,   10832297 tokens, 5 passes: best     3.5, median     3.2, worst     3.2 MiB/s; best   1.87, median   1.74 M tokens/s
+hf         gpt2    prompts fast latency prompts.txt              20000 calls: per call median pass mean 312.14 us

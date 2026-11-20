@@ -1,0 +1,24 @@
+matisse-py bench
+  matisse-tokenizer  0.1.0
+  tiktoken           0.14.0
+  numpy              2.5.4
+  tokenizers         0.23.3
+  python             3.12.3
+  RAYON_NUM_THREADS  1
+  system             Linux 6.18.58.1-microsoft-standard-WSL2 x86_64
+  processors         24 visible, 1 allowed
+  invocation         bench.py json-prompts llm-vocabs llama3 5 prompts.txt
+ids matisse-py llama3 prompts.txt 5142480 2fc5ecf962ed0d2cc229aa7948c14a58427e270505fe018561ffc43f7872352c
+ids hf llama3 prompts.txt 5142480 2fc5ecf962ed0d2cc229aa7948c14a58427e270505fe018561ffc43f7872352c
+ids matisse-py llama3 prompts.txt 5142480 2fc5ecf962ed0d2cc229aa7948c14a58427e270505fe018561ffc43f7872352c
+matisse-py llama3  json prompts       prompts.txt                 20.0 MiB,    5142480 tokens, 5 passes: best    28.3, median    27.9, worst    24.0 MiB/s; best   7.27, median   7.18 M tokens/s
+matisse-py llama3  json prompts latency prompts.txt              20000 calls: per call median pass mean 35.79 us
+ids matisse-py llama3 prompts.txt 5142480 2fc5ecf962ed0d2cc229aa7948c14a58427e270505fe018561ffc43f7872352c
+matisse-py llama3  json prompts numpy prompts.txt                 20.0 MiB,    5142480 tokens, 5 passes: best    34.2, median    33.3, worst    30.1 MiB/s; best   8.80, median   8.56 M tokens/s
+matisse-py llama3  json prompts numpy latency prompts.txt              20000 calls: per call median pass mean 30.04 us
+ids hf llama3 prompts.txt 5142480 2fc5ecf962ed0d2cc229aa7948c14a58427e270505fe018561ffc43f7872352c
+hf         llama3  prompts            prompts.txt                 20.0 MiB,    5142480 tokens, 5 passes: best     3.9, median     3.5, worst     3.5 MiB/s; best   1.00, median   0.89 M tokens/s
+hf         llama3  prompts latency    prompts.txt              20000 calls: per call median pass mean 287.90 us
+ids hf llama3 prompts.txt 5142480 2fc5ecf962ed0d2cc229aa7948c14a58427e270505fe018561ffc43f7872352c
+hf         llama3  prompts fast       prompts.txt                 20.0 MiB,    5142480 tokens, 5 passes: best     4.5, median     4.1, worst     4.1 MiB/s; best   1.15, median   1.06 M tokens/s
+hf         llama3  prompts fast latency prompts.txt              20000 calls: per call median pass mean 243.38 us

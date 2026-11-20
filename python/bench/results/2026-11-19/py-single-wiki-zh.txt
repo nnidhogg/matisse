@@ -1,0 +1,58 @@
+matisse-py bench
+  matisse-tokenizer  0.1.0
+  tiktoken           0.14.0
+  numpy              2.5.4
+  tokenizers         0.23.3
+  python             3.12.3
+  RAYON_NUM_THREADS  unset
+  system             Linux 6.18.58.1-microsoft-standard-WSL2 x86_64
+  processors         24 visible, 1 allowed
+  invocation         bench.py single llm-vocabs gpt2,cl100k,o200k,llama3 5 wiki-zh.txt
+ids matisse-py gpt2 wiki-zh.txt 2984479 9e1315d4c8f265369c3891e10d08a5358c663db4368c6a8050f6e75759384017
+matisse-py gpt2    encode fresh       wiki-zh.txt                  4.0 MiB,    2984479 tokens, 5 passes: best    46.3, median    43.6, worst    42.1 MiB/s; best  34.41, median  32.46 M tokens/s
+ids matisse-py gpt2 wiki-zh.txt 2984479 9e1315d4c8f265369c3891e10d08a5358c663db4368c6a8050f6e75759384017
+matisse-py gpt2    encode cached      wiki-zh.txt                  4.0 MiB,    2984479 tokens, 5 passes: best    52.8, median    50.5, worst    46.6 MiB/s; best  39.25, median  37.53 M tokens/s
+ids matisse-py gpt2 wiki-zh.txt 2984479 9e1315d4c8f265369c3891e10d08a5358c663db4368c6a8050f6e75759384017
+matisse-py gpt2    numpy fresh        wiki-zh.txt                  4.0 MiB,    2984479 tokens, 5 passes: best    73.7, median    72.0, worst    66.6 MiB/s; best  54.82, median  53.58 M tokens/s
+ids matisse-py gpt2 wiki-zh.txt 2984479 9e1315d4c8f265369c3891e10d08a5358c663db4368c6a8050f6e75759384017
+matisse-py gpt2    numpy cached       wiki-zh.txt                  4.0 MiB,    2984479 tokens, 5 passes: best    78.0, median    74.5, worst    72.1 MiB/s; best  58.05, median  55.43 M tokens/s
+ids tiktoken gpt2 wiki-zh.txt 2984479 9e1315d4c8f265369c3891e10d08a5358c663db4368c6a8050f6e75759384017
+tiktoken   gpt2    encode             wiki-zh.txt                  4.0 MiB,    2984479 tokens, 5 passes: best    22.6, median    22.0, worst    21.7 MiB/s; best  16.79, median  16.38 M tokens/s
+ids tiktoken gpt2 wiki-zh.txt 2984479 9e1315d4c8f265369c3891e10d08a5358c663db4368c6a8050f6e75759384017
+tiktoken   gpt2    numpy              wiki-zh.txt                  4.0 MiB,    2984479 tokens, 5 passes: best    25.9, median    25.4, worst    24.3 MiB/s; best  19.24, median  18.93 M tokens/s
+ids matisse-py cl100k wiki-zh.txt 1939825 7a0ec4e167b68b621e6562e2191bdcc43b4d73a31dd8b20d7e1b5aac67b986fc
+matisse-py cl100k  encode fresh       wiki-zh.txt                  4.0 MiB,    1939825 tokens, 5 passes: best    48.0, median    45.6, worst    43.0 MiB/s; best  23.22, median  22.05 M tokens/s
+ids matisse-py cl100k wiki-zh.txt 1939825 7a0ec4e167b68b621e6562e2191bdcc43b4d73a31dd8b20d7e1b5aac67b986fc
+matisse-py cl100k  encode cached      wiki-zh.txt                  4.0 MiB,    1939825 tokens, 5 passes: best    50.2, median    49.2, worst    46.2 MiB/s; best  24.26, median  23.77 M tokens/s
+ids matisse-py cl100k wiki-zh.txt 1939825 7a0ec4e167b68b621e6562e2191bdcc43b4d73a31dd8b20d7e1b5aac67b986fc
+matisse-py cl100k  numpy fresh        wiki-zh.txt                  4.0 MiB,    1939825 tokens, 5 passes: best    67.2, median    67.0, worst    66.3 MiB/s; best  32.50, median  32.40 M tokens/s
+ids matisse-py cl100k wiki-zh.txt 1939825 7a0ec4e167b68b621e6562e2191bdcc43b4d73a31dd8b20d7e1b5aac67b986fc
+matisse-py cl100k  numpy cached       wiki-zh.txt                  4.0 MiB,    1939825 tokens, 5 passes: best    70.3, median    69.2, worst    67.8 MiB/s; best  34.00, median  33.47 M tokens/s
+ids tiktoken cl100k wiki-zh.txt 1939825 7a0ec4e167b68b621e6562e2191bdcc43b4d73a31dd8b20d7e1b5aac67b986fc
+tiktoken   cl100k  encode             wiki-zh.txt                  4.0 MiB,    1939825 tokens, 5 passes: best    20.0, median    19.3, worst    18.8 MiB/s; best   9.68, median   9.35 M tokens/s
+ids tiktoken cl100k wiki-zh.txt 1939825 7a0ec4e167b68b621e6562e2191bdcc43b4d73a31dd8b20d7e1b5aac67b986fc
+tiktoken   cl100k  numpy              wiki-zh.txt                  4.0 MiB,    1939825 tokens, 5 passes: best    22.3, median    21.8, worst    21.2 MiB/s; best  10.77, median  10.53 M tokens/s
+ids matisse-py o200k wiki-zh.txt 1299269 f3b08b0ba50957619314917ebc98cc3b26c9e82f4a09fab530aba5976d56d56e
+matisse-py o200k   encode fresh       wiki-zh.txt                  4.0 MiB,    1299269 tokens, 5 passes: best    47.0, median    44.7, worst    43.5 MiB/s; best  15.21, median  14.48 M tokens/s
+ids matisse-py o200k wiki-zh.txt 1299269 f3b08b0ba50957619314917ebc98cc3b26c9e82f4a09fab530aba5976d56d56e
+matisse-py o200k   encode cached      wiki-zh.txt                  4.0 MiB,    1299269 tokens, 5 passes: best    47.9, median    47.3, worst    45.6 MiB/s; best  15.51, median  15.33 M tokens/s
+ids matisse-py o200k wiki-zh.txt 1299269 f3b08b0ba50957619314917ebc98cc3b26c9e82f4a09fab530aba5976d56d56e
+matisse-py o200k   numpy fresh        wiki-zh.txt                  4.0 MiB,    1299269 tokens, 5 passes: best    56.3, median    54.7, worst    53.0 MiB/s; best  18.24, median  17.70 M tokens/s
+ids matisse-py o200k wiki-zh.txt 1299269 f3b08b0ba50957619314917ebc98cc3b26c9e82f4a09fab530aba5976d56d56e
+matisse-py o200k   numpy cached       wiki-zh.txt                  4.0 MiB,    1299269 tokens, 5 passes: best    60.3, median    58.9, worst    57.9 MiB/s; best  19.53, median  19.06 M tokens/s
+ids tiktoken o200k wiki-zh.txt 1299269 f3b08b0ba50957619314917ebc98cc3b26c9e82f4a09fab530aba5976d56d56e
+tiktoken   o200k   encode             wiki-zh.txt                  4.0 MiB,    1299269 tokens, 5 passes: best    19.5, median    18.9, worst    18.3 MiB/s; best   6.31, median   6.14 M tokens/s
+ids tiktoken o200k wiki-zh.txt 1299269 f3b08b0ba50957619314917ebc98cc3b26c9e82f4a09fab530aba5976d56d56e
+tiktoken   o200k   numpy              wiki-zh.txt                  4.0 MiB,    1299269 tokens, 5 passes: best    20.8, median    20.5, worst    20.3 MiB/s; best   6.73, median   6.64 M tokens/s
+ids matisse-py llama3 wiki-zh.txt 1298383 9b3f7244ef292fb222cac56c62a7b68a86abbc95f2e8d7d7ce1d7a2fed7cf605
+matisse-py llama3  encode fresh       wiki-zh.txt                  4.0 MiB,    1298383 tokens, 5 passes: best    49.8, median    49.1, worst    47.0 MiB/s; best  16.12, median  15.90 M tokens/s
+ids matisse-py llama3 wiki-zh.txt 1298383 9b3f7244ef292fb222cac56c62a7b68a86abbc95f2e8d7d7ce1d7a2fed7cf605
+matisse-py llama3  encode cached      wiki-zh.txt                  4.0 MiB,    1298383 tokens, 5 passes: best    51.6, median    50.0, worst    46.7 MiB/s; best  16.71, median  16.19 M tokens/s
+ids matisse-py llama3 wiki-zh.txt 1298383 9b3f7244ef292fb222cac56c62a7b68a86abbc95f2e8d7d7ce1d7a2fed7cf605
+matisse-py llama3  numpy fresh        wiki-zh.txt                  4.0 MiB,    1298383 tokens, 5 passes: best    62.7, median    61.6, worst    59.7 MiB/s; best  20.30, median  19.95 M tokens/s
+ids matisse-py llama3 wiki-zh.txt 1298383 9b3f7244ef292fb222cac56c62a7b68a86abbc95f2e8d7d7ce1d7a2fed7cf605
+matisse-py llama3  numpy cached       wiki-zh.txt                  4.0 MiB,    1298383 tokens, 5 passes: best    64.2, median    63.8, worst    60.3 MiB/s; best  20.78, median  20.64 M tokens/s
+ids tiktoken llama3 wiki-zh.txt 1298383 9b3f7244ef292fb222cac56c62a7b68a86abbc95f2e8d7d7ce1d7a2fed7cf605
+tiktoken   llama3  encode             wiki-zh.txt                  4.0 MiB,    1298383 tokens, 5 passes: best    21.3, median    21.0, worst    20.5 MiB/s; best   6.90, median   6.80 M tokens/s
+ids tiktoken llama3 wiki-zh.txt 1298383 9b3f7244ef292fb222cac56c62a7b68a86abbc95f2e8d7d7ce1d7a2fed7cf605
+tiktoken   llama3  numpy              wiki-zh.txt                  4.0 MiB,    1298383 tokens, 5 passes: best    23.2, median    22.9, worst    22.6 MiB/s; best   7.52, median   7.42 M tokens/s

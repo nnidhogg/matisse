@@ -283,9 +283,9 @@ buffer, scales with the encoding itself, as the batch tables under Performance s
 
 ## **Performance**
 
-Every figure below is a median of the passes of one collection, run on 2026-11-10 at commit f1a7825 by
+Every figure below is a median of the passes of one collection, run on 2026-11-19 at commit a426728 by
 `python/bench/run.sh` on the machine of [benchmarks.md](benchmarks.md), an i9-12900K whose 24 logical processors WSL2
-shows, with Python 3.12.3, tiktoken 0.14.0 and NumPy 2.5.4. The outputs are kept in `python/bench/results/2026-11-10/`,
+shows, with Python 3.12.3, tiktoken 0.14.0 and NumPy 2.5.4. The outputs are kept in `python/bench/results/2026-11-19/`,
 and `python/bench/tables.py` writes these tables from them. The C++ rows are matisse_bench's, the Python rows
 `python/bench/bench.py`'s, which prints its rows and ids lines in matisse_bench's format; every row's ids are held to
 the first pass's, and the package's ids lines equal matisse_bench's on every input. The single-thread rows ran under
@@ -300,22 +300,22 @@ its calls of the same names:
 
 | Tokenizer | Corpus      | C++ `encode()` | Python array | Python list | tiktoken array | tiktoken list |
 |-----------|-------------|---------------:|-------------:|------------:|---------------:|--------------:|
-| gpt2      | `gutenberg` |           72.1 |         79.7 |        66.0 |           26.8 |          24.8 |
-| cl100k    | `gutenberg` |           80.6 |         80.3 |        67.3 |           26.5 |          23.6 |
-| o200k     | `gutenberg` |           75.7 |         78.5 |        64.5 |           39.3 |          36.0 |
-| llama3    | `gutenberg` |           76.4 |         84.3 |        67.5 |           37.3 |          33.8 |
-| gpt2      | `wiki-ru`   |           88.6 |         73.6 |        48.7 |           26.0 |          22.3 |
-| cl100k    | `wiki-ru`   |           62.5 |         60.5 |        51.2 |           19.9 |          18.9 |
-| o200k     | `wiki-ru`   |           50.7 |         53.0 |        48.7 |           26.1 |          24.7 |
-| llama3    | `wiki-ru`   |           51.8 |         55.3 |        49.1 |           25.6 |          24.3 |
-| gpt2      | `wiki-zh`   |           82.0 |         73.5 |        43.9 |           24.7 |          23.2 |
-| cl100k    | `wiki-zh`   |           65.3 |         67.1 |        46.1 |           22.0 |          19.8 |
-| o200k     | `wiki-zh`   |           55.3 |         59.6 |        45.8 |           21.5 |          20.0 |
-| llama3    | `wiki-zh`   |           60.6 |         64.8 |        52.2 |           23.5 |          21.9 |
-| gpt2      | `enwik8`    |           53.5 |         59.0 |        46.3 |           24.4 |          22.2 |
-| cl100k    | `enwik8`    |           62.2 |         60.4 |        46.5 |           22.5 |          21.1 |
-| o200k     | `enwik8`    |           53.3 |         53.0 |        45.6 |           32.6 |          29.6 |
-| llama3    | `enwik8`    |           56.5 |         55.2 |        45.2 |           32.6 |          28.2 |
+| gpt2      | `gutenberg` |           69.3 |         76.7 |        63.9 |           25.6 |          24.1 |
+| cl100k    | `gutenberg` |           76.2 |         79.4 |        65.3 |           25.7 |          23.9 |
+| o200k     | `gutenberg` |           73.6 |         77.3 |        63.2 |           39.0 |          35.5 |
+| llama3    | `gutenberg` |           76.7 |         78.7 |        63.4 |           35.4 |          32.1 |
+| gpt2      | `wiki-ru`   |           88.2 |         73.8 |        49.2 |           25.8 |          22.1 |
+| cl100k    | `wiki-ru`   |           62.4 |         60.1 |        49.8 |           19.8 |          18.9 |
+| o200k     | `wiki-ru`   |           51.0 |         51.1 |        45.9 |           25.1 |          23.9 |
+| llama3    | `wiki-ru`   |           52.0 |         51.7 |        47.2 |           24.9 |          23.7 |
+| gpt2      | `wiki-zh`   |           75.8 |         72.0 |        43.6 |           25.4 |          22.0 |
+| cl100k    | `wiki-zh`   |           63.7 |         67.0 |        45.6 |           21.8 |          19.3 |
+| o200k     | `wiki-zh`   |           53.9 |         54.7 |        44.7 |           20.5 |          18.9 |
+| llama3    | `wiki-zh`   |           59.4 |         61.6 |        49.1 |           22.9 |          21.0 |
+| gpt2      | `enwik8`    |           53.0 |         58.1 |        45.5 |           23.7 |          22.1 |
+| cl100k    | `enwik8`    |           59.1 |         55.8 |        46.6 |           21.9 |          20.4 |
+| o200k     | `enwik8`    |           52.9 |         52.1 |        42.8 |           32.3 |          29.2 |
+| llama3    | `enwik8`    |           57.0 |         53.3 |        43.9 |           30.7 |          28.3 |
 
 Where a Python call's time goes on those texts, in milliseconds a call: the encoding is `encode_to_numpy()` on a string
 whose UTF-8 CPython already keeps, the conversion is what the same call takes more on a string never converted, and the
@@ -325,22 +325,22 @@ stays at about a tenth of the encoding or less:
 
 | Tokenizer | Corpus      | Encoding, ms | Conversion, ms | List, ms | List, ns per id |
 |-----------|-------------|-------------:|---------------:|---------:|----------------:|
-| gpt2      | `gutenberg` |         79.3 |            7.3 |     22.3 |            11.1 |
-| cl100k    | `gutenberg` |         80.0 |            5.9 |     19.1 |            11.2 |
-| o200k     | `gutenberg` |         85.0 |            2.9 |     18.5 |            10.9 |
-| llama3    | `gutenberg` |         79.4 |            2.4 |     17.9 |            10.5 |
-| gpt2      | `wiki-ru`   |         49.5 |            4.8 |     27.1 |            11.0 |
-| cl100k    | `wiki-ru`   |         59.6 |            6.5 |     14.6 |            12.6 |
-| o200k     | `wiki-ru`   |         68.6 |            6.9 |     10.0 |            14.1 |
-| llama3    | `wiki-ru`   |         67.9 |            4.4 |      8.9 |            11.2 |
-| gpt2      | `wiki-zh`   |         51.8 |            2.6 |     23.7 |             7.9 |
-| cl100k    | `wiki-zh`   |         56.5 |            3.1 |     22.1 |            11.4 |
-| o200k     | `wiki-zh`   |         64.3 |            2.8 |     20.3 |            15.6 |
-| llama3    | `wiki-zh`   |         59.0 |            2.7 |     15.5 |            11.9 |
-| gpt2      | `enwik8`    |       1502.4 |          114.6 |    428.8 |            14.8 |
-| cl100k    | `enwik8`    |       1536.2 |           43.2 |    356.6 |            13.8 |
-| o200k     | `enwik8`    |       1676.6 |          123.4 |    415.5 |            16.3 |
-| llama3    | `enwik8`    |       1659.1 |           69.1 |    442.2 |            17.2 |
+| gpt2      | `gutenberg` |         81.0 |            9.0 |     22.3 |            11.1 |
+| cl100k    | `gutenberg` |         82.9 |            4.0 |     21.0 |            12.3 |
+| o200k     | `gutenberg` |         85.0 |            4.3 |     20.4 |            12.0 |
+| llama3    | `gutenberg` |         82.6 |            5.0 |     21.3 |            12.5 |
+| gpt2      | `wiki-ru`   |         50.2 |            4.0 |     27.3 |            11.1 |
+| cl100k    | `wiki-ru`   |         62.0 |            4.5 |     13.0 |            11.2 |
+| o200k     | `wiki-ru`   |         72.9 |            5.4 |      8.8 |            12.4 |
+| llama3    | `wiki-ru`   |         71.0 |            6.3 |      9.3 |            11.7 |
+| gpt2      | `wiki-zh`   |         53.7 |            1.9 |     25.5 |             8.5 |
+| cl100k    | `wiki-zh`   |         57.8 |            1.9 |     23.5 |            12.1 |
+| o200k     | `wiki-zh`   |         67.9 |            5.2 |     16.7 |            12.8 |
+| llama3    | `wiki-zh`   |         62.7 |            2.2 |     17.3 |            13.3 |
+| gpt2      | `enwik8`    |       1569.1 |           72.9 |    430.9 |            14.9 |
+| cl100k    | `enwik8`    |       1625.2 |           84.5 |    379.0 |            14.7 |
+| o200k     | `enwik8`    |       1763.4 |           67.7 |    404.8 |            15.9 |
+| llama3    | `enwik8`    |       1712.7 |           77.1 |    412.0 |            16.0 |
 
 One call per prompt on one thread, the mean microseconds of a call, over the 20,000 prompts of `prompts` and over the
 same prompts cut to their first 48 bytes at a code point. matisse_bench's calls make a piece cache for each call or keep
@@ -348,34 +348,34 @@ one across them, and the package keeps one per thread:
 
 | Tokenizer | Prompts            | C++, own cache | C++, kept cache | Python list | Python array | tiktoken list | tiktoken array |
 |-----------|--------------------|---------------:|----------------:|------------:|-------------:|--------------:|---------------:|
-| gpt2      | 48 bytes at most   |           1.56 |            0.94 |        2.08 |         2.08 |          3.18 |           3.74 |
-| cl100k    | 48 bytes at most   |           1.63 |            1.04 |        2.04 |         2.39 |          3.31 |           3.98 |
-| o200k     | 48 bytes at most   |           1.77 |            1.17 |        1.99 |         2.20 |          2.63 |           3.33 |
-| llama3    | 48 bytes at most   |           1.66 |            1.09 |        1.92 |         3.14 |          2.59 |           3.28 |
-| gpt2      | 100 to 2,000 bytes |          24.23 |           17.39 |       30.31 |        21.77 |         59.02 |          49.70 |
-| cl100k    | 100 to 2,000 bytes |          26.43 |           21.57 |       30.52 |        23.90 |         61.51 |          57.28 |
-| o200k     | 100 to 2,000 bytes |          29.95 |           25.97 |       31.40 |        27.31 |         47.01 |          43.94 |
-| llama3    | 100 to 2,000 bytes |          26.18 |           22.50 |       29.62 |        27.07 |         48.81 |          46.57 |
+| gpt2      | 48 bytes at most   |           1.61 |            0.94 |        2.30 |         2.24 |          3.35 |           3.74 |
+| cl100k    | 48 bytes at most   |           1.72 |            1.08 |        2.09 |         2.35 |          3.33 |           4.02 |
+| o200k     | 48 bytes at most   |           1.85 |            1.17 |        2.14 |         2.25 |          2.62 |           3.62 |
+| llama3    | 48 bytes at most   |           1.70 |            1.10 |        2.01 |         2.25 |          2.67 |           3.63 |
+| gpt2      | 100 to 2,000 bytes |          24.44 |           17.55 |       31.60 |        23.70 |         59.31 |          52.10 |
+| cl100k    | 100 to 2,000 bytes |          26.09 |           20.92 |       32.15 |        25.48 |         62.38 |          57.04 |
+| o200k     | 100 to 2,000 bytes |          29.75 |           26.33 |       33.69 |        28.80 |         50.85 |          47.61 |
+| llama3    | 100 to 2,000 bytes |          27.51 |           23.69 |       30.89 |        27.17 |         49.95 |          45.78 |
 
 One text in parallel, `enwik8` in MiB/s at each number of chunks, `encode_parallel_to_numpy()` as the Python array and
 `encode_parallel()` as the list. The interpreter lock is released while the chunks are encoded, so the array scales with
-the chunks as the C++ call does, at 24 chunks to 84 to 99 percent of its rate, and building the list of 25 to 29 million
+the chunks as the C++ call does, at 24 chunks to 84 to 95 percent of its rate, and building the list of 25 to 29 million
 Python integers is most of the list's time:
 
 | Tokenizer | Call                    |    1 |     2 |     4 |     8 |    12 |    16 |    24 |
 |-----------|-------------------------|-----:|------:|------:|------:|------:|------:|------:|
-| gpt2      | C++ `encode_parallel()` | 52.6 | 106.8 | 205.3 | 382.2 | 459.0 | 530.0 | 624.6 |
-| gpt2      | Python array            | 63.3 | 119.8 | 227.4 | 369.6 | 445.1 | 519.3 | 619.5 |
-| gpt2      | Python list             |    - |     - |     - |     - |     - |     - | 155.3 |
-| cl100k    | C++ `encode_parallel()` | 56.3 | 108.2 | 228.1 | 402.5 | 494.7 | 579.7 | 714.4 |
-| cl100k    | Python array            | 58.5 | 116.4 | 224.6 | 366.8 | 450.5 | 524.7 | 605.3 |
-| cl100k    | Python list             |    - |     - |     - |     - |     - |     - | 164.5 |
-| o200k     | C++ `encode_parallel()` | 56.5 | 110.7 | 204.7 | 363.7 | 450.3 | 526.0 | 631.1 |
-| o200k     | Python array            | 52.0 | 102.4 | 204.5 | 331.8 | 412.0 | 480.1 | 570.7 |
-| o200k     | Python list             |    - |     - |     - |     - |     - |     - | 161.8 |
-| llama3    | C++ `encode_parallel()` | 60.8 | 116.5 | 225.0 | 393.8 | 484.2 | 567.1 | 685.1 |
-| llama3    | Python array            | 56.9 |  99.9 | 201.9 | 342.8 | 409.0 | 494.1 | 572.7 |
-| llama3    | Python list             |    - |     - |     - |     - |     - |     - | 152.9 |
+| gpt2      | C++ `encode_parallel()` | 51.7 |  97.3 | 188.7 | 362.2 | 465.1 | 533.6 | 574.3 |
+| gpt2      | Python array            | 56.9 | 120.2 | 229.2 | 392.9 | 447.5 | 523.2 | 543.0 |
+| gpt2      | Python list             |    - |     - |     - |     - |     - |     - | 142.6 |
+| cl100k    | C++ `encode_parallel()` | 57.8 | 111.8 | 211.2 | 388.5 | 469.4 | 543.7 | 639.2 |
+| cl100k    | Python array            | 56.0 | 106.9 | 210.4 | 361.1 | 446.1 | 496.0 | 559.8 |
+| cl100k    | Python list             |    - |     - |     - |     - |     - |     - | 148.3 |
+| o200k     | C++ `encode_parallel()` | 53.9 | 104.6 | 204.3 | 371.9 | 458.2 | 520.6 | 596.4 |
+| o200k     | Python array            | 51.9 |  96.8 | 193.1 | 327.3 | 392.5 | 460.4 | 504.7 |
+| o200k     | Python list             |    - |     - |     - |     - |     - |     - | 144.9 |
+| llama3    | C++ `encode_parallel()` | 59.0 | 114.4 | 222.4 | 411.3 | 488.4 | 544.9 | 620.3 |
+| llama3    | Python array            | 53.8 |  98.6 | 191.6 | 342.6 | 394.9 | 463.9 | 518.7 |
+| llama3    | Python list             |    - |     - |     - |     - |     - |     - | 144.0 |
 
 The documents of `prompts` as a batch at one and at 24 threads, in MiB/s: matisse_bench's pool, the package's
 `encode_ordinary_batch()` as the list and `encode_batch_to_numpy()` as the array, tiktoken's `encode_ordinary_batch()`,
@@ -386,14 +386,14 @@ threads calling one text at a time scales little under either package:
 
 | Tokenizer | Threads | C++ batch | Python list | Python array | tiktoken | Python pool | tiktoken pool |
 |-----------|--------:|----------:|------------:|-------------:|---------:|------------:|--------------:|
-| gpt2      |       1 |      58.9 |        34.4 |         49.0 |     12.3 |        20.8 |          13.2 |
-| cl100k    |       1 |      48.2 |        36.2 |         45.6 |     11.1 |        19.3 |          12.6 |
-| o200k     |       1 |      39.0 |        32.9 |         36.5 |     13.2 |        18.8 |          14.3 |
-| llama3    |       1 |      42.6 |        36.5 |         42.0 |     12.5 |        18.8 |          15.1 |
-| gpt2      |      24 |     773.7 |       103.7 |        367.1 |     31.5 |        30.1 |          31.6 |
-| cl100k    |      24 |     644.2 |       123.5 |        358.0 |     31.2 |        29.4 |          33.4 |
-| o200k     |      24 |     539.9 |       152.9 |        321.5 |     34.3 |        33.9 |          35.3 |
-| llama3    |      24 |     542.5 |       147.9 |        344.4 |     33.1 |        32.0 |          34.9 |
+| gpt2      |       1 |      58.6 |        34.1 |         47.6 |     11.7 |        20.6 |          12.9 |
+| cl100k    |       1 |      47.1 |        34.7 |         42.1 |     10.1 |        17.7 |          12.6 |
+| o200k     |       1 |      36.8 |        31.7 |         35.9 |     13.0 |        18.5 |          13.0 |
+| llama3    |       1 |      41.0 |        34.2 |         39.8 |     12.2 |        18.9 |          15.0 |
+| gpt2      |      24 |     744.7 |        97.9 |        361.2 |     30.4 |        29.7 |          30.2 |
+| cl100k    |      24 |     609.8 |       117.9 |        327.8 |     30.4 |        30.0 |          32.5 |
+| o200k     |      24 |     509.2 |       150.5 |        319.5 |     32.8 |        32.1 |          31.3 |
+| llama3    |      24 |     512.7 |       140.5 |        323.2 |     33.4 |        33.2 |          34.5 |
 
 The seconds a fresh process takes from its start to an encoding that has encoded one word, the median of seven
 processes: `get_encoding()`, or `load_encoding()` for Llama 3, with the shipped report, `load_encoding()` of the same
@@ -403,19 +403,19 @@ encoder, whose tables [limits.md](limits.md) gives the cost of:
 
 | Tokenizer | Shipped report, s | Report decided, s | tiktoken, s |
 |-----------|------------------:|------------------:|------------:|
-| gpt2      |             0.190 |             0.989 |       0.102 |
-| cl100k    |             0.384 |             2.158 |       0.075 |
-| o200k     |             0.545 |             1.853 |       0.140 |
-| llama3    |             0.524 |             2.236 |           - |
+| gpt2      |             0.202 |             1.090 |       0.113 |
+| cl100k    |             0.439 |             2.221 |       0.076 |
+| o200k     |             0.574 |             2.031 |       0.149 |
+| llama3    |             0.490 |             2.291 |           - |
 
 ## **Performance beside Hugging Face tokenizers**
 
 The figures below set the package beside Hugging Face's tokenizers package, the two reading the same tokenizer.json
-files. They are medians of the passes of one collection, begun on 2026-11-13 and timed on 2026-11-14 at commit 79126be
-by `python/bench/run_tokenizer_json.sh` on the machine above, with Python 3.12.3, tokenizers 0.23.3, tiktoken 0.14.0 and
+files. They are medians of the passes of one collection, run on 2026-11-19 at commit a426728 by
+`python/bench/run_tokenizer_json.sh` on the machine above, with Python 3.12.3, tokenizers 0.23.3, tiktoken 0.14.0 and
 NumPy 2.5.4 installed from PyPI in a virtual environment of their own and matisse-tokenizer built from that commit;
 `machine.txt` among the outputs lists every package of the environment and the SHA-256 of each file read. The outputs
-are kept in `python/bench/results/2026-11-13/`, and `python/bench/tables.py` writes these tables from them. Both
+are kept in `python/bench/results/2026-11-19-json/`, and `python/bench/tables.py` writes these tables from them. Both
 packages read the four pinned tokenizer.json files of [design.md](design.md), each held to its SHA-256 before it is
 read: GPT-2's from openai-community/gpt2 at commit 607a30d783dfa663caf39e06633721c8d4cfcd7e, Xenova's conversions of
 cl100k and o200k from Xenova/gpt-4 at 1d9f1f1b1fae88c0e4df1dab0a397f8de6229075 and Xenova/gpt-4o at
@@ -497,22 +497,22 @@ faster of Hugging Face's two:
 
 | tokenizer.json | Corpus      | Python array | Python list | `encode()` | `encode_batch_fast()` | List over the faster |
 |----------------|-------------|-------------:|------------:|-----------:|----------------------:|---------------------:|
-| gpt2           | `gutenberg` |         68.7 |        55.9 |        2.7 |                   3.9 |                14.3x |
-| cl100k         | `gutenberg` |         69.8 |        57.4 |        2.8 |                   3.7 |                15.5x |
-| o200k          | `gutenberg` |         67.7 |        56.7 |        2.8 |                   3.7 |                15.3x |
-| llama3         | `gutenberg` |         76.7 |        62.8 |        2.9 |                   4.1 |                15.3x |
-| gpt2           | `wiki-ru`   |         81.3 |        51.8 |        2.7 |                   4.4 |                11.8x |
-| cl100k         | `wiki-ru`   |         64.6 |        53.2 |        3.2 |                   4.8 |                11.1x |
-| o200k          | `wiki-ru`   |         54.7 |        49.0 |        3.3 |                   4.7 |                10.4x |
-| llama3         | `wiki-ru`   |         50.6 |        45.2 |        3.4 |                   5.5 |                 8.2x |
-| gpt2           | `wiki-zh`   |         77.7 |        53.6 |        2.8 |                   4.4 |                12.2x |
-| cl100k         | `wiki-zh`   |         71.6 |        50.5 |        3.0 |                   4.8 |                10.5x |
-| o200k          | `wiki-zh`   |         62.1 |        49.9 |        3.1 |                   4.8 |                10.4x |
-| llama3         | `wiki-zh`   |         59.8 |        48.8 |        3.3 |                   5.9 |                 8.3x |
-| gpt2           | `enwik8`    |         57.1 |        47.4 |        2.3 |                   4.0 |                11.8x |
-| cl100k         | `enwik8`    |         55.4 |        47.4 |        2.3 |                   3.8 |                12.5x |
-| o200k          | `enwik8`    |         51.0 |        45.5 |        2.3 |                   3.7 |                12.3x |
-| llama3         | `enwik8`    |         57.5 |        52.6 |        2.3 |                   4.2 |                12.5x |
+| gpt2           | `gutenberg` |         67.1 |        54.5 |        2.7 |                   3.8 |                14.3x |
+| cl100k         | `gutenberg` |         74.0 |        59.5 |        3.0 |                   3.6 |                16.5x |
+| o200k          | `gutenberg` |         68.1 |        57.4 |        2.8 |                   3.8 |                15.1x |
+| llama3         | `gutenberg` |         76.8 |        62.6 |        3.0 |                   4.2 |                14.9x |
+| gpt2           | `wiki-ru`   |         81.1 |        51.5 |        2.7 |                   4.4 |                11.7x |
+| cl100k         | `wiki-ru`   |         67.2 |        54.7 |        3.1 |                   5.2 |                10.5x |
+| o200k          | `wiki-ru`   |         55.5 |        49.5 |        3.4 |                   4.9 |                10.1x |
+| llama3         | `wiki-ru`   |         50.7 |        46.2 |        3.5 |                   5.5 |                 8.4x |
+| gpt2           | `wiki-zh`   |         76.8 |        53.2 |        2.8 |                   4.5 |                11.8x |
+| cl100k         | `wiki-zh`   |         76.3 |        54.3 |        3.3 |                   5.2 |                10.4x |
+| o200k          | `wiki-zh`   |         60.6 |        50.4 |        3.3 |                   4.9 |                10.3x |
+| llama3         | `wiki-zh`   |         60.2 |        47.6 |        3.4 |                   6.3 |                 7.6x |
+| gpt2           | `enwik8`    |         56.5 |        47.6 |        2.3 |                   4.1 |                11.6x |
+| cl100k         | `enwik8`    |         53.0 |        47.5 |        2.3 |                   3.9 |                12.2x |
+| o200k          | `enwik8`    |         50.2 |        46.6 |        2.3 |                   3.8 |                12.3x |
+| llama3         | `enwik8`    |         62.1 |        52.8 |        2.4 |                   4.5 |                11.7x |
 
 One call per prompt on one thread, the mean microseconds of a call, over the 20,000 prompts of `prompts` and over the
 same prompts cut to their first 48 bytes, through the same calls; the last column is the latency of Hugging Face's
@@ -520,14 +520,14 @@ faster call over the package's list:
 
 | tokenizer.json | Prompts            | Python list | Python array | `encode()` | `encode_batch_fast()` | List over the faster |
 |----------------|--------------------|------------:|-------------:|-----------:|----------------------:|---------------------:|
-| gpt2           | 48 bytes at most   |        2.01 |         2.23 |      14.45 |                 13.77 |                 6.9x |
-| cl100k         | 48 bytes at most   |        2.03 |         2.29 |      13.94 |                 12.85 |                 6.3x |
-| o200k          | 48 bytes at most   |        2.32 |         2.72 |      14.15 |                 13.55 |                 5.8x |
-| llama3         | 48 bytes at most   |        2.11 |         3.53 |      12.80 |                 11.87 |                 5.6x |
-| gpt2           | 100 to 2,000 bytes |       30.03 |        21.42 |     370.31 |                330.60 |                11.0x |
-| cl100k         | 100 to 2,000 bytes |       32.03 |        24.54 |     332.44 |                300.87 |                 9.4x |
-| o200k          | 100 to 2,000 bytes |       34.91 |        30.30 |     317.99 |                286.07 |                 8.2x |
-| llama3         | 100 to 2,000 bytes |       35.07 |        30.04 |     302.86 |                257.39 |                 7.3x |
+| gpt2           | 48 bytes at most   |        2.06 |         2.01 |      14.54 |                 13.32 |                 6.5x |
+| cl100k         | 48 bytes at most   |        2.01 |         2.09 |      13.16 |                 12.25 |                 6.1x |
+| o200k          | 48 bytes at most   |        2.25 |         2.65 |      14.28 |                 13.34 |                 5.9x |
+| llama3         | 48 bytes at most   |        2.13 |         2.29 |      12.64 |                 11.76 |                 5.5x |
+| gpt2           | 100 to 2,000 bytes |       30.87 |        21.81 |     348.39 |                312.14 |                10.1x |
+| cl100k         | 100 to 2,000 bytes |       32.00 |        24.15 |     307.72 |                277.29 |                 8.7x |
+| o200k          | 100 to 2,000 bytes |       32.32 |        27.84 |     295.16 |                263.67 |                 8.2x |
+| llama3         | 100 to 2,000 bytes |       35.79 |        30.04 |     287.90 |                243.38 |                 6.8x |
 
 The documents of `prompts` as one batch at one and at 24 threads, in MiB/s: the package's `encode_ordinary_batch()` as
 the list and `encode_batch_to_numpy()` as the array, and Hugging Face's `encode_batch()` and `encode_batch_fast()`, each
@@ -536,21 +536,21 @@ Hugging Face's two:
 
 | tokenizer.json | Threads | Python list | Python array | `encode_batch()` | `encode_batch_fast()` | List over the faster |
 |----------------|--------:|------------:|-------------:|-----------------:|----------------------:|---------------------:|
-| gpt2           |       1 |        37.3 |         50.6 |              3.9 |                   3.8 |                 9.6x |
-| cl100k         |       1 |        36.6 |         46.1 |              4.0 |                   4.0 |                 9.2x |
-| o200k          |       1 |        31.3 |         35.3 |              4.1 |                   4.0 |                 7.6x |
-| llama3         |       1 |        32.6 |         37.8 |              4.4 |                   4.7 |                 6.9x |
-| gpt2           |      24 |       103.4 |        362.1 |             23.3 |                  27.7 |                 3.7x |
-| cl100k         |      24 |       121.9 |        344.2 |             26.7 |                  30.1 |                 4.0x |
-| o200k          |      24 |       139.4 |        295.9 |             30.2 |                  33.4 |                 4.2x |
-| llama3         |      24 |       138.7 |        316.5 |             31.6 |                  35.5 |                 3.9x |
+| gpt2           |       1 |        37.5 |         51.5 |              4.0 |                   4.0 |                 9.4x |
+| cl100k         |       1 |        36.9 |         47.0 |              4.2 |                   4.2 |                 8.8x |
+| o200k          |       1 |        32.8 |         36.9 |              4.1 |                   4.1 |                 8.0x |
+| llama3         |       1 |        33.9 |         38.5 |              4.6 |                   4.9 |                 6.9x |
+| gpt2           |      24 |        94.6 |        333.4 |             22.4 |                  29.2 |                 3.2x |
+| cl100k         |      24 |       120.6 |        353.2 |             26.9 |                  30.8 |                 3.9x |
+| o200k          |      24 |       146.3 |        288.2 |             30.7 |                  34.2 |                 4.3x |
+| llama3         |      24 |       140.7 |        313.1 |             32.5 |                  36.8 |                 3.8x |
 
-On this machine and these files, the package's list of ids comes 8.2 to 15.5 times as fast as Hugging Face's faster call
-on one long text, at 45.2 to 62.8 MiB/s against 3.7 to 5.9, and a prompt of 100 to 2,000 bytes costs it 30.03 to 35.07
-microseconds against Hugging Face's 257.39 to 330.60, 7.3 to 11.0 times less; on the prompts cut to 48 bytes the lead
-narrows to 5.6 to 6.9 times, 2.01 to 2.32 microseconds against 11.87 to 13.77. As one batch the list runs at 6.9 to 9.6
-times Hugging Face's faster call on one thread and at 3.7 to 4.2 times it on 24, where the package's arrays reach 295.9
-to 362.1 MiB/s against Hugging Face's 27.7 to 35.5, which is why the arrays are the calls to use on many threads. The
+On this machine and these files, the package's list of ids comes 7.6 to 16.5 times as fast as Hugging Face's faster call
+on one long text, at 46.2 to 62.6 MiB/s against 3.6 to 6.3, and a prompt of 100 to 2,000 bytes costs it 30.87 to 35.79
+microseconds against Hugging Face's 243.38 to 312.14, 6.8 to 10.1 times less; on the prompts cut to 48 bytes the lead
+narrows to 5.5 to 6.5 times, 2.01 to 2.25 microseconds against 11.76 to 13.34. As one batch the list runs at 6.9 to 9.4
+times Hugging Face's faster call on one thread and at 3.2 to 4.3 times it on 24, where the package's arrays reach 288.2
+to 353.2 MiB/s against Hugging Face's 29.2 to 36.8, which is why the arrays are the calls to use on many threads. The
 figures compare the calls a Python program makes to have the ids of these four files, and no more. Hugging Face's calls
 return an `Encoding` that carries the masks its other features use and, unless `encode_batch_fast()` returns it, the
 tokens' strings and their offsets, none of which the package computes, so the tables measure what each call costs as it

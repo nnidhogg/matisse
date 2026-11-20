@@ -1,0 +1,20 @@
+matisse-py bench
+  matisse-tokenizer  0.1.0
+  tiktoken           0.14.0
+  numpy              2.5.4
+  tokenizers         0.23.3
+  python             3.12.3
+  RAYON_NUM_THREADS  24
+  system             Linux 6.18.58.1-microsoft-standard-WSL2 x86_64
+  processors         24 visible, 24 allowed
+  invocation         bench.py json-batch llm-vocabs gpt2 3 prompts.txt 24
+ids matisse-py gpt2 prompts.txt 10832297 2e52723085d05b2a2e01e4e6356619f1d8d18870e9f80eb13f786f9548580bf1
+ids hf gpt2 prompts.txt 10832297 2e52723085d05b2a2e01e4e6356619f1d8d18870e9f80eb13f786f9548580bf1
+ids matisse-py gpt2 prompts.txt 10832297 2e52723085d05b2a2e01e4e6356619f1d8d18870e9f80eb13f786f9548580bf1
+matisse-py gpt2    json batch x24     prompts.txt                 20.0 MiB,   10832297 tokens, 3 passes: best   100.8, median    94.6, worst    93.8 MiB/s; best  54.59, median  51.21 M tokens/s
+ids matisse-py gpt2 prompts.txt 10832297 2e52723085d05b2a2e01e4e6356619f1d8d18870e9f80eb13f786f9548580bf1
+matisse-py gpt2    json batch numpy x24 prompts.txt                 20.0 MiB,   10832297 tokens, 3 passes: best   346.8, median   333.4, worst   333.4 MiB/s; best 187.83, median 180.55 M tokens/s
+ids hf gpt2 prompts.txt 10832297 2e52723085d05b2a2e01e4e6356619f1d8d18870e9f80eb13f786f9548580bf1
+hf         gpt2    batch x24          prompts.txt                 20.0 MiB,   10832297 tokens, 3 passes: best    22.6, median    22.4, worst    22.4 MiB/s; best  12.23, median  12.15 M tokens/s
+ids hf gpt2 prompts.txt 10832297 2e52723085d05b2a2e01e4e6356619f1d8d18870e9f80eb13f786f9548580bf1
+hf         gpt2    batch fast x24     prompts.txt                 20.0 MiB,   10832297 tokens, 3 passes: best    29.5, median    29.2, worst    26.8 MiB/s; best  15.95, median  15.82 M tokens/s

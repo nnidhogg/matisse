@@ -1,0 +1,20 @@
+matisse-py bench
+  matisse-tokenizer  0.1.0
+  tiktoken           0.14.0
+  numpy              2.5.4
+  tokenizers         0.23.3
+  python             3.12.3
+  RAYON_NUM_THREADS  1
+  system             Linux 6.18.58.1-microsoft-standard-WSL2 x86_64
+  processors         24 visible, 24 allowed
+  invocation         bench.py json-batch llm-vocabs o200k 3 prompts.txt 1
+ids matisse-py o200k prompts.txt 4566270 cba41e7a3fa25f4d46a664cd4c607d5921129872b108177725fdac0ce8e368c7
+ids hf o200k prompts.txt 4566270 cba41e7a3fa25f4d46a664cd4c607d5921129872b108177725fdac0ce8e368c7
+ids matisse-py o200k prompts.txt 4566270 cba41e7a3fa25f4d46a664cd4c607d5921129872b108177725fdac0ce8e368c7
+matisse-py o200k   json batch x1      prompts.txt                 20.0 MiB,    4566270 tokens, 3 passes: best    33.0, median    32.8, worst    32.3 MiB/s; best   7.54, median   7.48 M tokens/s
+ids matisse-py o200k prompts.txt 4566270 cba41e7a3fa25f4d46a664cd4c607d5921129872b108177725fdac0ce8e368c7
+matisse-py o200k   json batch numpy x1 prompts.txt                 20.0 MiB,    4566270 tokens, 3 passes: best    37.1, median    36.9, worst    36.6 MiB/s; best   8.47, median   8.43 M tokens/s
+ids hf o200k prompts.txt 4566270 cba41e7a3fa25f4d46a664cd4c607d5921129872b108177725fdac0ce8e368c7
+hf         o200k   batch x1           prompts.txt                 20.0 MiB,    4566270 tokens, 3 passes: best     4.2, median     4.1, worst     4.1 MiB/s; best   0.95, median   0.94 M tokens/s
+ids hf o200k prompts.txt 4566270 cba41e7a3fa25f4d46a664cd4c607d5921129872b108177725fdac0ce8e368c7
+hf         o200k   batch fast x1      prompts.txt                 20.0 MiB,    4566270 tokens, 3 passes: best     4.2, median     4.1, worst     4.1 MiB/s; best   0.96, median   0.94 M tokens/s

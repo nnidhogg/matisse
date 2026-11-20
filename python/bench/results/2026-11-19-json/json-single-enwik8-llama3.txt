@@ -1,0 +1,20 @@
+matisse-py bench
+  matisse-tokenizer  0.1.0
+  tiktoken           0.14.0
+  numpy              2.5.4
+  tokenizers         0.23.3
+  python             3.12.3
+  RAYON_NUM_THREADS  1
+  system             Linux 6.18.58.1-microsoft-standard-WSL2 x86_64
+  processors         24 visible, 1 allowed
+  invocation         bench.py json-single llm-vocabs llama3 3 enwik8
+ids matisse-py llama3 enwik8 25706310 3fc3bd5e699caaf8956c53b1e3dde1e1bfa9cea39d75454feb1e6c409c073a36
+ids hf llama3 enwik8 25706310 3fc3bd5e699caaf8956c53b1e3dde1e1bfa9cea39d75454feb1e6c409c073a36
+ids matisse-py llama3 enwik8 25706310 3fc3bd5e699caaf8956c53b1e3dde1e1bfa9cea39d75454feb1e6c409c073a36
+matisse-py llama3  json numpy         enwik8                      95.4 MiB,   25706310 tokens, 3 passes: best    63.9, median    62.1, worst    59.4 MiB/s; best  17.22, median  16.74 M tokens/s
+ids matisse-py llama3 enwik8 25706310 3fc3bd5e699caaf8956c53b1e3dde1e1bfa9cea39d75454feb1e6c409c073a36
+matisse-py llama3  json list          enwik8                      95.4 MiB,   25706310 tokens, 3 passes: best    53.3, median    52.8, worst    52.7 MiB/s; best  14.36, median  14.24 M tokens/s
+ids hf llama3 enwik8 25706310 3fc3bd5e699caaf8956c53b1e3dde1e1bfa9cea39d75454feb1e6c409c073a36
+hf         llama3  encode             enwik8                      95.4 MiB,   25706310 tokens, 3 passes: best     2.4, median     2.4, worst     2.4 MiB/s; best   0.65, median   0.65 M tokens/s
+ids hf llama3 enwik8 25706310 3fc3bd5e699caaf8956c53b1e3dde1e1bfa9cea39d75454feb1e6c409c073a36
+hf         llama3  encode fast        enwik8                      95.4 MiB,   25706310 tokens, 3 passes: best     4.6, median     4.5, worst     4.4 MiB/s; best   1.23, median   1.20 M tokens/s

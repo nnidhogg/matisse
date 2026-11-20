@@ -1,0 +1,71 @@
+matisse_bench
+  commit      a426728
+  collected   2026-11-19 23:12:40 UTC
+  compiler    13.3.0
+  system      Linux 6.18.58.1-microsoft-standard-WSL2 x86_64
+  processors  24 visible, 24 allowed
+  invocation  matisse_bench parallel llm-vocabs gpt2,cl100k,o200k,llama3 3 enwik8 1 2 4 8 12 16 24
+ids gpt2 enwik8 29013572 a7e18c6d9ab250b10190b6e80c13942596b024e49552c63e699f056b38b9d53d
+gpt2    encode          enwik8                      95.4 MiB,   29013572 tokens, 3 passes: best    53.5, median    53.4, worst    53.3 MiB/s; best  16.27, median  16.24 M tokens/s
+gpt2    parallel x1     enwik8                      95.4 MiB,   29013572 tokens, 3 passes: best    51.8, median    51.7, worst    51.2 MiB/s; best  15.76, median  15.74 M tokens/s
+gpt2    parallel x1     enwik8                   1 chunks, median speedup 0.97 over encode()
+gpt2    parallel x2     enwik8                      95.4 MiB,   29013572 tokens, 3 passes: best    98.7, median    97.3, worst    96.5 MiB/s; best  30.03, median  29.60 M tokens/s
+gpt2    parallel x2     enwik8                   2 chunks, median speedup 1.82 over encode()
+gpt2    parallel x4     enwik8                      95.4 MiB,   29013572 tokens, 3 passes: best   190.8, median   188.7, worst   188.7 MiB/s; best  58.04, median  57.42 M tokens/s
+gpt2    parallel x4     enwik8                   4 chunks, median speedup 3.54 over encode()
+gpt2    parallel x8     enwik8                      95.4 MiB,   29013572 tokens, 3 passes: best   367.2, median   362.2, worst   345.8 MiB/s; best 111.72, median 110.18 M tokens/s
+gpt2    parallel x8     enwik8                   8 chunks, median speedup 6.78 over encode()
+gpt2    parallel x12    enwik8                      95.4 MiB,   29013572 tokens, 3 passes: best   470.1, median   465.1, worst   453.2 MiB/s; best 143.03, median 141.49 M tokens/s
+gpt2    parallel x12    enwik8                   12 chunks, median speedup 8.71 over encode()
+gpt2    parallel x16    enwik8                      95.4 MiB,   29013572 tokens, 3 passes: best   534.2, median   533.6, worst   527.8 MiB/s; best 162.53, median 162.34 M tokens/s
+gpt2    parallel x16    enwik8                   16 chunks, median speedup 10.00 over encode()
+gpt2    parallel x24    enwik8                      95.4 MiB,   29013572 tokens, 3 passes: best   620.3, median   574.3, worst   503.6 MiB/s; best 188.73, median 174.72 M tokens/s
+gpt2    parallel x24    enwik8                   24 chunks, median speedup 10.76 over encode()
+ids cl100k enwik8 25793085 fc905793ea8efed63d03122c453f1a0f48e062490201b416cb3eacacc1302311
+cl100k  encode          enwik8                      95.4 MiB,   25793085 tokens, 3 passes: best    59.1, median    59.0, worst    58.8 MiB/s; best  15.98, median  15.96 M tokens/s
+cl100k  parallel x1     enwik8                      95.4 MiB,   25793085 tokens, 3 passes: best    58.1, median    57.8, worst    56.8 MiB/s; best  15.72, median  15.62 M tokens/s
+cl100k  parallel x1     enwik8                   1 chunks, median speedup 0.98 over encode()
+cl100k  parallel x2     enwik8                      95.4 MiB,   25793085 tokens, 3 passes: best   113.1, median   111.8, worst   111.8 MiB/s; best  30.59, median  30.23 M tokens/s
+cl100k  parallel x2     enwik8                   2 chunks, median speedup 1.89 over encode()
+cl100k  parallel x4     enwik8                      95.4 MiB,   25793085 tokens, 3 passes: best   217.7, median   211.2, worst   210.6 MiB/s; best  58.87, median  57.13 M tokens/s
+cl100k  parallel x4     enwik8                   4 chunks, median speedup 3.58 over encode()
+cl100k  parallel x8     enwik8                      95.4 MiB,   25793085 tokens, 3 passes: best   390.5, median   388.5, worst   366.1 MiB/s; best 105.61, median 105.06 M tokens/s
+cl100k  parallel x8     enwik8                   8 chunks, median speedup 6.58 over encode()
+cl100k  parallel x12    enwik8                      95.4 MiB,   25793085 tokens, 3 passes: best   471.3, median   469.4, worst   464.9 MiB/s; best 127.48, median 126.94 M tokens/s
+cl100k  parallel x12    enwik8                   12 chunks, median speedup 7.95 over encode()
+cl100k  parallel x16    enwik8                      95.4 MiB,   25793085 tokens, 3 passes: best   559.8, median   543.7, worst   543.1 MiB/s; best 151.40, median 147.06 M tokens/s
+cl100k  parallel x16    enwik8                   16 chunks, median speedup 9.21 over encode()
+cl100k  parallel x24    enwik8                      95.4 MiB,   25793085 tokens, 3 passes: best   643.2, median   639.2, worst   622.9 MiB/s; best 173.95, median 172.87 M tokens/s
+cl100k  parallel x24    enwik8                   24 chunks, median speedup 10.83 over encode()
+ids o200k enwik8 25426300 7de481826895d0084a3bca6376494a2f70f6ff71224e7fb2bcdbee5439631ae1
+o200k   encode          enwik8                      95.4 MiB,   25426300 tokens, 3 passes: best    57.0, median    56.8, worst    55.9 MiB/s; best  15.20, median  15.14 M tokens/s
+o200k   parallel x1     enwik8                      95.4 MiB,   25426300 tokens, 3 passes: best    54.1, median    53.9, worst    53.3 MiB/s; best  14.44, median  14.38 M tokens/s
+o200k   parallel x1     enwik8                   1 chunks, median speedup 0.95 over encode()
+o200k   parallel x2     enwik8                      95.4 MiB,   25426300 tokens, 3 passes: best   106.1, median   104.6, worst   103.2 MiB/s; best  28.29, median  27.88 M tokens/s
+o200k   parallel x2     enwik8                   2 chunks, median speedup 1.84 over encode()
+o200k   parallel x4     enwik8                      95.4 MiB,   25426300 tokens, 3 passes: best   204.5, median   204.3, worst   200.9 MiB/s; best  54.52, median  54.47 M tokens/s
+o200k   parallel x4     enwik8                   4 chunks, median speedup 3.60 over encode()
+o200k   parallel x8     enwik8                      95.4 MiB,   25426300 tokens, 3 passes: best   376.2, median   371.9, worst   366.1 MiB/s; best 100.31, median  99.15 M tokens/s
+o200k   parallel x8     enwik8                   8 chunks, median speedup 6.55 over encode()
+o200k   parallel x12    enwik8                      95.4 MiB,   25426300 tokens, 3 passes: best   459.0, median   458.2, worst   438.1 MiB/s; best 122.39, median 122.15 M tokens/s
+o200k   parallel x12    enwik8                   12 chunks, median speedup 8.07 over encode()
+o200k   parallel x16    enwik8                      95.4 MiB,   25426300 tokens, 3 passes: best   526.6, median   520.6, worst   509.5 MiB/s; best 140.39, median 138.81 M tokens/s
+o200k   parallel x16    enwik8                   16 chunks, median speedup 9.17 over encode()
+o200k   parallel x24    enwik8                      95.4 MiB,   25426300 tokens, 3 passes: best   601.3, median   596.4, worst   576.5 MiB/s; best 160.32, median 159.02 M tokens/s
+o200k   parallel x24    enwik8                   24 chunks, median speedup 10.50 over encode()
+ids llama3 enwik8 25706310 3fc3bd5e699caaf8956c53b1e3dde1e1bfa9cea39d75454feb1e6c409c073a36
+llama3  encode          enwik8                      95.4 MiB,   25706310 tokens, 3 passes: best    60.1, median    57.3, worst    53.7 MiB/s; best  16.20, median  15.43 M tokens/s
+llama3  parallel x1     enwik8                      95.4 MiB,   25706310 tokens, 3 passes: best    59.0, median    59.0, worst    58.7 MiB/s; best  15.92, median  15.89 M tokens/s
+llama3  parallel x1     enwik8                   1 chunks, median speedup 1.03 over encode()
+llama3  parallel x2     enwik8                      95.4 MiB,   25706310 tokens, 3 passes: best   114.7, median   114.4, worst   113.9 MiB/s; best  30.91, median  30.85 M tokens/s
+llama3  parallel x2     enwik8                   2 chunks, median speedup 2.00 over encode()
+llama3  parallel x4     enwik8                      95.4 MiB,   25706310 tokens, 3 passes: best   227.0, median   222.4, worst   221.3 MiB/s; best  61.19, median  59.94 M tokens/s
+llama3  parallel x4     enwik8                   4 chunks, median speedup 3.88 over encode()
+llama3  parallel x8     enwik8                      95.4 MiB,   25706310 tokens, 3 passes: best   419.4, median   411.3, worst   383.4 MiB/s; best 113.04, median 110.88 M tokens/s
+llama3  parallel x8     enwik8                   8 chunks, median speedup 7.18 over encode()
+llama3  parallel x12    enwik8                      95.4 MiB,   25706310 tokens, 3 passes: best   494.5, median   488.4, worst   448.9 MiB/s; best 133.30, median 131.65 M tokens/s
+llama3  parallel x12    enwik8                   12 chunks, median speedup 8.53 over encode()
+llama3  parallel x16    enwik8                      95.4 MiB,   25706310 tokens, 3 passes: best   547.8, median   544.9, worst   544.8 MiB/s; best 147.65, median 146.88 M tokens/s
+llama3  parallel x16    enwik8                   16 chunks, median speedup 9.52 over encode()
+llama3  parallel x24    enwik8                      95.4 MiB,   25706310 tokens, 3 passes: best   645.4, median   620.3, worst   617.3 MiB/s; best 173.96, median 167.20 M tokens/s
+llama3  parallel x24    enwik8                   24 chunks, median speedup 10.83 over encode()

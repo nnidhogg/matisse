@@ -1,0 +1,20 @@
+matisse-py bench
+  matisse-tokenizer  0.1.0
+  tiktoken           0.14.0
+  numpy              2.5.4
+  tokenizers         0.23.3
+  python             3.12.3
+  RAYON_NUM_THREADS  1
+  system             Linux 6.18.58.1-microsoft-standard-WSL2 x86_64
+  processors         24 visible, 1 allowed
+  invocation         bench.py json-single llm-vocabs gpt2 5 wiki-ru.txt
+ids matisse-py gpt2 wiki-ru.txt 2470902 1cff652bf33ba07b6e4899c9d997cc50495d115dda68bf252355a82397080b94
+ids hf gpt2 wiki-ru.txt 2470902 1cff652bf33ba07b6e4899c9d997cc50495d115dda68bf252355a82397080b94
+ids matisse-py gpt2 wiki-ru.txt 2470902 1cff652bf33ba07b6e4899c9d997cc50495d115dda68bf252355a82397080b94
+matisse-py gpt2    json numpy         wiki-ru.txt                  4.0 MiB,    2470902 tokens, 5 passes: best    82.4, median    81.1, worst    79.2 MiB/s; best  50.38, median  49.54 M tokens/s
+ids matisse-py gpt2 wiki-ru.txt 2470902 1cff652bf33ba07b6e4899c9d997cc50495d115dda68bf252355a82397080b94
+matisse-py gpt2    json list          wiki-ru.txt                  4.0 MiB,    2470902 tokens, 5 passes: best    52.3, median    51.5, worst    50.3 MiB/s; best  31.99, median  31.50 M tokens/s
+ids hf gpt2 wiki-ru.txt 2470902 1cff652bf33ba07b6e4899c9d997cc50495d115dda68bf252355a82397080b94
+hf         gpt2    encode             wiki-ru.txt                  4.0 MiB,    2470902 tokens, 5 passes: best     2.7, median     2.7, worst     2.6 MiB/s; best   1.66, median   1.63 M tokens/s
+ids hf gpt2 wiki-ru.txt 2470902 1cff652bf33ba07b6e4899c9d997cc50495d115dda68bf252355a82397080b94
+hf         gpt2    encode fast        wiki-ru.txt                  4.0 MiB,    2470902 tokens, 5 passes: best     4.5, median     4.4, worst     4.3 MiB/s; best   2.74, median   2.69 M tokens/s

@@ -1,0 +1,20 @@
+matisse-py bench
+  matisse-tokenizer  0.1.0
+  tiktoken           0.14.0
+  numpy              2.5.4
+  tokenizers         0.23.3
+  python             3.12.3
+  RAYON_NUM_THREADS  1
+  system             Linux 6.18.58.1-microsoft-standard-WSL2 x86_64
+  processors         24 visible, 1 allowed
+  invocation         bench.py json-single llm-vocabs o200k 5 wiki-zh.txt
+ids matisse-py o200k wiki-zh.txt 1299269 f3b08b0ba50957619314917ebc98cc3b26c9e82f4a09fab530aba5976d56d56e
+ids hf o200k wiki-zh.txt 1299269 f3b08b0ba50957619314917ebc98cc3b26c9e82f4a09fab530aba5976d56d56e
+ids matisse-py o200k wiki-zh.txt 1299269 f3b08b0ba50957619314917ebc98cc3b26c9e82f4a09fab530aba5976d56d56e
+matisse-py o200k   json numpy         wiki-zh.txt                  4.0 MiB,    1299269 tokens, 5 passes: best    63.9, median    60.6, worst    59.9 MiB/s; best  20.70, median  19.63 M tokens/s
+ids matisse-py o200k wiki-zh.txt 1299269 f3b08b0ba50957619314917ebc98cc3b26c9e82f4a09fab530aba5976d56d56e
+matisse-py o200k   json list          wiki-zh.txt                  4.0 MiB,    1299269 tokens, 5 passes: best    50.8, median    50.4, worst    49.9 MiB/s; best  16.45, median  16.33 M tokens/s
+ids hf o200k wiki-zh.txt 1299269 f3b08b0ba50957619314917ebc98cc3b26c9e82f4a09fab530aba5976d56d56e
+hf         o200k   encode             wiki-zh.txt                  4.0 MiB,    1299269 tokens, 5 passes: best     3.3, median     3.3, worst     3.2 MiB/s; best   1.06, median   1.06 M tokens/s
+ids hf o200k wiki-zh.txt 1299269 f3b08b0ba50957619314917ebc98cc3b26c9e82f4a09fab530aba5976d56d56e
+hf         o200k   encode fast        wiki-zh.txt                  4.0 MiB,    1299269 tokens, 5 passes: best     4.9, median     4.9, worst     4.9 MiB/s; best   1.58, median   1.57 M tokens/s

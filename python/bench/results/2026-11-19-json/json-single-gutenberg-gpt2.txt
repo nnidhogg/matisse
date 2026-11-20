@@ -1,0 +1,20 @@
+matisse-py bench
+  matisse-tokenizer  0.1.0
+  tiktoken           0.14.0
+  numpy              2.5.4
+  tokenizers         0.23.3
+  python             3.12.3
+  RAYON_NUM_THREADS  1
+  system             Linux 6.18.58.1-microsoft-standard-WSL2 x86_64
+  processors         24 visible, 1 allowed
+  invocation         bench.py json-single llm-vocabs gpt2 5 gutenberg.txt
+ids matisse-py gpt2 gutenberg.txt 2002145 f8c1359e9260f01b1a1bde0580480b4cac01d8f7c9ca20a8c2443718ed000434
+ids hf gpt2 gutenberg.txt 2002145 f8c1359e9260f01b1a1bde0580480b4cac01d8f7c9ca20a8c2443718ed000434
+ids matisse-py gpt2 gutenberg.txt 2002145 f8c1359e9260f01b1a1bde0580480b4cac01d8f7c9ca20a8c2443718ed000434
+matisse-py gpt2    json numpy         gutenberg.txt                6.9 MiB,    2002145 tokens, 5 passes: best    68.0, median    67.1, worst    66.6 MiB/s; best  19.62, median  19.36 M tokens/s
+ids matisse-py gpt2 gutenberg.txt 2002145 f8c1359e9260f01b1a1bde0580480b4cac01d8f7c9ca20a8c2443718ed000434
+matisse-py gpt2    json list          gutenberg.txt                6.9 MiB,    2002145 tokens, 5 passes: best    55.1, median    54.5, worst    54.3 MiB/s; best  15.92, median  15.72 M tokens/s
+ids hf gpt2 gutenberg.txt 2002145 f8c1359e9260f01b1a1bde0580480b4cac01d8f7c9ca20a8c2443718ed000434
+hf         gpt2    encode             gutenberg.txt                6.9 MiB,    2002145 tokens, 5 passes: best     2.7, median     2.7, worst     2.5 MiB/s; best   0.78, median   0.77 M tokens/s
+ids hf gpt2 gutenberg.txt 2002145 f8c1359e9260f01b1a1bde0580480b4cac01d8f7c9ca20a8c2443718ed000434
+hf         gpt2    encode fast        gutenberg.txt                6.9 MiB,    2002145 tokens, 5 passes: best     3.8, median     3.8, worst     3.7 MiB/s; best   1.11, median   1.09 M tokens/s

@@ -1,0 +1,23 @@
+matisse_bench
+  commit      a426728
+  collected   2026-11-19 23:03:13 UTC
+  compiler    13.3.0
+  system      Linux 6.18.58.1-microsoft-standard-WSL2 x86_64
+  processors  24 visible, 1 allowed
+  invocation  matisse_bench single llm-vocabs gpt2,cl100k,o200k,llama3 3 enwik8
+ids gpt2 enwik8 29013572 a7e18c6d9ab250b10190b6e80c13942596b024e49552c63e699f056b38b9d53d
+gpt2    encode          enwik8                      95.4 MiB,   29013572 tokens, 3 passes: best    53.1, median    53.0, worst    52.7 MiB/s; best  16.15, median  16.12 M tokens/s
+gpt2    encode no cache enwik8                      95.4 MiB,   29013572 tokens, 3 passes: best    36.6, median    36.6, worst    36.6 MiB/s; best  11.14, median  11.13 M tokens/s
+gpt2    segment         enwik8                      95.4 MiB,   23311160 pieces, 3 passes: best   165.1, median   164.1, worst   164.0 MiB/s; best  40.35, median  40.10 M pieces/s
+ids cl100k enwik8 25793085 fc905793ea8efed63d03122c453f1a0f48e062490201b416cb3eacacc1302311
+cl100k  encode          enwik8                      95.4 MiB,   25793085 tokens, 3 passes: best    59.4, median    59.1, worst    56.9 MiB/s; best  16.06, median  16.00 M tokens/s
+cl100k  encode no cache enwik8                      95.4 MiB,   25793085 tokens, 3 passes: best    57.5, median    57.2, worst    55.3 MiB/s; best  15.56, median  15.47 M tokens/s
+cl100k  segment         enwik8                      95.4 MiB,   21676486 pieces, 3 passes: best   171.6, median   171.4, worst   171.3 MiB/s; best  39.01, median  38.95 M pieces/s
+ids o200k enwik8 25426300 7de481826895d0084a3bca6376494a2f70f6ff71224e7fb2bcdbee5439631ae1
+o200k   encode          enwik8                      95.4 MiB,   25426300 tokens, 3 passes: best    53.7, median    52.9, worst    52.0 MiB/s; best  14.32, median  14.09 M tokens/s
+o200k   encode no cache enwik8                      95.4 MiB,   25426300 tokens, 3 passes: best    52.9, median    52.7, worst    52.5 MiB/s; best  14.11, median  14.05 M tokens/s
+o200k   segment         enwik8                      95.4 MiB,   21637702 pieces, 3 passes: best   170.6, median   169.8, worst   168.6 MiB/s; best  38.70, median  38.52 M pieces/s
+ids llama3 enwik8 25706310 3fc3bd5e699caaf8956c53b1e3dde1e1bfa9cea39d75454feb1e6c409c073a36
+llama3  encode          enwik8                      95.4 MiB,   25706310 tokens, 3 passes: best    57.8, median    57.0, worst    56.9 MiB/s; best  15.58, median  15.38 M tokens/s
+llama3  encode no cache enwik8                      95.4 MiB,   25706310 tokens, 3 passes: best    58.2, median    58.0, worst    57.6 MiB/s; best  15.68, median  15.64 M tokens/s
+llama3  segment         enwik8                      95.4 MiB,   21676486 pieces, 3 passes: best   171.8, median   170.9, worst   170.5 MiB/s; best  39.04, median  38.84 M pieces/s

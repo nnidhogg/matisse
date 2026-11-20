@@ -1,0 +1,20 @@
+matisse-py bench
+  matisse-tokenizer  0.1.0
+  tiktoken           0.14.0
+  numpy              2.5.4
+  tokenizers         0.23.3
+  python             3.12.3
+  RAYON_NUM_THREADS  1
+  system             Linux 6.18.58.1-microsoft-standard-WSL2 x86_64
+  processors         24 visible, 1 allowed
+  invocation         bench.py json-single llm-vocabs cl100k 5 gutenberg.txt
+ids matisse-py cl100k gutenberg.txt 1708273 9c925a5984d22eb7dbb8408b897f612f0a345931605a822aab52c480382c21ea
+ids hf cl100k gutenberg.txt 1708273 9c925a5984d22eb7dbb8408b897f612f0a345931605a822aab52c480382c21ea
+ids matisse-py cl100k gutenberg.txt 1708273 9c925a5984d22eb7dbb8408b897f612f0a345931605a822aab52c480382c21ea
+matisse-py cl100k  json numpy         gutenberg.txt                6.9 MiB,    1708273 tokens, 5 passes: best    74.7, median    74.0, worst    72.4 MiB/s; best  18.40, median  18.22 M tokens/s
+ids matisse-py cl100k gutenberg.txt 1708273 9c925a5984d22eb7dbb8408b897f612f0a345931605a822aab52c480382c21ea
+matisse-py cl100k  json list          gutenberg.txt                6.9 MiB,    1708273 tokens, 5 passes: best    60.9, median    59.5, worst    57.0 MiB/s; best  15.01, median  14.66 M tokens/s
+ids hf cl100k gutenberg.txt 1708273 9c925a5984d22eb7dbb8408b897f612f0a345931605a822aab52c480382c21ea
+hf         cl100k  encode             gutenberg.txt                6.9 MiB,    1708273 tokens, 5 passes: best     3.0, median     3.0, worst     2.8 MiB/s; best   0.75, median   0.73 M tokens/s
+ids hf cl100k gutenberg.txt 1708273 9c925a5984d22eb7dbb8408b897f612f0a345931605a822aab52c480382c21ea
+hf         cl100k  encode fast        gutenberg.txt                6.9 MiB,    1708273 tokens, 5 passes: best     3.9, median     3.6, worst     3.6 MiB/s; best   0.96, median   0.89 M tokens/s

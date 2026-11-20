@@ -1,0 +1,58 @@
+matisse-py bench
+  matisse-tokenizer  0.1.0
+  tiktoken           0.14.0
+  numpy              2.5.4
+  tokenizers         0.23.3
+  python             3.12.3
+  RAYON_NUM_THREADS  unset
+  system             Linux 6.18.58.1-microsoft-standard-WSL2 x86_64
+  processors         24 visible, 1 allowed
+  invocation         bench.py single llm-vocabs gpt2,cl100k,o200k,llama3 5 gutenberg.txt
+ids matisse-py gpt2 gutenberg.txt 2002145 f8c1359e9260f01b1a1bde0580480b4cac01d8f7c9ca20a8c2443718ed000434
+matisse-py gpt2    encode fresh       gutenberg.txt                6.9 MiB,    2002145 tokens, 5 passes: best    64.0, median    63.9, worst    62.1 MiB/s; best  18.46, median  18.44 M tokens/s
+ids matisse-py gpt2 gutenberg.txt 2002145 f8c1359e9260f01b1a1bde0580480b4cac01d8f7c9ca20a8c2443718ed000434
+matisse-py gpt2    encode cached      gutenberg.txt                6.9 MiB,    2002145 tokens, 5 passes: best    67.0, median    66.8, worst    66.1 MiB/s; best  19.35, median  19.30 M tokens/s
+ids matisse-py gpt2 gutenberg.txt 2002145 f8c1359e9260f01b1a1bde0580480b4cac01d8f7c9ca20a8c2443718ed000434
+matisse-py gpt2    numpy fresh        gutenberg.txt                6.9 MiB,    2002145 tokens, 5 passes: best    79.9, median    76.7, worst    72.8 MiB/s; best  23.06, median  22.15 M tokens/s
+ids matisse-py gpt2 gutenberg.txt 2002145 f8c1359e9260f01b1a1bde0580480b4cac01d8f7c9ca20a8c2443718ed000434
+matisse-py gpt2    numpy cached       gutenberg.txt                6.9 MiB,    2002145 tokens, 5 passes: best    86.4, median    85.2, worst    84.2 MiB/s; best  24.95, median  24.60 M tokens/s
+ids tiktoken gpt2 gutenberg.txt 2002145 f8c1359e9260f01b1a1bde0580480b4cac01d8f7c9ca20a8c2443718ed000434
+tiktoken   gpt2    encode             gutenberg.txt                6.9 MiB,    2002145 tokens, 5 passes: best    24.3, median    24.1, worst    23.6 MiB/s; best   7.01, median   6.97 M tokens/s
+ids tiktoken gpt2 gutenberg.txt 2002145 f8c1359e9260f01b1a1bde0580480b4cac01d8f7c9ca20a8c2443718ed000434
+tiktoken   gpt2    numpy              gutenberg.txt                6.9 MiB,    2002145 tokens, 5 passes: best    26.0, median    25.6, worst    25.2 MiB/s; best   7.49, median   7.38 M tokens/s
+ids matisse-py cl100k gutenberg.txt 1708273 9c925a5984d22eb7dbb8408b897f612f0a345931605a822aab52c480382c21ea
+matisse-py cl100k  encode fresh       gutenberg.txt                6.9 MiB,    1708273 tokens, 5 passes: best    66.4, median    65.3, worst    61.5 MiB/s; best  16.35, median  16.08 M tokens/s
+ids matisse-py cl100k gutenberg.txt 1708273 9c925a5984d22eb7dbb8408b897f612f0a345931605a822aab52c480382c21ea
+matisse-py cl100k  encode cached      gutenberg.txt                6.9 MiB,    1708273 tokens, 5 passes: best    68.1, median    66.4, worst    65.7 MiB/s; best  16.78, median  16.35 M tokens/s
+ids matisse-py cl100k gutenberg.txt 1708273 9c925a5984d22eb7dbb8408b897f612f0a345931605a822aab52c480382c21ea
+matisse-py cl100k  numpy fresh        gutenberg.txt                6.9 MiB,    1708273 tokens, 5 passes: best    79.5, median    79.4, worst    73.9 MiB/s; best  19.59, median  19.55 M tokens/s
+ids matisse-py cl100k gutenberg.txt 1708273 9c925a5984d22eb7dbb8408b897f612f0a345931605a822aab52c480382c21ea
+matisse-py cl100k  numpy cached       gutenberg.txt                6.9 MiB,    1708273 tokens, 5 passes: best    85.3, median    83.2, worst    82.1 MiB/s; best  21.02, median  20.50 M tokens/s
+ids tiktoken cl100k gutenberg.txt 1708273 9c925a5984d22eb7dbb8408b897f612f0a345931605a822aab52c480382c21ea
+tiktoken   cl100k  encode             gutenberg.txt                6.9 MiB,    1708273 tokens, 5 passes: best    24.3, median    23.9, worst    23.2 MiB/s; best   5.97, median   5.89 M tokens/s
+ids tiktoken cl100k gutenberg.txt 1708273 9c925a5984d22eb7dbb8408b897f612f0a345931605a822aab52c480382c21ea
+tiktoken   cl100k  numpy              gutenberg.txt                6.9 MiB,    1708273 tokens, 5 passes: best    26.1, median    25.7, worst    25.2 MiB/s; best   6.43, median   6.32 M tokens/s
+ids matisse-py o200k gutenberg.txt 1695829 f561e9d7ea3cf117591bc9b806e39bb094e378068728065e3c512eb992816e08
+matisse-py o200k   encode fresh       gutenberg.txt                6.9 MiB,    1695829 tokens, 5 passes: best    64.2, median    63.2, worst    60.7 MiB/s; best  15.70, median  15.46 M tokens/s
+ids matisse-py o200k gutenberg.txt 1695829 f561e9d7ea3cf117591bc9b806e39bb094e378068728065e3c512eb992816e08
+matisse-py o200k   encode cached      gutenberg.txt                6.9 MiB,    1695829 tokens, 5 passes: best    66.7, median    65.5, worst    61.2 MiB/s; best  16.31, median  16.03 M tokens/s
+ids matisse-py o200k gutenberg.txt 1695829 f561e9d7ea3cf117591bc9b806e39bb094e378068728065e3c512eb992816e08
+matisse-py o200k   numpy fresh        gutenberg.txt                6.9 MiB,    1695829 tokens, 5 passes: best    77.7, median    77.3, worst    72.8 MiB/s; best  18.99, median  18.91 M tokens/s
+ids matisse-py o200k gutenberg.txt 1695829 f561e9d7ea3cf117591bc9b806e39bb094e378068728065e3c512eb992816e08
+matisse-py o200k   numpy cached       gutenberg.txt                6.9 MiB,    1695829 tokens, 5 passes: best    81.9, median    81.2, worst    78.0 MiB/s; best  20.02, median  19.84 M tokens/s
+ids tiktoken o200k gutenberg.txt 1695829 f561e9d7ea3cf117591bc9b806e39bb094e378068728065e3c512eb992816e08
+tiktoken   o200k   encode             gutenberg.txt                6.9 MiB,    1695829 tokens, 5 passes: best    35.7, median    35.5, worst    33.6 MiB/s; best   8.74, median   8.67 M tokens/s
+ids tiktoken o200k gutenberg.txt 1695829 f561e9d7ea3cf117591bc9b806e39bb094e378068728065e3c512eb992816e08
+tiktoken   o200k   numpy              gutenberg.txt                6.9 MiB,    1695829 tokens, 5 passes: best    39.5, median    39.0, worst    35.5 MiB/s; best   9.67, median   9.54 M tokens/s
+ids matisse-py llama3 gutenberg.txt 1706691 96bf65b9a9a7e608664af5a1730be923e7350d71e4bcbfa8a26f92a051769183
+matisse-py llama3  encode fresh       gutenberg.txt                6.9 MiB,    1706691 tokens, 5 passes: best    64.6, median    63.4, worst    62.8 MiB/s; best  15.90, median  15.59 M tokens/s
+ids matisse-py llama3 gutenberg.txt 1706691 96bf65b9a9a7e608664af5a1730be923e7350d71e4bcbfa8a26f92a051769183
+matisse-py llama3  encode cached      gutenberg.txt                6.9 MiB,    1706691 tokens, 5 passes: best    68.0, median    66.4, worst    65.7 MiB/s; best  16.74, median  16.33 M tokens/s
+ids matisse-py llama3 gutenberg.txt 1706691 96bf65b9a9a7e608664af5a1730be923e7350d71e4bcbfa8a26f92a051769183
+matisse-py llama3  numpy fresh        gutenberg.txt                6.9 MiB,    1706691 tokens, 5 passes: best    80.5, median    78.7, worst    73.8 MiB/s; best  19.80, median  19.36 M tokens/s
+ids matisse-py llama3 gutenberg.txt 1706691 96bf65b9a9a7e608664af5a1730be923e7350d71e4bcbfa8a26f92a051769183
+matisse-py llama3  numpy cached       gutenberg.txt                6.9 MiB,    1706691 tokens, 5 passes: best    84.0, median    83.5, worst    82.3 MiB/s; best  20.67, median  20.54 M tokens/s
+ids tiktoken llama3 gutenberg.txt 1706691 96bf65b9a9a7e608664af5a1730be923e7350d71e4bcbfa8a26f92a051769183
+tiktoken   llama3  encode             gutenberg.txt                6.9 MiB,    1706691 tokens, 5 passes: best    33.1, median    32.1, worst    31.3 MiB/s; best   8.14, median   7.91 M tokens/s
+ids tiktoken llama3 gutenberg.txt 1706691 96bf65b9a9a7e608664af5a1730be923e7350d71e4bcbfa8a26f92a051769183
+tiktoken   llama3  numpy              gutenberg.txt                6.9 MiB,    1706691 tokens, 5 passes: best    36.3, median    35.4, worst    33.9 MiB/s; best   8.92, median   8.71 M tokens/s

@@ -1,0 +1,23 @@
+matisse_bench
+  commit      a426728
+  collected   2026-11-19 23:16:39 UTC
+  compiler    13.3.0
+  system      Linux 6.18.58.1-microsoft-standard-WSL2 x86_64
+  processors  24 visible, 24 allowed
+  invocation  matisse_bench batch llm-vocabs gpt2,cl100k,o200k,llama3 3 prompts.txt 1 24
+ids gpt2 prompts.txt 10832297 2e52723085d05b2a2e01e4e6356619f1d8d18870e9f80eb13f786f9548580bf1
+gpt2    batch           prompts.txt              20000 documents
+gpt2    batch x1        prompts.txt                 20.0 MiB,   10832297 tokens, 3 passes: best    58.6, median    58.6, worst    54.7 MiB/s; best  31.75, median  31.73 M tokens/s
+gpt2    batch x24       prompts.txt                 20.0 MiB,   10832297 tokens, 3 passes: best   768.3, median   744.7, worst   669.1 MiB/s; best 416.08, median 403.30 M tokens/s
+ids cl100k prompts.txt 7202788 88674a5751d4bea4470490c4561cf9ade97e13839097ca542196bcefb7400bca
+cl100k  batch           prompts.txt              20000 documents
+cl100k  batch x1        prompts.txt                 20.0 MiB,    7202788 tokens, 3 passes: best    47.5, median    47.1, worst    46.8 MiB/s; best  17.10, median  16.98 M tokens/s
+cl100k  batch x24       prompts.txt                 20.0 MiB,    7202788 tokens, 3 passes: best   621.4, median   609.8, worst   608.9 MiB/s; best 223.76, median 219.61 M tokens/s
+ids o200k prompts.txt 4566270 cba41e7a3fa25f4d46a664cd4c607d5921129872b108177725fdac0ce8e368c7
+o200k   batch           prompts.txt              20000 documents
+o200k   batch x1        prompts.txt                 20.0 MiB,    4566270 tokens, 3 passes: best    36.8, median    36.8, worst    36.3 MiB/s; best   8.41, median   8.40 M tokens/s
+o200k   batch x24       prompts.txt                 20.0 MiB,    4566270 tokens, 3 passes: best   514.6, median   509.2, worst   493.9 MiB/s; best 117.49, median 116.26 M tokens/s
+ids llama3 prompts.txt 5142480 2fc5ecf962ed0d2cc229aa7948c14a58427e270505fe018561ffc43f7872352c
+llama3  batch           prompts.txt              20000 documents
+llama3  batch x1        prompts.txt                 20.0 MiB,    5142480 tokens, 3 passes: best    41.4, median    41.0, worst    40.4 MiB/s; best  10.64, median  10.53 M tokens/s
+llama3  batch x24       prompts.txt                 20.0 MiB,    5142480 tokens, 3 passes: best   513.0, median   512.7, worst   511.9 MiB/s; best 131.90, median 131.81 M tokens/s

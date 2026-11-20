@@ -1,0 +1,20 @@
+matisse-py bench
+  matisse-tokenizer  0.1.0
+  tiktoken           0.14.0
+  numpy              2.5.4
+  tokenizers         0.23.3
+  python             3.12.3
+  RAYON_NUM_THREADS  1
+  system             Linux 6.18.58.1-microsoft-standard-WSL2 x86_64
+  processors         24 visible, 1 allowed
+  invocation         bench.py json-single llm-vocabs o200k 5 wiki-ru.txt
+ids matisse-py o200k wiki-ru.txt 709178 9b243bc017b9b6f62449eee4bde696ecb6d32ec2db90114b6ca4a0cd4d684713
+ids hf o200k wiki-ru.txt 709178 9b243bc017b9b6f62449eee4bde696ecb6d32ec2db90114b6ca4a0cd4d684713
+ids matisse-py o200k wiki-ru.txt 709178 9b243bc017b9b6f62449eee4bde696ecb6d32ec2db90114b6ca4a0cd4d684713
+matisse-py o200k   json numpy         wiki-ru.txt                  4.0 MiB,     709178 tokens, 5 passes: best    56.7, median    55.5, worst    54.1 MiB/s; best   9.94, median   9.74 M tokens/s
+ids matisse-py o200k wiki-ru.txt 709178 9b243bc017b9b6f62449eee4bde696ecb6d32ec2db90114b6ca4a0cd4d684713
+matisse-py o200k   json list          wiki-ru.txt                  4.0 MiB,     709178 tokens, 5 passes: best    50.4, median    49.5, worst    49.3 MiB/s; best   8.85, median   8.69 M tokens/s
+ids hf o200k wiki-ru.txt 709178 9b243bc017b9b6f62449eee4bde696ecb6d32ec2db90114b6ca4a0cd4d684713
+hf         o200k   encode             wiki-ru.txt                  4.0 MiB,     709178 tokens, 5 passes: best     3.5, median     3.4, worst     3.4 MiB/s; best   0.61, median   0.60 M tokens/s
+ids hf o200k wiki-ru.txt 709178 9b243bc017b9b6f62449eee4bde696ecb6d32ec2db90114b6ca4a0cd4d684713
+hf         o200k   encode fast        wiki-ru.txt                  4.0 MiB,     709178 tokens, 5 passes: best     4.9, median     4.9, worst     4.6 MiB/s; best   0.86, median   0.85 M tokens/s
