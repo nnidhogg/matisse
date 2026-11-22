@@ -1,5 +1,5 @@
 matisse_bench
-  commit      a426728
+  commit      41aeafb
   collected   2026-11-19 23:02:00 UTC
   compiler    13.3.0
   system      Linux 6.18.58.1-microsoft-standard-WSL2 x86_64

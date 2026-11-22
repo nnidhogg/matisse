@@ -283,7 +283,7 @@ buffer, scales with the encoding itself, as the batch tables under Performance s
 
 ## **Performance**
 
-Every figure below is a median of the passes of one collection, run on 2026-11-19 at commit a426728 by
+Every figure below is a median of the passes of one collection, run on 2026-11-19 at commit 41aeafb by
 `python/bench/run.sh` on the machine of [benchmarks.md](benchmarks.md), an i9-12900K whose 24 logical processors WSL2
 shows, with Python 3.12.3, tiktoken 0.14.0 and NumPy 2.5.4. The outputs are kept in `python/bench/results/2026-11-19/`,
 and `python/bench/tables.py` writes these tables from them. The C++ rows are matisse_bench's, the Python rows
@@ -411,7 +411,7 @@ encoder, whose tables [limits.md](limits.md) gives the cost of:
 ## **Performance beside Hugging Face tokenizers**
 
 The figures below set the package beside Hugging Face's tokenizers package, the two reading the same tokenizer.json
-files. They are medians of the passes of one collection, run on 2026-11-19 at commit a426728 by
+files. They are medians of the passes of one collection, run on 2026-11-19 at commit 41aeafb by
 `python/bench/run_tokenizer_json.sh` on the machine above, with Python 3.12.3, tokenizers 0.23.3, tiktoken 0.14.0 and
 NumPy 2.5.4 installed from PyPI in a virtual environment of their own and matisse-tokenizer built from that commit;
 `machine.txt` among the outputs lists every package of the environment and the SHA-256 of each file read. The outputs
