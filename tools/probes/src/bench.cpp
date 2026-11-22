@@ -83,12 +83,12 @@ using matisse::validate::Inventory;
 /**
  * @brief The ids of a text.
  */
-using Ids = std::vector<Token_id_t>;
+using Ids_t = std::vector<Token_id_t>;
 
 /**
  * @brief The ids of each document of a batch, in the documents' order.
  */
-using Batch_ids = std::vector<Ids>;
+using Batch_ids_t = std::vector<Ids_t>;
 
 /**
  * @brief The SHA-256 of GPT-2's encoder.json as pinned, gpt2-vocab.json in the vocabulary directory.
@@ -235,7 +235,7 @@ struct Prompt_timing
     /**
      * @brief The ids of each prompt in the first pass, which every timed pass reproduces.
      */
-    Batch_ids first{};
+    Batch_ids_t first{};
 
     /**
      * @brief The timed passes in seconds, each the sum of its calls, ascending.
@@ -655,10 +655,10 @@ void print_ids(const std::string_view tokenizer, const std::string_view input, c
  * @param text The text.
  * @return The ids.
  */
-Ids uncached_ids(
+Ids_t uncached_ids(
         const matisse::encode::Merger& merger, const matisse::pretok::Segmenter& segmenter, const std::string_view text)
 {
-    Ids ids{};
+    Ids_t ids{};
 
     std::size_t start{0};
 
@@ -737,9 +737,9 @@ std::size_t bytes_of(const std::span<const std::string_view> parts)
  * @param encoded The ids of each document.
  * @return The ids.
  */
-Ids concatenated(const std::span<const Ids> encoded)
+Ids_t concatenated(const std::span<const Ids_t> encoded)
 {
-    Ids all{};
+    Ids_t all{};
 
     for (const auto& document_ids : encoded)
     {
@@ -765,7 +765,7 @@ Prompt_timing time_prompts(
     std::vector<double> latencies{};
 
     const auto encode_all{[&](const bool timed_pass) {
-        Batch_ids encoded{};
+        Batch_ids_t encoded{};
 
         encoded.reserve(prompts.size());
 
@@ -832,7 +832,7 @@ void print_prompt_rows(
 {
     const auto& [first, seconds, latencies]{timing};
 
-    const auto sizes{first | std::views::transform(&Ids::size)};
+    const auto sizes{first | std::views::transform(&Ids_t::size)};
 
     const auto tokens{std::ranges::fold_left(sizes, 0UZ, std::plus{})};
 
@@ -975,10 +975,10 @@ void run_parallel(
  * @throws std::invalid_argument If a document is not well-formed UTF-8, the first refusal rethrown once every thread
  *         has joined.
  */
-Batch_ids encode_batch(
+Batch_ids_t encode_batch(
         const Encoder& encoder, const std::span<const std::string_view> documents, const std::size_t threads)
 {
-    Batch_ids encoded(documents.size());
+    Batch_ids_t encoded(documents.size());
 
     std::atomic<std::size_t> next{0};
 
@@ -1041,7 +1041,7 @@ void run_batch(
         const std::span<const std::string_view> documents, const std::size_t passes,
         const std::span<const std::size_t> threads)
 {
-    Batch_ids serial{};
+    Batch_ids_t serial{};
 
     serial.reserve(documents.size());
 
@@ -1077,11 +1077,11 @@ void run_batch(
  * @param size The bytes of a push, the last push taking what is left.
  * @return The ids.
  */
-Ids streamed(const Encoder& encoder, const std::string_view text, const std::size_t size)
+Ids_t streamed(const Encoder& encoder, const std::string_view text, const std::size_t size)
 {
     matisse::encode::Stream_encoder stream{encoder};
 
-    Ids ids{};
+    Ids_t ids{};
 
     for (std::size_t at{0}; at < text.size(); at += size)
     {
