@@ -26,10 +26,10 @@
  * prefix final for the bytes before them, and the ids can lag by more than the held bytes: with `<|endoftext|>`
  * allowed, a word followed by `<` stays an open piece whose ids are held until the bytes after it show whether the `<`
  * begins the special token; while they end inside a UTF-8 sequence, its bytes are held and not classed until a later
- * push or finish() completes it, so that a push returns the longest prefix final for the code points before it, even
- * where an id of those bytes is final under every completion, as a byte's own id is when no token of two or more bytes
- * begins with it; and inside a piece the continuations a stable id is held against are all byte strings, where the
- * pattern allows fewer.
+ * push completes it (finish() refuses a sequence still incomplete), so that a push returns the longest prefix final
+ * for the code points before it, even where an id of those bytes is final under every completion, as a byte's own id
+ * is when no token of two or more bytes begins with it; and inside a piece the continuations a stable id is held
+ * against are all byte strings, where the pattern allows fewer.
  *
  * The encoding has three layers, each exact at its level. A special token's occurrence is committed once no proper
  * prefix of an allowed spelling begins at or before it in the bytes read after the special tokens already cut out, and
