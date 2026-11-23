@@ -30,12 +30,12 @@ tables, and the runtime with its token ids, normalizers and special-token cuts.
 
 ## **Status**
 
-The version is 1.0.0, the first release, and matisse depends on munch 3.2.0, the release its submodule is pinned to. It
-loads GPT-2's encoder.json and vocab.bpe, tiktoken rank files and Hugging Face tokenizer.json files, and it encodes text
-under GPT-2, cl100k_base, o200k_base and Llama 3 sequentially, in parallel at certified cuts and as a stream, with the
-vendors' special tokens cut out where they are allowed, and decodes ids back to bytes; validate decides each pattern's
-certified windows and those of a byte-level merge table without a pre-tokenizer, and `matisse-validate` reports them for
-a rank file or a tokenizer.json. The ids are held to the vendors' on pinned vocabularies, fixtures and corpora, with the
+The version is 2.0.0, and matisse depends on munch 3.2.0, the release its submodule is pinned to. It loads GPT-2's
+encoder.json and vocab.bpe, tiktoken rank files and Hugging Face tokenizer.json files, and it encodes text under GPT-2,
+cl100k_base, o200k_base and Llama 3 sequentially, in parallel at certified cuts and as a stream, with the vendors'
+special tokens cut out where they are allowed, and decodes ids back to bytes; validate decides each pattern's certified
+windows and those of a byte-level merge table without a pre-tokenizer, and `matisse-validate` reports them for a rank
+file or a tokenizer.json. The ids are held to the vendors' on pinned vocabularies, fixtures and corpora, with the
 classes of code points pinned to Unicode 16.0.0, tiktoken's version. How the libraries fit together and the decisions
 behind them are in [docs/design.md](docs/design.md), how each is called is in [docs/usage.md](docs/usage.md), and what
 every call guarantees is in [docs/limits.md](docs/limits.md).
