@@ -4,17 +4,24 @@ matisse-tokenizer is matisse's Python package, imported as `matisse_tokenizer`, 
 encoder behind tiktoken's interface for GPT-2, cl100k_base, o200k_base and Llama 3, so that a program written against
 tiktoken runs on matisse by its import, and its ids are tiktoken's, held to them by the tests below. matisse's class
 tables are pinned to Unicode 16.0.0, the version of the tables tiktoken 0.14.0's regex engine reads, so the two class
-every code point alike, as [limits.md](limits.md) describes; a tiktoken whose tables move past that version fails the
-package's tests. Where matisse cannot do what tiktoken does, the package refuses with an error that says so, and this
-page lists every such place. How the encoder works is in [design.md](design.md), what it guarantees in
-[limits.md](limits.md), and the C++ interface in [usage.md](usage.md).
+every code point alike, as [limits.md](https://github.com/nnidhogg/matisse/blob/master/docs/limits.md) describes; a
+tiktoken whose tables move past that version fails the package's tests. Where matisse cannot do what tiktoken does, the
+package refuses with an error that says so, and this page lists every such place. How the encoder works is in
+[design.md](https://github.com/nnidhogg/matisse/blob/master/docs/design.md), what it guarantees in
+[limits.md](https://github.com/nnidhogg/matisse/blob/master/docs/limits.md), and the C++ interface in
+[usage.md](https://github.com/nnidhogg/matisse/blob/master/docs/usage.md).
 
 ## **Installing and building**
 
 The package needs CPython 3.12 or later. A wheel is built against the stable ABI of Python 3.12, so one wheel serves
 every later CPython on its platform; free-threaded builds of CPython are not served, since the stable ABI does not cover
 them. NumPy is needed only by the calls that return arrays, `encode_to_numpy()`, `encode_batch_to_numpy()` and
-`encode_parallel_to_numpy()`, and is the extra `numpy`.
+`encode_parallel_to_numpy()`, and is the extra `numpy`. The package is installed from PyPI:
+
+```bash
+pip install matisse-tokenizer
+pip install "matisse-tokenizer[numpy]"
+```
 
 The build is scikit-build-core with nanobind, both pinned in `pyproject.toml`, over the CMake build of the libraries.
 `pyproject.toml` stands at the root of the repository, not under `python/`, because the extension module builds from the
@@ -22,9 +29,9 @@ root project's libraries and the munch and hopper submodules, and an sdist made 
 them. The package's own sources are under `python/`: `python/matisse_tokenizer/` the Python modules, `python/src/` the
 module's C++, `python/tests/` the tests and `python/bench/` the bench. The root `CMakeLists.txt` adds `python/` under
 the option `MATISSE_BUILD_PYTHON`, which `pyproject.toml` turns on and which builds every library as
-position-independent code; nothing else in the libraries changes. A build from source needs what the libraries need, a
-C++23 compiler, GCC 13 or Clang 19 or later, and CMake, and it fetches Boost's header-only modules as munch's build
-does:
+position-independent code; nothing else in the libraries changes. A build from source, which pip makes from the sdist on
+a platform no wheel serves, needs what the libraries need, a C++23 compiler, GCC 13 or Clang 19 or later, and CMake, and
+it fetches Boost's header-only modules and mdspan as munch's build does:
 
 ```bash
 git clone --recurse-submodules https://github.com/nnidhogg/matisse
@@ -33,11 +40,13 @@ pip install .
 ```
 
 The wheels are built by cibuildwheel, configured in `pyproject.toml` and run by `.github/workflows/wheels.yml` when it
-is started by hand or a tag `python-v*` is pushed. On Linux they are built for x86-64 and ARM64 in the manylinux_2_34
-containers. On macOS they are built for ARM64 and x86-64 with Homebrew's LLVM and its libc++, since Apple's toolchain
-lacks parts of the C++23 matisse uses, `std::jthread` among them. Neither the workflow nor the macOS configuration has
-been run. There are no Windows wheels, since matisse builds with GCC and Clang on Linux alone. The workflow keeps the
-wheels and the sdist as artifacts and publishes nothing.
+is started by hand or a tag `python-v*` is pushed. They are built for Linux on x86-64 and ARM64 in the manylinux_2_34
+containers and need glibc 2.34 or later. There are no macOS wheels, and no build on macOS is supported, since LLVM's
+libc++ has no `std::views::cartesian_product`, which `libs/encode/src/verifier_table.cpp` and
+`libs/validate/src/report.cpp` use, in any release through 23.1.6 or on its main branch; macOS wheels come when libc++
+ships it. There are no Windows wheels, since matisse builds with GCC and Clang on Linux alone. Each wheel is tested by
+the suite below before it is kept, and the workflow keeps the wheels and the sdist as artifacts and publishes them to
+PyPI on a tag `python-v*`.
 
 ## **In place of tiktoken**
 
@@ -85,9 +94,9 @@ encoding, whose `push(part)` reads the next part of a text, a string or bytes th
 sequence, and returns the ids that have become final, which no continuation of the text can change, and whose `finish()`
 returns the rest, after which the stream reads a new text. Every id a stream returns is one of `encode_ordinary()`'s of
 the whole text and all of them are, so every special token's spelling is read as text. How far the ids lag behind the
-parts is what [limits.md](limits.md) gives for matisse's `Stream_encoder`. A stream serves one thread at a time, its
-calls release the interpreter lock, and once it has refused a text, ill-formed UTF-8 or a text that ends inside a
-sequence, every further call is refused with `ValueError`.
+parts is what [limits.md](https://github.com/nnidhogg/matisse/blob/master/docs/limits.md) gives for matisse's
+`Stream_encoder`. A stream serves one thread at a time, its calls release the interpreter lock, and once it has refused
+a text, ill-formed UTF-8 or a text that ends inside a sequence, every further call is refused with `ValueError`.
 
 The constructor `Encoding(name, pat_str=..., mergeable_ranks=..., special_tokens=...)` is tiktoken's, as Meta's
 tokenizer.py and tiktoken's README call it. It takes a pattern only when it is one of the four, spelled exactly as
@@ -153,7 +162,7 @@ cut out of the text overlaps the window's occurrence. A file whose vocabulary do
 Hugging Face drops a byte its vocabulary does not hold when the model names no `unk_token`, and the tokens on either
 side of it can then merge. The file is read and the windows decided with the interpreter lock released and the table's
 token automaton built once for all of them, and on GPT-2's table a window of three bytes takes about half a millisecond
-on average, as [limits.md](limits.md) gives.
+on average, as [limits.md](https://github.com/nnidhogg/matisse/blob/master/docs/limits.md) gives.
 
 ## **Where it refuses or differs**
 
@@ -181,9 +190,9 @@ are the places where matisse-tokenizer does something else:
   adds tokens otherwise than under `add_special_tokens` or whose template does not hold a single text once, an added
   token that is not special or that stands at another id than the one Hugging Face gives it, a vocabulary entry with a
   special token's id under `ignore_merges`, and ordinary ids that are not dense from zero, among the others
-  [design.md](design.md) lists. A file it cannot read is refused with `RuntimeError`. Its special tokens are refused as
-  the constructor's are, an empty one, one with an ordinary token's id and one whose spelling begins another's among
-  them.
+  [design.md](https://github.com/nnidhogg/matisse/blob/master/docs/design.md) lists. A file it cannot read is refused
+  with `RuntimeError`. Its special tokens are refused as the constructor's are, an empty one, one with an ordinary
+  token's id and one whose spelling begins another's among them.
 - **Merge tables.** `validate_merges()` refuses with `ValueError`, with matisse's message, a file matisse's loader
   refuses under the empty spelling, a pre-tokenizer that splits a text among them, a model whose `ignore_merges` is
   true, which would look a whole text up, a vocabulary that does not hold every byte, naming the first it lacks, a table
@@ -232,8 +241,9 @@ are the places where matisse-tokenizer does something else:
 
 `get_encoding()` fetches a rank file and holds it to the SHA-256 tiktoken pins: r50k_base.tiktoken for gpt2, from the
 URL tiktoken's r50k_base reads it from, which holds GPT-2's ranks as tiktoken builds its gpt2 encoding and has the
-digest [benchmarks.md](benchmarks.md) pins for gpt2.tiktoken, and cl100k_base.tiktoken and o200k_base.tiktoken, from the
-URLs tiktoken reads them from and with the digests [design.md](design.md) pins. tiktoken's gpt2 reads GPT-2's two
+digest [benchmarks.md](https://github.com/nnidhogg/matisse/blob/master/docs/benchmarks.md) pins for gpt2.tiktoken, and
+cl100k_base.tiktoken and o200k_base.tiktoken, from the URLs tiktoken reads them from and with the digests
+[design.md](https://github.com/nnidhogg/matisse/blob/master/docs/design.md) pins. tiktoken's gpt2 reads GPT-2's two
 original files, vocab.bpe and encoder.json, from URLs of their own, so a cache that holds only what tiktoken's gpt2
 fetched does not serve the package's gpt2. The cache is tiktoken's own: the directory `TIKTOKEN_CACHE_DIR` names, else
 `DATA_GYM_CACHE_DIR`, else `data-gym-cache` under the system's temporary directory, each file under the SHA-1 of its
@@ -248,18 +258,19 @@ caller's.
 ## **Reports shipped with the package**
 
 An encoder is built from its pattern's report, which `validate()` decides in 1.1 seconds for GPT-2 and 2.4 for cl100k at
-the default width of five, as [limits.md](limits.md) gives. The package decides the reports of the four patterns when it
-is built, GPT-2's, cl100k's and Llama 3's to width five and o200k's to width three, as matisse's bench decides them, and
-ships each as the text `validate::serialize()` writes, under `matisse_tokenizer/reports/`. A process that reads a rank
-file whose SHA-256 is the pinned file's reads its report back with `validate::deserialize()` instead of deciding it. Any
-other rank file, read by `load_encoding()` or written by the constructor, is a table the package has not seen, and its
-pattern's report is decided when it is read. The report depends on the pattern alone, so the digest is the stricter of
-the two tests a shipped report could be held to. The tests hold each shipped report to the report `validate()` decides
-at its width.
+the default width of five, as [limits.md](https://github.com/nnidhogg/matisse/blob/master/docs/limits.md) gives. The
+package decides the reports of the four patterns when it is built, GPT-2's, cl100k's and Llama 3's to width five and
+o200k's to width three, as matisse's bench decides them, and ships each as the text `validate::serialize()` writes,
+under `matisse_tokenizer/reports/`. A process that reads a rank file whose SHA-256 is the pinned file's reads its report
+back with `validate::deserialize()` instead of deciding it. Any other rank file, read by `load_encoding()` or written by
+the constructor, is a table the package has not seen, and its pattern's report is decided when it is read. The report
+depends on the pattern alone, so the digest is the stricter of the two tests a shipped report could be held to. The
+tests hold each shipped report to the report `validate()` decides at its width.
 
-The encoder is built with the factorization inventory, the one [design.md](design.md) recommends, and with no special
-token allowed. A call that allows special tokens cuts the text at their spellings in Python, as matisse's encoder cuts
-at those it is built with, the earliest first and the longest among those that begin at one place, the special tokens a
+The encoder is built with the factorization inventory, the one
+[design.md](https://github.com/nnidhogg/matisse/blob/master/docs/design.md) recommends, and with no special token
+allowed. A call that allows special tokens cuts the text at their spellings in Python, as matisse's encoder cuts at
+those it is built with, the earliest first and the longest among those that begin at one place, the special tokens a
 tokenizer.json marks `normalized` out of the stretches the others leave, and encodes each stretch between them as a
 complete input, which is the encoding matisse's encoder gives with those tokens allowed. One encoder therefore serves
 every set of allowed special tokens, Llama 3's 256 among them.
@@ -267,34 +278,38 @@ every set of allowed special tokens, Llama 3's 256 among them.
 ## **Threads and the interpreter lock**
 
 Every encoding call releases the interpreter lock while matisse encodes, so Python threads encode at once. Each thread
-keeps a piece cache of its own across its calls, which never changes an id, as [design.md](design.md) argues. A batch is
-encoded in C++ by a pool of `num_threads` threads, the calling thread one of them, that take the next text from a shared
-counter, each with a cache of its own, as matisse's bench encodes a batch; `encode_parallel()` starts a thread per chunk
-beyond the last, as matisse's `encode_parallel()` does. Where a call returning lists is given a batch holding a lone
-surrogate, which it replaces, the batch is encoded text by text on the calling thread, each text as `encode()` encodes
-it, so that a later text that is not a string is refused as tiktoken's pool refuses it. The text's UTF-8 is read from
-the Python string, which CPython computes once and keeps beside the string, and an ASCII string needs no conversion. The
-ids are returned as a list of Python integers, or as a NumPy array that owns matisse's buffer with no copy, except where
-the stretches of a text around allowed special tokens are joined, which `numpy.concatenate` copies, as it copies every
-array of a batch with special tokens allowed, a text holding none included. On many threads the arrays are the calls to
-choose: a list holds one Python integer per id, made on the calling thread once the encoding is done, so a batch of
-lists scales with its threads only as far as that one thread can build them, while an array, which owns matisse's
-buffer, scales with the encoding itself, as the batch tables under Performance show.
+keeps a piece cache of its own across its calls, which never changes an id, as
+[design.md](https://github.com/nnidhogg/matisse/blob/master/docs/design.md) argues. A batch is encoded in C++ by a pool
+of `num_threads` threads, the calling thread one of them, that take the next text from a shared counter, each with a
+cache of its own, as matisse's bench encodes a batch; `encode_parallel()` starts a thread per chunk beyond the last, as
+matisse's `encode_parallel()` does. Where a call returning lists is given a batch holding a lone surrogate, which it
+replaces, the batch is encoded text by text on the calling thread, each text as `encode()` encodes it, so that a later
+text that is not a string is refused as tiktoken's pool refuses it. The text's UTF-8 is read from the Python string,
+which CPython computes once and keeps beside the string, and an ASCII string needs no conversion. The ids are returned
+as a list of Python integers, or as a NumPy array that owns matisse's buffer with no copy, except where the stretches of
+a text around allowed special tokens are joined, which `numpy.concatenate` copies, as it copies every array of a batch
+with special tokens allowed, a text holding none included. On many threads the arrays are the calls to choose: a list
+holds one Python integer per id, made on the calling thread once the encoding is done, so a batch of lists scales with
+its threads only as far as that one thread can build them, while an array, which owns matisse's buffer, scales with the
+encoding itself, as the batch tables under Performance show.
 
 ## **Performance**
 
 Every figure below is a median of the passes of one collection, run on 2026-11-19 at commit 41aeafb by
-`python/bench/run.sh` on the machine of [benchmarks.md](benchmarks.md), an i9-12900K whose 24 logical processors WSL2
-shows, with Python 3.12.3, tiktoken 0.14.0 and NumPy 2.5.4. The outputs are kept in `python/bench/results/2026-11-19/`,
-and `python/bench/tables.py` writes these tables from them. Commit 41aeafb is the master commit whose source tree the
-collection was built from: the records' commit fields name it, where the programs printed the revision of their
-checkout, a commit with the same tree that the history no longer holds. The C++ rows are matisse_bench's, the Python
-rows `python/bench/bench.py`'s, which prints its rows and ids lines in matisse_bench's format; every row's ids are held
-to the first pass's, and the package's ids lines equal matisse_bench's on every input. The single-thread rows ran under
-`taskset -c 2`, as [benchmarks.md](benchmarks.md)'s do, and the threaded rows unpinned. The corpora are those of
-[benchmarks.md](benchmarks.md). Under GPT-2 matisse_bench reads encoder.json and vocab.bpe and merges by the pair rule,
-where the package reads r50k_base.tiktoken and merges by the rank rule, so the GPT-2 rows compare two definitions with
-the same ids; the other three read the same rank file the same way.
+`python/bench/run.sh` on the machine of
+[benchmarks.md](https://github.com/nnidhogg/matisse/blob/master/docs/benchmarks.md), an i9-12900K whose 24 logical
+processors WSL2 shows, with Python 3.12.3, tiktoken 0.14.0 and NumPy 2.5.4. The outputs are kept in
+`python/bench/results/2026-11-19/`, and `python/bench/tables.py` writes these tables from them. Commit 41aeafb is the
+master commit whose source tree the collection was built from: the records' commit fields name it, where the programs
+printed the revision of their checkout, a commit with the same tree that the history no longer holds. The C++ rows are
+matisse_bench's, the Python rows `python/bench/bench.py`'s, which prints its rows and ids lines in matisse_bench's
+format; every row's ids are held to the first pass's, and the package's ids lines equal matisse_bench's on every input.
+The single-thread rows ran under `taskset -c 2`, as
+[benchmarks.md](https://github.com/nnidhogg/matisse/blob/master/docs/benchmarks.md)'s do, and the threaded rows
+unpinned. The corpora are those of [benchmarks.md](https://github.com/nnidhogg/matisse/blob/master/docs/benchmarks.md).
+Under GPT-2 matisse_bench reads encoder.json and vocab.bpe and merges by the pair rule, where the package reads
+r50k_base.tiktoken and merges by the rank rule, so the GPT-2 rows compare two definitions with the same ids; the other
+three read the same rank file the same way.
 
 One long text in one call on one thread, in MiB/s, the text a Python string made before the clock starts and never asked
 for its UTF-8. "Python array" is `encode_to_numpy()` and "Python list" `encode_ordinary()`, and tiktoken's columns are
@@ -401,7 +416,7 @@ The seconds a fresh process takes from its start to an encoding that has encoded
 processes: `get_encoding()`, or `load_encoding()` for Llama 3, with the shipped report, `load_encoding()` of the same
 table with one empty line more, which is not the pinned file and so has its report decided, and tiktoken's
 `get_encoding()`, the rank files in the cache. Beside the report, a process reads the rank file and builds matisse's
-encoder, whose tables [limits.md](limits.md) gives the cost of:
+encoder, whose tables [limits.md](https://github.com/nnidhogg/matisse/blob/master/docs/limits.md) gives the cost of:
 
 | Tokenizer | Shipped report, s | Report decided, s | tiktoken, s |
 |-----------|------------------:|------------------:|------------:|
@@ -418,9 +433,10 @@ files. They are medians of the passes of one collection, run on 2026-11-19 at co
 NumPy 2.5.4 installed from PyPI in a virtual environment of their own and matisse-tokenizer built from that commit;
 `machine.txt` among the outputs lists every package of the environment and the SHA-256 of each file read. The outputs
 are kept in `python/bench/results/2026-11-19-json/`, and `python/bench/tables.py` writes these tables from them. Both
-packages read the four pinned tokenizer.json files of [design.md](design.md), each held to its SHA-256 before it is
-read: GPT-2's from openai-community/gpt2 at commit 607a30d783dfa663caf39e06633721c8d4cfcd7e, Xenova's conversions of
-cl100k and o200k from Xenova/gpt-4 at 1d9f1f1b1fae88c0e4df1dab0a397f8de6229075 and Xenova/gpt-4o at
+packages read the four pinned tokenizer.json files of
+[design.md](https://github.com/nnidhogg/matisse/blob/master/docs/design.md), each held to its SHA-256 before it is read:
+GPT-2's from openai-community/gpt2 at commit 607a30d783dfa663caf39e06633721c8d4cfcd7e, Xenova's conversions of cl100k
+and o200k from Xenova/gpt-4 at 1d9f1f1b1fae88c0e4df1dab0a397f8de6229075 and Xenova/gpt-4o at
 7956d98f2a83b2751a98ea7136fdf7fe6cf54e69, and Llama 3's, held beside its rank file. The tables name each file by its
 tokenizer, and Xenova/gpt-4's, the cl100k rows, reads under Llama 3's pattern, as the section on reading a
 tokenizer.json says. The package reads each file with `load_tokenizer_json()` and Hugging Face with
@@ -433,12 +449,13 @@ a run during which other work used a processor was repeated. Every process ran w
 enwik8 takes about 14 GiB resident and its process aborts under the lower limit.
 
 Before any of it was timed, both packages' ids were compared document by document on every input, the ten corpora of
-[benchmarks.md](benchmarks.md) below a gigabyte, the 20,000 prompts of `prompts` and the same prompts cut to their first
-48 bytes at a code point, and each timed mode compares them again before its rows and holds every timed row's ids to
-them; a tokenizer and an input whose ids differed would have been reported and left untimed. None differs. Every digest
-below is also the one [benchmarks.md](benchmarks.md)'s exactness table gives for the corpus where it lists it, so that
-under Xenova/gpt-4's file both packages give tiktoken's cl100k_base ids on every corpus compared here that the table
-lists:
+[benchmarks.md](https://github.com/nnidhogg/matisse/blob/master/docs/benchmarks.md) below a gigabyte, the 20,000 prompts
+of `prompts` and the same prompts cut to their first 48 bytes at a code point, and each timed mode compares them again
+before its rows and holds every timed row's ids to them; a tokenizer and an input whose ids differed would have been
+reported and left untimed. None differs. Every digest below is also the one
+[benchmarks.md](https://github.com/nnidhogg/matisse/blob/master/docs/benchmarks.md)'s exactness table gives for the
+corpus where it lists it, so that under Xenova/gpt-4's file both packages give tiktoken's cl100k_base ids on every
+corpus compared here that the table lists:
 
 | Corpus                      | tokenizer.json |        Ids | SHA-256 of the ids                                                 | Equal |
 |-----------------------------|----------------|-----------:|--------------------------------------------------------------------|-------|
@@ -556,10 +573,12 @@ to 353.2 MiB/s against Hugging Face's 29.2 to 36.8, which is why the arrays are 
 figures compare the calls a Python program makes to have the ids of these four files, and no more. Hugging Face's calls
 return an `Encoding` that carries the masks its other features use and, unless `encode_batch_fast()` returns it, the
 tokens' strings and their offsets, none of which the package computes, so the tables measure what each call costs as it
-is, not where Hugging Face's time goes or what its merge alone would cost; [benchmarks.md](benchmarks.md) sets the C++
-encoder beside Hugging Face's Rust crate and the other engines. Nothing was measured of Hugging Face's normalizers,
-post-processors, padding or truncation, of any tokenizer.json but the four pinned ones, or on any other machine, and the
-single-thread figures carry the spread across WSL2's processors that [benchmarks.md](benchmarks.md) describes.
+is, not where Hugging Face's time goes or what its merge alone would cost;
+[benchmarks.md](https://github.com/nnidhogg/matisse/blob/master/docs/benchmarks.md) sets the C++ encoder beside Hugging
+Face's Rust crate and the other engines. Nothing was measured of Hugging Face's normalizers, post-processors, padding or
+truncation, of any tokenizer.json but the four pinned ones, or on any other machine, and the single-thread figures carry
+the spread across WSL2's processors that
+[benchmarks.md](https://github.com/nnidhogg/matisse/blob/master/docs/benchmarks.md) describes.
 
 ## **Tests**
 
@@ -575,11 +594,12 @@ MATISSE_VOCAB_DIR=VOCAB MATISSE_CORPUS_DIR=CORPORA python -m pytest python/tests
 `MATISSE_VOCAB_DIR` names the directory of the pinned vocabulary files, as matisse's CMake option does, and the suite
 writes GPT-2's rank file from its encoder.json and vocab.bpe with tiktoken's own conversion, held to r50k_base's digest,
 and serves the files to both packages through one cache directory. The directory also holds the pinned tokenizer.json
-files that [design.md](design.md) lists, each held to its digest. With `MATISSE_TEST_DOWNLOAD=1` and no directory the
-three public rank files are fetched from tiktoken's URLs instead, as the wheels' tests are, and the three public
-tokenizer.json files from the Hugging Face Hub at their pinned commits, and Llama 3's tests skip. With neither every
-test that needs a vocabulary skips. `MATISSE_CORPUS_DIR` names the corpora of [benchmarks.md](benchmarks.md), and the
-tests that read them skip without them.
+files that [design.md](https://github.com/nnidhogg/matisse/blob/master/docs/design.md) lists, each held to its digest.
+With `MATISSE_TEST_DOWNLOAD=1` and no directory the three public rank files are fetched from tiktoken's URLs instead, as
+the wheels' tests are, and the three public tokenizer.json files from the Hugging Face Hub at their pinned commits, and
+Llama 3's tests skip. With neither every test that needs a vocabulary skips. `MATISSE_CORPUS_DIR` names the corpora of
+[benchmarks.md](https://github.com/nnidhogg/matisse/blob/master/docs/benchmarks.md), and the tests that read them skip
+without them.
 
 - **test_ids.py** holds matisse-tokenizer's ids to tiktoken's and to matisse's fixtures: the known answers of
   `known_answers_reference.txt`, 3,000 seeded random texts per encoding drawn from white space of every kind,
@@ -587,9 +607,9 @@ tests that read them skip without them.
   spellings and random code points of every plane, adversarial texts with runs of up to 100,000 spaces, letters, digits
   and CJK, newlines before runs of tabs, pieces either side of the merge's 128-byte threshold and special tokens'
   spellings against letters and each other, every special token allowed alone and as text, and the ten corpora of
-  [benchmarks.md](benchmarks.md) other than enwik8 and the three of a gigabyte or more, each held to the vendors'
-  digests of `vendors_reference.txt` and to tiktoken's ids, through every encoding call, both batch calls and
-  `encode_parallel()`.
+  [benchmarks.md](https://github.com/nnidhogg/matisse/blob/master/docs/benchmarks.md) other than enwik8 and the three of
+  a gigabyte or more, each held to the vendors' digests of `vendors_reference.txt` and to tiktoken's ids, through every
+  encoding call, both batch calls and `encode_parallel()`.
 - **test_unicode.py** holds the Unicode version: matisse-tokenizer's ids are tiktoken's at every Unicode scalar value
   followed by `'s`, and at every code point of planes 0 to 3 and 14 in three more contexts; the class tables are of
   Unicode 16.0.0; and tiktoken reads every code point the tables leave out as the other class, by matisse's own

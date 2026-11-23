@@ -160,9 +160,9 @@ target_link_libraries(first PRIVATE matisse::cl100k matisse::encode)
 
 matisse-tokenizer, imported as `matisse_tokenizer`, puts the encoder behind tiktoken's interface for GPT-2, cl100k_base,
 o200k_base and Llama 3, with tiktoken's ids, so that `import matisse_tokenizer as tiktoken` serves tiktoken's common
-calls; it is built from this repository with `pip install .` and is at version 0.1.0, not yet published.
-[docs/python.md](docs/python.md) lists its calls, the places where it refuses or differs from tiktoken, and its measured
-performance beside matisse's C++ encoder, tiktoken and Hugging Face tokenizers.
+calls; it is at version 0.1.0, installed from PyPI with `pip install matisse-tokenizer` or built from this repository
+with `pip install .`. [docs/python.md](docs/python.md) lists its calls, the places where it refuses or differs from
+tiktoken, and its measured performance beside matisse's C++ encoder, tiktoken and Hugging Face tokenizers.
 
 ## **Documentation**
 
