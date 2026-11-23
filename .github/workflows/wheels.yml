@@ -1,7 +1,7 @@
 name: Wheels
 
-# Builds and tests matisse-tokenizer's wheels and its sdist, and keeps them as the run's artifacts; publishing them is
-# a step of its own, not taken here. It runs when started by hand and on a tag of the Python package's version.
+# Builds and tests matisse-tokenizer's wheels and its sdist, and keeps them as the run's artifacts. It runs when started
+# by hand and on a tag of the Python package's version, and only a tag's run publishes them, to PyPI.
 on:
   workflow_dispatch:
   push:
@@ -12,9 +12,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Linux x86-64 and ARM64 in manylinux containers, and macOS on ARM64 and x86-64 with Homebrew's LLVM, as
-        # pyproject.toml configures them. Windows has no job: matisse builds with GCC and Clang on Linux alone.
-        os: [ ubuntu-24.04, ubuntu-24.04-arm, macos-15, macos-15-intel ]
+        # Linux x86-64 and ARM64 in manylinux containers, as pyproject.toml configures them. macOS has no job: libc++
+        # has no std::views::cartesian_product in any release through LLVM 23.1.6 or on its main branch, and
+        # libs/encode/src/verifier_table.cpp and libs/validate/src/report.cpp use it, so the macOS wheels wait for
+        # libc++ to ship it. Windows has no job: matisse builds with GCC and Clang on Linux alone.
+        os: [ ubuntu-24.04, ubuntu-24.04-arm ]
 
     runs-on: ${{ matrix.os }}
 
@@ -60,3 +62,27 @@ jobs:
         with:
           name: sdist
           path: dist/*.tar.gz
+
+  # PyPI's trusted publishing for the project matisse-tokenizer, after every wheel and the sdist, so a failed leg
+  # publishes nothing.
+  pypi:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/python-v')
+    needs: [ wheels, sdist ]
+    runs-on: ubuntu-24.04
+
+    environment:
+      name: pypi
+      url: https://pypi.org/p/matisse-tokenizer
+
+    permissions:
+      id-token: write
+
+    steps:
+      - name: Fetch the wheels and the sdist
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@v1.14.3

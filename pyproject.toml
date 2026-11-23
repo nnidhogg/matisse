@@ -78,17 +78,5 @@ test-command = "python -m pytest python/tests"
 [tool.cibuildwheel.linux]
 archs = ["native"]
 
-[tool.cibuildwheel.macos]
-archs = ["native"]
-# Apple's Clang and libc++ lag the C++23 matisse is written in, std::jthread among it, so the macOS wheels build with
-# Homebrew's LLVM and its libc++, which delocate copies into the wheel. This configuration has not been run.
-before-all = "brew install llvm"
-
-[tool.cibuildwheel.macos.environment]
-MACOSX_DEPLOYMENT_TARGET = "15.0"
-CC = "$(brew --prefix llvm)/bin/clang"
-CXX = "$(brew --prefix llvm)/bin/clang++"
-LDFLAGS = "-L$(brew --prefix llvm)/lib/c++ -L$(brew --prefix llvm)/lib/unwind -lunwind"
-
 [tool.pytest.ini_options]
 testpaths = ["python/tests"]
