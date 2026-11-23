@@ -10,18 +10,26 @@ build-backend = "scikit_build_core.build"
 name = "matisse-tokenizer"
 # The version is read from python/matisse_tokenizer/__init__.py, its one source, by the regex provider below.
 dynamic = ["version"]
-description = "Exact BPE encoding for GPT-2, cl100k_base, o200k_base and Llama 3, behind tiktoken's interface"
+description = """A tiktoken-compatible tokenizer that encodes in parallel and as a stream, with ids identical to \
+  tiktoken's, for GPT-2, cl100k, o200k and Llama 3"""
 readme = "docs/python.md"
 requires-python = ">=3.12"
-license = "MIT"
+license = "MIT AND BSD-3-Clause AND Unicode-3.0"
 license-files = ["LICENSE", "THIRD_PARTY_NOTICES.md"]
 authors = [{ name = "Nicklas Nidhögg" }]
+keywords = ["tokenization", "byte-pair encoding", "pre-tokenization", "parallel encoding", "C++"]
 classifiers = [
     "Programming Language :: C++",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: Implementation :: CPython",
     "Operating System :: POSIX :: Linux",
-    "Operating System :: MacOS",
+    "Intended Audience :: Developers",
+    "Topic :: Text Processing :: Linguistic",
+    "Typing :: Typed",
 ]
 dependencies = []
 
@@ -33,6 +41,7 @@ numpy = ["numpy>=2"]
 [project.urls]
 Homepage = "https://github.com/nnidhogg/matisse"
 Documentation = "https://github.com/nnidhogg/matisse/blob/master/docs/python.md"
+Source = "https://github.com/nnidhogg/matisse"
 
 [dependency-groups]
 test = ["pytest==9.2.0", "tiktoken==0.14.0", "numpy==2.5.4", "tokenizers==0.23.3"]
@@ -47,7 +56,9 @@ cmake.build-type = "Release"
 wheel.packages = ["python/matisse_tokenizer"]
 # One wheel per platform under the stable ABI of Python 3.12, which every later CPython loads.
 wheel.py-api = "cp312"
-sdist.exclude = ["build", ".github", "tools/fuzz/seeds"]
+# The sdist leaves out what no build reads: munch's reports and their data, licensed apart from the code, and hopper's
+# own munch submodule, since the build links hopper's libraries against matisse's munch.
+sdist.exclude = ["build", ".github", "tools/fuzz/seeds", "external/munch/paper", "external/hopper/external/munch"]
 
 [tool.scikit-build.cmake.define]
 MATISSE_BUILD_PYTHON = "ON"
