@@ -115,7 +115,7 @@ matisse needs from it the parser and its `Value` tree, objects keeping their mem
 every escape resolved and surrogate pairs combined, numbers as spelled. hopper 1.0.0's top level adds its own munch
 submodule unless hopper is built against an installed munch, which would define munch's targets twice beside matisse's
 own submodule, so external/CMakeLists.txt adds hopper's parse and json libraries directly, and both link `munch::munch`,
-the submodule's or the installed one; hopper 1.0.0's sources build unchanged against munch 3.1.0. A hopper release whose
+the submodule's or the installed one; hopper 1.0.0's sources build unchanged against munch 3.2.0. A hopper release whose
 external/CMakeLists.txt adds its munch submodule only when the target `munch::munch` does not exist yet, one more
 condition on the line that adds it, would let matisse add hopper whole. Installing installs hopper's two libraries with
 matisse's targets, since load links hopper_json privately and a static library carries it to the consumer's link.
@@ -1098,7 +1098,7 @@ build each tokenizer's suite runs for many minutes, so that job runs the suites 
 
 ## **What matisse needs from munch**
 
-matisse builds against munch 3.1.0 and uses:
+matisse builds against munch 3.2.0 and uses:
 
 - `munch::regex::Regex` and its combinators for the alternatives' languages, and, in the tests,
   `munch::pattern::parse()` reading a spelling of one into the same nodes.
